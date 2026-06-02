@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+        body { font-family: 'Inter', sans-serif; }
+        .font-mono { font-family: 'JetBrains+Mono', monospace; }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            display: inline-block;
+            line-height: 1;
+            text-transform: none;
+            letter-spacing: normal;
+            word-wrap: normal;
+            white-space: nowrap;
+            direction: ltr;
+        }
+        .glass-panel {
+            backdrop-filter: blur(20px);
+            background: rgba(247, 249, 252, 0.8);
+        }
+        .needle-active::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 25%;
+            height: 50%;
+            width: 2px;
+            background-color: #005db5;
+        }
+        .ghost-border { border: 1px solid rgba(113, 124, 132, 0.15); }
+    </style>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "on-error-container": "#752121",
+                        "primary-fixed-dim": "#bfd5ff",
+                        "on-primary-container": "#00519e",
+                        "on-error": "#fff7f6",
+                        "on-secondary": "#f2faff",
+                        "surface-bright": "#f7f9fc",
+                        "surface-container-high": "#e1e9f0",
+                        "inverse-on-surface": "#9a9da0",
+                        "background": "#f7f9fc",
+                        "primary-container": "#d6e3ff",
+                        "tertiary-fixed": "#b2faa9",
+                        "secondary-fixed": "#cfe6f2",
+                        "secondary": "#4d626c",
+                        "on-tertiary-fixed-variant": "#2a6c2c",
+                        "tertiary-fixed-dim": "#a4eb9c",
+                        "surface-container-low": "#f0f4f8",
+                        "on-tertiary": "#eaffe2",
+                        "surface-container": "#e8eff4",
+                        "surface-variant": "#d9e4ec",
+                        "on-primary-fixed-variant": "#005bb0",
+                        "error-dim": "#4e0309",
+                        "surface-container-highest": "#d9e4ec",
+                        "outline-variant": "#a8b3bb",
+                        "on-secondary-container": "#40555f",
+                        "secondary-dim": "#415660",
+                        "secondary-container": "#cfe6f2",
+                        "on-surface": "#29343a",
+                        "on-surface-variant": "#566168",
+                        "outline": "#717c84",
+                        "surface": "#f7f9fc",
+                        "on-primary": "#f6f7ff",
+                        "tertiary-dim": "#1d5f21",
+                        "on-background": "#29343a",
+                        "inverse-primary": "#5f9efb",
+                        "on-tertiary-container": "#1f6223",
+                        "primary-fixed": "#d6e3ff",
+                        "tertiary": "#2a6c2c",
+                        "surface-tint": "#005db5",
+                        "tertiary-container": "#b2faa9",
+                        "error": "#9f403d",
+                        "primary": "#005db5",
+                        "on-tertiary-fixed": "#054e12",
+                        "error-container": "#fe8983",
+                        "on-secondary-fixed-variant": "#495f69",
+                        "on-secondary-fixed": "#2d424c",
+                        "secondary-fixed-dim": "#c1d8e4",
+                        "primary-dim": "#0052a0",
+                        "on-primary-fixed": "#003f7d",
+                        "inverse-surface": "#0b0f11",
+                        "surface-dim": "#cedce5",
+                        "surface-container-lowest": "#ffffff"
+                    },
+                    fontFamily: {
+                        "headline": ["Inter"],
+                        "body": ["Inter"],
+                        "label": ["Inter"]
+                    },
+                    borderRadius: { "DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem" },
+                },
+            },
+        }
+    </script>
+</head>
+<body class="bg-background text-on-background antialiased selection:bg-primary-container selection:text-on-primary-container">
+<!-- Side Navigation Rail -->
+<aside class="fixed left-0 top-0 h-full flex flex-col bg-slate-100 dark:bg-slate-900 h-screen w-64 border-r-0 font-sans antialiased text-sm tracking-tight z-40">
+<div class="px-6 py-5 mb-4">
+<h1 class="text-lg font-mono font-bold text-slate-900 dark:text-slate-100">GRACE-L2</h1>
+<p class="text-[10px] uppercase tracking-[0.2em] text-secondary opacity-70">Precision Pipeline</p>
+</div>
+<nav class="flex-1 space-y-0.5">
+<a class="flex items-center gap-3 px-4 py-3 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors" href="#">
+<span class="material-symbols-outlined text-lg">dashboard</span>
+<span>Dashboard</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors" href="#">
+<span class="material-symbols-outlined text-lg">folder_open</span>
+<span>Data &amp; Paths</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors" href="#">
+<span class="material-symbols-outlined text-lg">settings_input_component</span>
+<span>Processing Setup</span>
+</a>
+<!-- Active Tab: Leakage -->
+<a class="relative flex items-center gap-3 px-4 py-3 text-blue-700 dark:text-blue-400 border-l-2 border-blue-700 dark:border-blue-500 bg-slate-200/50 dark:bg-slate-800/50" href="#">
+<span class="material-symbols-outlined text-lg" style="font-variation-settings: 'FILL' 1;">water_drop</span>
+<span class="font-medium">Leakage</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors" href="#">
+<span class="material-symbols-outlined text-lg">terrain</span>
+<span>Basin</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors" href="#">
+<span class="material-symbols-outlined text-lg">visibility</span>
+<span>Preview</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors" href="#">
+<span class="material-symbols-outlined text-lg">monitoring</span>
+<span>Run Monitor</span>
+</a>
+</nav>
+<div class="p-4 mt-auto">
+<div class="bg-surface-container-high p-3 rounded-sm flex items-center gap-3">
+<div class="w-8 h-8 bg-primary rounded-full flex items-center justify-center text-white text-[10px] font-bold">JD</div>
+<div class="overflow-hidden">
+<p class="text-xs font-semibold truncate">Dr. J. Doe</p>
+<p class="text-[10px] text-secondary truncate">Lead Geophysicist</p>
+</div>
+</div>
+</div>
+</aside>
+<!-- Top App Bar -->
+<header class="fixed top-0 right-0 h-14 bg-slate-50 dark:bg-slate-950 flex items-center justify-between px-6 ml-64 w-[calc(100%-16rem)] z-30 font-mono text-xs uppercase tracking-widest">
+<div class="flex items-center gap-4">
+<span class="font-bold text-slate-800 dark:text-slate-200">GRACE Level-2 Pipeline</span>
+<div class="h-4 w-[1px] bg-outline-variant opacity-30"></div>
+<span class="text-secondary">Workflow / Leakage Correction</span>
+</div>
+<div class="flex items-center gap-3">
+<button class="px-4 py-1.5 border border-outline-variant hover:bg-surface-container-high transition-colors text-on-surface">Pause</button>
+<button class="px-4 py-1.5 bg-primary text-white hover:bg-primary-dim transition-colors flex items-center gap-2">
+<span class="material-symbols-outlined text-sm">play_arrow</span>
+                Run
+            </button>
+<div class="h-4 w-[1px] bg-outline-variant opacity-30 mx-2"></div>
+<span class="material-symbols-outlined cursor-pointer hover:text-blue-600">stop</span>
+<span class="material-symbols-outlined cursor-pointer hover:text-blue-600">settings</span>
+</div>
+</header>
+<!-- Main Content Workspace -->
+<main class="ml-64 mt-14 mb-12 p-6 min-h-screen bg-background">
+<div class="max-w-6xl mx-auto space-y-6">
+<!-- Bento Grid Layout -->
+<div class="grid grid-cols-12 gap-6">
+<!-- Main Configuration Card -->
+<section class="col-span-8 space-y-6">
+<!-- Leakage Activation -->
+<div class="bg-surface-container-lowest border-l-4 border-primary p-5 flex items-center justify-between shadow-sm">
+<div class="flex items-center gap-4">
+<div class="p-2 bg-primary-container text-primary rounded-sm">
+<span class="material-symbols-outlined">layers_clear</span>
+</div>
+<div>
+<h2 class="text-sm font-semibold text-on-surface">Leakage Correction Enable/Disable</h2>
+<p class="text-xs text-secondary">Toggle processing of inter-basin mass signal artifacts</p>
+</div>
+</div>
+<div class="flex items-center">
+<label class="relative inline-flex items-center cursor-pointer">
+<input checked="" class="sr-only peer" type="checkbox"/>
+<div class="w-11 h-6 bg-surface-container-highest rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
+</label>
+</div>
+</div>
+<!-- Correction Method Selection -->
+<div class="bg-surface-container-lowest shadow-sm rounded-sm">
+<div class="bg-surface-container-low px-4 py-3">
+<h3 class="text-xs font-semibold uppercase tracking-wider text-secondary">Correction Method</h3>
+</div>
+<div class="p-6">
+<div class="grid grid-cols-2 gap-4">
+<label class="relative flex flex-col p-4 border border-primary bg-primary/5 cursor-pointer rounded-sm">
+<input checked="" class="absolute top-4 right-4 text-primary focus:ring-primary h-4 w-4" name="method" type="radio" value="fm"/>
+<span class="font-bold text-sm text-primary">FM (Forward Modeling)</span>
+<span class="text-[11px] text-secondary mt-1">Iterative spatial reconstruction based on mask geometry.</span>
+</label>
+<label class="relative flex flex-col p-4 border border-outline-variant hover:border-primary transition-all cursor-pointer rounded-sm">
+<input class="absolute top-4 right-4 text-primary focus:ring-primary h-4 w-4" name="method" type="radio" value="sf"/>
+<span class="font-bold text-sm text-on-surface">SF (Scaling Factors)</span>
+<span class="text-[11px] text-secondary mt-1">Grid-based multiplication using hydrological model priors.</span>
+</label>
+</div>
+</div>
+</div>
+<!-- Dynamic Parameter Panel: FM -->
+<div class="bg-surface-container-lowest shadow-sm rounded-sm overflow-hidden">
+<div class="bg-surface-container-low px-4 py-3 flex justify-between items-center">
+<h3 class="text-xs font-semibold uppercase tracking-wider text-secondary">Dynamic Parameters: Forward Modeling</h3>
+<span class="text-[10px] font-mono text-primary bg-primary-container px-2 py-0.5">ACTIVE</span>
+</div>
+<div class="p-6 grid grid-cols-2 gap-x-8 gap-y-6">
+<div class="space-y-2">
+<label class="text-[11px] font-medium text-secondary flex items-center gap-1">
+                                    ITERATION COUNT
+                                    <span class="material-symbols-outlined text-[14px]">info</span>
+</label>
+<input class="w-full bg-background border border-outline-variant focus:border-primary focus:ring-0 text-sm font-mono p-2" type="number" value="100"/>
+</div>
+<div class="space-y-2">
+<label class="text-[11px] font-medium text-secondary">CONVERGENCE THRESHOLD (mm)</label>
+<input class="w-full bg-background border border-outline-variant focus:border-primary focus:ring-0 text-sm font-mono p-2" type="text" value="0.001"/>
+</div>
+<div class="col-span-2 space-y-2">
+<label class="text-[11px] font-medium text-secondary">REGIONAL MASK SELECTION</label>
+<div class="relative">
+<select class="w-full bg-background border border-outline-variant focus:border-primary focus:ring-0 text-sm p-2 appearance-none">
+<option>Global Ocean-Land Mask v2.1</option>
+<option>Amazon Basin Extended</option>
+<option>Greenland Ice Sheet - Sectorized</option>
+</select>
+<span class="material-symbols-outlined absolute right-2 top-2 pointer-events-none text-secondary">expand_more</span>
+</div>
+</div>
+</div>
+<!-- Progressive Disclosure: Advanced Scientific Parameters -->
+<div class="border-t border-outline-variant/20">
+<details class="group">
+<summary class="flex items-center justify-between p-4 cursor-pointer hover:bg-surface-container-low transition-colors list-none">
+<span class="text-[11px] font-bold text-on-surface-variant flex items-center gap-2 tracking-widest uppercase">
+<span class="material-symbols-outlined text-sm transition-transform group-open:rotate-180">expand_more</span>
+                                        Advanced Scientific Parameters
+                                    </span>
+<span class="material-symbols-outlined text-secondary text-base">science</span>
+</summary>
+<div class="p-6 pt-2 space-y-6 bg-surface-container-low/40">
+<div class="grid grid-cols-3 gap-6">
+<div class="space-y-1">
+<div class="flex items-center gap-1.5">
+<label class="text-[10px] font-bold text-secondary uppercase tracking-tighter">Iterative Tolerance</label>
+<span class="material-symbols-outlined text-[14px] text-outline cursor-help">info</span>
+</div>
+<input class="w-full bg-surface-container-lowest border-none text-xs font-mono py-2 px-3 focus:ring-1 focus:ring-primary ghost-border" type="text" value="0.001"/>
+</div>
+<div class="space-y-1">
+<div class="flex items-center gap-1.5">
+<label class="text-[10px] font-bold text-secondary uppercase tracking-tighter">Max Iterations</label>
+<span class="material-symbols-outlined text-[14px] text-outline cursor-help">info</span>
+</div>
+<input class="w-full bg-surface-container-lowest border-none text-xs font-mono py-2 px-3 focus:ring-1 focus:ring-primary ghost-border" type="number" value="100"/>
+</div>
+<div class="space-y-1">
+<div class="flex items-center gap-1.5">
+<label class="text-[10px] font-bold text-secondary uppercase tracking-tighter">Regularization Alpha</label>
+<span class="material-symbols-outlined text-[14px] text-outline cursor-help">info</span>
+</div>
+<input class="w-full bg-surface-container-lowest border-none text-xs font-mono py-2 px-3 focus:ring-1 focus:ring-primary ghost-border" type="text" value="0.005"/>
+</div>
+</div>
+<div class="grid grid-cols-2 gap-x-12 gap-y-6">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2">
+<span class="text-xs font-medium text-on-surface-variant">Use Pre-computed Kernel</span>
+<span class="material-symbols-outlined text-[14px] text-outline cursor-help">help</span>
+</div>
+<button class="relative inline-flex h-5 w-10 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none bg-outline-variant">
+<span class="translate-x-0 pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"></span>
+</button>
+</div>
+<div class="space-y-1.5">
+<div class="flex items-center gap-2">
+<label class="text-[10px] font-bold text-secondary uppercase">Smoothing Radius for FM (km)</label>
+<span class="material-symbols-outlined text-[14px] text-outline cursor-help">info</span>
+</div>
+<div class="relative flex items-center">
+<input class="w-full bg-surface-container-lowest border-none text-[11px] font-mono py-2 px-3 pr-10 ghost-border focus:ring-1 focus:ring-primary" type="number" value="300"/>
+<span class="absolute right-3 text-[10px] font-mono text-outline-variant">km</span>
+</div>
+</div>
+<div class="col-span-2 space-y-1.5">
+<div class="flex items-center gap-2">
+<label class="text-[10px] font-bold text-secondary uppercase">Kernel Path</label>
+<span class="material-symbols-outlined text-[14px] text-outline cursor-help">info</span>
+</div>
+<div class="flex items-center gap-1 group">
+<div class="relative flex-1">
+<input class="w-full bg-surface-container-lowest border-none text-[10px] font-mono py-2 px-3 ghost-border focus:ring-1 focus:ring-primary truncate" placeholder="/data/kernels/spatial_kernel_v1.mat" type="text"/>
+</div>
+<button class="flex items-center justify-center h-8 w-8 bg-surface-container-lowest ghost-border hover:bg-surface-variant transition-colors">
+<span class="material-symbols-outlined text-secondary text-sm">folder_open</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+</details>
+</div>
+</div>
+</section>
+<!-- Sidebar Info / File Inputs -->
+<aside class="col-span-4 space-y-6">
+<div class="bg-surface-container-lowest shadow-sm rounded-sm">
+<div class="bg-surface-container-low px-4 py-3">
+<h3 class="text-xs font-semibold uppercase tracking-wider text-secondary">Boundary Data</h3>
+</div>
+<div class="p-5 space-y-4">
+<div class="space-y-2">
+<label class="text-[11px] font-medium text-secondary">REGIONAL BOUNDARY FILE (.SHP, .KML)</label>
+<div class="flex gap-2">
+<div class="flex-1 border border-outline-variant bg-surface-container-low p-2 text-[11px] text-on-surface-variant font-mono truncate">
+                                        /data/boundaries/hydro_basins_v4.shp
+                                    </div>
+<button class="bg-primary px-3 text-white flex items-center justify-center hover:bg-primary-dim transition-colors">
+<span class="material-symbols-outlined text-sm">folder_open</span>
+</button>
+</div>
+<div class="flex items-center gap-2 mt-2">
+<span class="material-symbols-outlined text-tertiary text-xs" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+<span class="text-[10px] text-tertiary">Topology validated (24 polygons)</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Visualization Overlay (Placeholder for Chart/Map) -->
+<div class="bg-surface-container-lowest shadow-sm rounded-sm overflow-hidden aspect-square relative group">
+<div class="absolute inset-0 bg-slate-200">
+<img class="w-full h-full object-cover mix-blend-multiply opacity-80" data-alt="Scientific map showing hydrological leakage patterns" src="https://lh3.googleusercontent.com/aida-public/AB6AXuD3mGTHEqJnR7pYsUyDjiwRn3VEz-7AK30m5DhwZlH-ejkZ8uwtpojQK3PBy-kSShfFKhO0mQja000tey-wCdrVVxHzM8p-bMdt9dj9lOtLLsHynbfnShFTWuI8cLV6tYDDTPXKuwZQcTal2IvMel5Eo0Q8prilnT3Ysc5PJBQVDuAwFH4AAdz5opKd5G2_ojgtT3q0Vu0qcti61oi2IGqIzZLmw-ou5_poLVMaZllSpi3zSc4dfz5NyVdrReqQp2hsglCkwh1SeA"/>
+</div>
+<div class="absolute top-4 left-4 bg-white/90 backdrop-blur px-2 py-1 text-[10px] font-mono font-bold border border-outline-variant">
+                            LEAKAGE_MAP_PREVIEW
+                        </div>
+<div class="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent"></div>
+<button class="absolute bottom-4 right-4 bg-white/20 hover:bg-white/40 backdrop-blur p-2 rounded-sm text-white">
+<span class="material-symbols-outlined">zoom_in</span>
+</button>
+</div>
+<!-- Scientific Reference -->
+<div class="p-4 bg-surface-container shadow-inner border border-outline-variant/20">
+<p class="text-[11px] text-on-surface-variant leading-relaxed">
+<strong class="text-on-surface">Scientific Note:</strong> The Leakage Workflow reduces signal attenuation caused by the GRACE satellite's limited spatial resolution (truncated spherical harmonics). Failure to correct will result in underestimated mass changes in small basins.
+                        </p>
+</div>
+</aside>
+</div>
+</div>
+</main>
+<!-- Console / Bottom Bar -->
+<footer class="fixed bottom-0 left-64 w-[calc(100%-16rem)] h-12 bg-slate-900 flex justify-between items-center px-4 z-50 font-mono text-[11px] leading-tight text-slate-400">
+<div class="flex items-center gap-6">
+<div class="flex items-center gap-2 px-3 text-emerald-400 bg-slate-800 h-12">
+<span class="material-symbols-outlined text-sm">terminal</span>
+<span>Console</span>
+</div>
+<div class="flex items-center gap-2 px-3 text-slate-400 hover:bg-slate-800 transition-colors h-12 cursor-pointer">
+<span class="material-symbols-outlined text-sm">filter_list</span>
+<span>Filters</span>
+</div>
+<div class="hidden lg:flex items-center gap-4 border-l border-slate-800 pl-6 ml-2">
+<span class="text-slate-500">[14:20:01] System: Ready for processing</span>
+<span class="text-slate-500">[14:20:05] Input: hydro_basins_v4.shp loaded</span>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<div class="flex items-center gap-2">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+<span>SYSTEM_ONLINE</span>
+</div>
+<button class="flex items-center gap-2 px-3 text-slate-400 hover:text-white transition-colors">
+<span class="material-symbols-outlined text-sm">delete_sweep</span>
+<span>Clear</span>
+</button>
+</div>
+</footer>
+</body></html>

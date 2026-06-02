@@ -1,0 +1,60 @@
+﻿# Python cache/metadata
+__pycache__/
+*.py[cod]
+*.egg-info/
+*.egg
+
+# Virtual environments
+.venv/
+.venv-build/
+venv/
+venv*/
+python/venv/
+python/venv*/
+python/.venv-build/
+
+# Build artifacts
+build/
+dist/
+dist_preview/
+dist_tmp/
+release/
+python/build/
+python/build_preview/
+python/dist/
+python/output/
+python/_pyi_dll_aliases/
+python/.venv312_ready
+python/files.zip
+python/tests/files.zip
+
+# Vendored tool sample/input data.
+matlab/src/tools/GRACE-filter-master/data/
+matlab/src/tools/GRACE-filter-master/tests/GSM-*
+
+# Input data: keep only directory placeholders and the manifest.
+/data/**
+!/data/
+!/data/**/
+!/data/.gitignore
+!/data/INPUT_FILES.md
+!/data/**/.gitkeep
+/data/Aux/
+
+# Outputs: keep only local/remote directory placeholders.
+/output/**
+!/output/
+!/output/local/
+!/output/remote/
+!/output/local/.gitkeep
+!/output/remote/.gitkeep
+
+# Local scratch and archives
+_archive/
+_scratch/
+tmp/
+
+# Logs and temp files
+*.log
+*.tmp
+

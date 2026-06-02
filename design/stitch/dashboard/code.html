@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>GRACE-L2 Precision Pipeline | Dashboard</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+        body { font-family: 'Inter', sans-serif; }
+        .font-mono { font-family: 'JetBrains Mono', monospace; }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            vertical-align: middle;
+        }
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.8);
+            backdrop-filter: blur(20px);
+        }
+        .needle-active {
+            position: relative;
+        }
+        .needle-active::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 25%;
+            height: 50%;
+            width: 2px;
+            background-color: #005db5;
+        }
+    </style>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "on-error-container": "#752121",
+                        "primary-fixed-dim": "#bfd5ff",
+                        "on-primary-container": "#00519e",
+                        "on-error": "#fff7f6",
+                        "on-secondary": "#f2faff",
+                        "surface-bright": "#f7f9fc",
+                        "surface-container-high": "#e1e9f0",
+                        "inverse-on-surface": "#9a9da0",
+                        "background": "#f7f9fc",
+                        "primary-container": "#d6e3ff",
+                        "tertiary-fixed": "#b2faa9",
+                        "secondary-fixed": "#cfe6f2",
+                        "secondary": "#4d626c",
+                        "on-tertiary-fixed-variant": "#2a6c2c",
+                        "tertiary-fixed-dim": "#a4eb9c",
+                        "surface-container-low": "#f0f4f8",
+                        "on-tertiary": "#eaffe2",
+                        "surface-container": "#e8eff4",
+                        "surface-variant": "#d9e4ec",
+                        "on-primary-fixed-variant": "#005bb0",
+                        "error-dim": "#4e0309",
+                        "surface-container-highest": "#d9e4ec",
+                        "outline-variant": "#a8b3bb",
+                        "on-secondary-container": "#40555f",
+                        "secondary-dim": "#415660",
+                        "secondary-container": "#cfe6f2",
+                        "on-surface": "#29343a",
+                        "on-surface-variant": "#566168",
+                        "outline": "#717c84",
+                        "surface": "#f7f9fc",
+                        "on-primary": "#f6f7ff",
+                        "tertiary-dim": "#1d5f21",
+                        "on-background": "#29343a",
+                        "inverse-primary": "#5f9efb",
+                        "on-tertiary-container": "#1f6223",
+                        "primary-fixed": "#d6e3ff",
+                        "tertiary": "#2a6c2c",
+                        "surface-tint": "#005db5",
+                        "tertiary-container": "#b2faa9",
+                        "error": "#9f403d",
+                        "primary": "#005db5",
+                        "on-tertiary-fixed": "#054e12",
+                        "error-container": "#fe8983",
+                        "on-secondary-fixed-variant": "#495f69",
+                        "on-secondary-fixed": "#2d424c",
+                        "secondary-fixed-dim": "#c1d8e4",
+                        "primary-dim": "#0052a0",
+                        "on-primary-fixed": "#003f7d",
+                        "inverse-surface": "#0b0f11",
+                        "surface-dim": "#cedce5",
+                        "surface-container-lowest": "#ffffff"
+                    },
+                    fontFamily: {
+                        "headline": ["Inter"],
+                        "body": ["Inter"],
+                        "label": ["Inter"]
+                    },
+                    borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+                },
+            },
+        }
+    </script>
+</head>
+<body class="bg-background text-on-background selection:bg-primary-container">
+<!-- SideNavBar (Immutable Content & Mandatory Styling) -->
+<nav class="fixed left-0 top-0 h-full flex flex-col h-screen w-64 border-r-0 bg-slate-100 dark:bg-slate-900 font-sans antialiased text-sm tracking-tight z-50">
+<div class="p-6">
+<h1 class="text-lg font-mono font-bold text-slate-900 dark:text-slate-100">GRACE-L2</h1>
+<p class="text-[10px] uppercase tracking-widest text-secondary mt-1">Precision Pipeline</p>
+</div>
+<div class="flex-1 space-y-0.5">
+<!-- Active Navigation: Dashboard -->
+<a class="flex items-center gap-3 px-4 py-3 text-blue-700 dark:text-blue-400 border-l-2 border-blue-700 dark:border-blue-500 bg-slate-200/50 dark:bg-slate-800/50 scale-98 active:opacity-80 transition-colors" href="#">
+<span class="material-symbols-outlined" data-icon="dashboard">dashboard</span>
+<span>Dashboard</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors" href="#">
+<span class="material-symbols-outlined" data-icon="folder_open">folder_open</span>
+<span>Data &amp; Paths</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors" href="#">
+<span class="material-symbols-outlined" data-icon="settings_input_component">settings_input_component</span>
+<span>Processing Setup</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors" href="#">
+<span class="material-symbols-outlined" data-icon="water_drop">water_drop</span>
+<span>Leakage</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors" href="#">
+<span class="material-symbols-outlined" data-icon="terrain">terrain</span>
+<span>Basin</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors" href="#">
+<span class="material-symbols-outlined" data-icon="visibility">visibility</span>
+<span>Preview</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors" href="#">
+<span class="material-symbols-outlined" data-icon="monitoring">monitoring</span>
+<span>Run Monitor</span>
+</a>
+</div>
+<div class="mt-auto p-4 border-t border-slate-200 dark:border-slate-800">
+<div class="flex items-center gap-3 px-2 py-2">
+<div class="w-8 h-8 bg-primary text-on-primary flex items-center justify-center rounded-sm text-xs font-bold">OP</div>
+<div>
+<p class="text-xs font-medium">Operator-04</p>
+<p class="text-[10px] text-secondary">ID: 8829-SC</p>
+</div>
+</div>
+</div>
+</nav>
+<!-- TopAppBar -->
+<header class="flex items-center justify-between px-6 ml-64 w-[calc(100%-16rem)] bg-slate-50 dark:bg-slate-950 h-14 border-b-0 tonal-shift bg-slate-100 dark:bg-slate-900 sticky top-0 z-40">
+<div class="flex items-center gap-4">
+<span class="font-mono text-xs uppercase tracking-widest text-slate-500">Pipeline Status:</span>
+<div class="flex items-center gap-2 px-2 py-0.5 bg-tertiary-container text-on-tertiary-container rounded-sm text-[10px] font-bold">
+<span class="w-1.5 h-1.5 bg-tertiary rounded-full animate-pulse"></span>
+                ACTIVE MONITOR
+            </div>
+</div>
+<div class="flex items-center gap-6">
+<div class="flex items-center gap-4">
+<button class="flex items-center gap-2 text-slate-500 hover:text-blue-600 dark:hover:text-blue-400 cursor-pointer transition-opacity font-mono text-xs uppercase tracking-widest">
+<span class="material-symbols-outlined text-sm" data-icon="pause">pause</span>
+                    Pause
+                </button>
+<button class="flex items-center gap-2 text-blue-700 dark:text-blue-500 hover:text-blue-600 dark:hover:text-blue-400 cursor-pointer transition-opacity font-mono text-xs uppercase tracking-widest font-bold">
+<span class="material-symbols-outlined text-sm" data-icon="play_arrow">play_arrow</span>
+                    Run
+                </button>
+</div>
+<div class="w-[1px] h-4 bg-outline-variant opacity-30"></div>
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-slate-500 hover:text-blue-600 cursor-pointer text-xl" data-icon="stop">stop</span>
+<span class="material-symbols-outlined text-slate-500 hover:text-blue-600 cursor-pointer text-xl" data-icon="settings">settings</span>
+</div>
+</div>
+</header>
+<!-- Main Workspace -->
+<main class="ml-64 p-6 min-h-screen pb-24">
+<!-- Bento Grid Layout for Dashboard -->
+<div class="grid grid-cols-12 gap-4">
+<!-- Project Summary Card -->
+<section class="col-span-12 lg:col-span-8 bg-surface-container-lowest border border-outline-variant/15 rounded-sm overflow-hidden flex flex-col">
+<div class="bg-surface-container-low px-4 py-3 flex justify-between items-center">
+<h2 class="text-xs font-medium uppercase tracking-wider text-on-surface-variant flex items-center gap-2">
+<span class="material-symbols-outlined text-sm" data-icon="inventory_2">inventory_2</span>
+                        Project Configuration Summary
+                    </h2>
+<span class="font-mono text-[10px] text-secondary">UUID: 4f8d-992a-331c</span>
+</div>
+<div class="p-4 grid grid-cols-3 gap-6">
+<div class="space-y-1">
+<p class="text-[10px] text-secondary uppercase tracking-tight">Project Name</p>
+<p class="text-sm font-medium">JPL_RL06_MASCON_V02</p>
+</div>
+<div class="space-y-1">
+<p class="text-[10px] text-secondary uppercase tracking-tight">Last Edited</p>
+<p class="text-sm font-medium">2023-10-24 14:22:09</p>
+</div>
+<div class="space-y-1">
+<p class="text-[10px] text-secondary uppercase tracking-tight">Status</p>
+<div class="flex items-center gap-1.5 text-blue-700">
+<span class="material-symbols-outlined text-sm" data-icon="verified">verified</span>
+<span class="text-sm font-medium">Ready to Process</span>
+</div>
+</div>
+</div>
+</section>
+<!-- Quick Actions Sidebar -->
+<aside class="col-span-12 lg:col-span-4 row-span-2 space-y-4">
+<div class="bg-surface-container-lowest border border-outline-variant/15 rounded-sm p-4 space-y-3">
+<h3 class="text-xs font-medium uppercase tracking-wider text-on-surface-variant mb-4">Pipeline Commands</h3>
+<button class="w-full flex items-center justify-between px-4 py-3 bg-primary text-on-primary hover:bg-primary-dim transition-colors rounded-sm group">
+<span class="text-sm font-medium">Run Full Pipeline</span>
+<span class="material-symbols-outlined group-hover:translate-x-1 transition-transform" data-icon="rocket_launch">rocket_launch</span>
+</button>
+<button class="w-full flex items-center justify-between px-4 py-3 bg-surface-container-high text-on-surface hover:bg-surface-variant transition-colors rounded-sm">
+<span class="text-sm font-medium">Load Config</span>
+<span class="material-symbols-outlined" data-icon="upload_file">upload_file</span>
+</button>
+<button class="w-full flex items-center justify-between px-4 py-3 border border-outline-variant text-on-surface hover:bg-surface-container-low transition-colors rounded-sm">
+<span class="text-sm font-medium">Save Config</span>
+<span class="material-symbols-outlined" data-icon="save">save</span>
+</button>
+</div>
+<div class="bg-surface-container-lowest border border-outline-variant/15 rounded-sm p-4">
+<h3 class="text-xs font-medium uppercase tracking-wider text-on-surface-variant mb-4">System Health</h3>
+<div class="space-y-4">
+<div class="flex justify-between items-end">
+<span class="text-[11px] text-secondary">HPC Cluster Latency</span>
+<span class="font-mono text-xs text-tertiary">14ms</span>
+</div>
+<div class="w-full h-1 bg-surface-container-highest">
+<div class="h-full bg-tertiary w-[12%]"></div>
+</div>
+<div class="flex justify-between items-end">
+<span class="text-[11px] text-secondary">Local Storage</span>
+<span class="font-mono text-xs">842 GB Free</span>
+</div>
+<div class="w-full h-1 bg-surface-container-highest">
+<div class="h-full bg-primary w-[65%]"></div>
+</div>
+</div>
+</div>
+</aside>
+<!-- Output Root & Data Summary -->
+<section class="col-span-12 lg:col-span-8 grid grid-cols-2 gap-4">
+<div class="bg-surface-container-lowest border border-outline-variant/15 rounded-sm p-4 flex flex-col justify-between">
+<div>
+<p class="text-[10px] text-secondary uppercase tracking-tight mb-1">Output Root</p>
+<code class="text-xs font-mono bg-surface-container-low p-2 block rounded-sm border border-outline-variant/10 text-on-surface">/volumes/science/L2_output/v02/</code>
+</div>
+<div class="mt-4 flex items-center justify-between">
+<div class="flex items-center gap-2">
+<div class="w-2 h-2 rounded-full bg-tertiary"></div>
+<span class="text-xs font-medium">Remote HPC</span>
+</div>
+<span class="text-[10px] text-secondary font-mono">Sync: 100%</span>
+</div>
+</div>
+<div class="bg-surface-container-lowest border border-outline-variant/15 rounded-sm p-4 flex flex-col justify-between">
+<div>
+<p class="text-[10px] text-secondary uppercase tracking-tight mb-1">Data Availability</p>
+<div class="flex items-baseline gap-2">
+<span class="text-2xl font-light tracking-tight">1,248</span>
+<span class="text-xs text-secondary">GFC Data Files</span>
+</div>
+</div>
+<div class="mt-4 flex items-center gap-3">
+<span class="material-symbols-outlined text-sm text-secondary" data-icon="calendar_month">calendar_month</span>
+<span class="text-xs font-mono">2002-04 // 2023-09</span>
+</div>
+</div>
+</section>
+<!-- Current Progress (Asymmetric Highlight) -->
+<section class="col-span-12 bg-surface-container-lowest border border-primary/20 rounded-sm p-5 relative overflow-hidden">
+<div class="absolute top-0 left-0 w-1 h-full bg-primary"></div>
+<div class="flex flex-col md:flex-row justify-between md:items-center gap-6">
+<div class="space-y-1">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary" data-icon="update">update</span>
+<h3 class="text-sm font-semibold text-primary">Active Run Progress</h3>
+</div>
+<p class="text-xs text-secondary">Harmonic Synthesis: Degree 60 / Order 60</p>
+</div>
+<div class="flex-1 max-w-xl">
+<div class="flex justify-between mb-2">
+<span class="text-[10px] font-mono text-secondary">Task: BASIN_INTEGRATION_09</span>
+<span class="text-[10px] font-mono text-primary font-bold">78.4%</span>
+</div>
+<div class="w-full h-2 bg-surface-container-highest rounded-none overflow-hidden">
+<div class="h-full bg-gradient-to-r from-primary to-primary-dim w-[78.4%]"></div>
+</div>
+</div>
+<div class="flex gap-4">
+<div class="text-right">
+<p class="text-[10px] text-secondary uppercase">Elapsed</p>
+<p class="text-sm font-mono">00:14:22</p>
+</div>
+<div class="text-right">
+<p class="text-[10px] text-secondary uppercase">ETR</p>
+<p class="text-sm font-mono">00:04:10</p>
+</div>
+</div>
+</div>
+</section>
+<!-- Recent Runs List -->
+<section class="col-span-12 bg-surface-container-lowest border border-outline-variant/15 rounded-sm overflow-hidden">
+<div class="bg-surface-container-low px-4 py-3 border-b border-outline-variant/5">
+<h2 class="text-xs font-medium uppercase tracking-wider text-on-surface-variant flex items-center gap-2">
+<span class="material-symbols-outlined text-sm" data-icon="history">history</span>
+                        Recent Execution Log
+                    </h2>
+</div>
+<table class="w-full text-left">
+<thead>
+<tr class="bg-surface-container-lowest border-b border-outline-variant/10">
+<th class="px-4 py-3 text-[10px] font-semibold text-secondary uppercase tracking-wider">Date / Time</th>
+<th class="px-4 py-3 text-[10px] font-semibold text-secondary uppercase tracking-wider">Config Identifier</th>
+<th class="px-4 py-3 text-[10px] font-semibold text-secondary uppercase tracking-wider">Result</th>
+<th class="px-4 py-3 text-[10px] font-semibold text-secondary uppercase tracking-wider">Processing Time</th>
+<th class="px-4 py-3 text-[10px] font-semibold text-secondary uppercase tracking-wider text-right">Actions</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-outline-variant/10">
+<tr class="hover:bg-surface-container-low/50 transition-colors">
+<td class="px-4 py-2.5 text-xs font-mono">2023-10-24 10:15</td>
+<td class="px-4 py-2.5 text-xs">JPL_RL06_MASCON_V02_Full</td>
+<td class="px-4 py-2.5">
+<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-tertiary-container text-on-tertiary-container text-[10px] font-medium">
+<span class="material-symbols-outlined text-[10px]" data-icon="check_circle" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+                                    SUCCESS
+                                </span>
+</td>
+<td class="px-4 py-2.5 text-xs font-mono">01:42:12</td>
+<td class="px-4 py-2.5 text-right">
+<span class="material-symbols-outlined text-slate-400 hover:text-primary cursor-pointer text-lg" data-icon="open_in_new">open_in_new</span>
+</td>
+</tr>
+<tr class="hover:bg-surface-container-low/50 transition-colors">
+<td class="px-4 py-2.5 text-xs font-mono">2023-10-23 16:30</td>
+<td class="px-4 py-2.5 text-xs">JPL_RL06_TEST_GAUSS_300km</td>
+<td class="px-4 py-2.5">
+<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-error-container text-on-error-container text-[10px] font-medium">
+<span class="material-symbols-outlined text-[10px]" data-icon="error" style="font-variation-settings: 'FILL' 1;">error</span>
+                                    FAILED
+                                </span>
+</td>
+<td class="px-4 py-2.5 text-xs font-mono">00:04:18</td>
+<td class="px-4 py-2.5 text-right">
+<span class="material-symbols-outlined text-slate-400 hover:text-primary cursor-pointer text-lg" data-icon="bug_report">bug_report</span>
+</td>
+</tr>
+<tr class="hover:bg-surface-container-low/50 transition-colors">
+<td class="px-4 py-2.5 text-xs font-mono">2023-10-22 09:45</td>
+<td class="px-4 py-2.5 text-xs">JPL_RL06_MASCON_V01_Baseline</td>
+<td class="px-4 py-2.5">
+<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-tertiary-container text-on-tertiary-container text-[10px] font-medium">
+<span class="material-symbols-outlined text-[10px]" data-icon="check_circle" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+                                    SUCCESS
+                                </span>
+</td>
+<td class="px-4 py-2.5 text-xs font-mono">01:38:55</td>
+<td class="px-4 py-2.5 text-right">
+<span class="material-symbols-outlined text-slate-400 hover:text-primary cursor-pointer text-lg" data-icon="open_in_new">open_in_new</span>
+</td>
+</tr>
+</tbody>
+</table>
+</section>
+</div>
+</main>
+<!-- BottomNavBar (Console Drawer) -->
+<footer class="fixed bottom-0 left-64 w-[calc(100%-16rem)] z-50 flex justify-between items-center px-4 bg-slate-900 dark:bg-black h-12 border-t border-slate-800 shadow-2xl transition-all duration-150">
+<div class="flex items-center gap-6 h-full">
+<button class="flex items-center gap-2 px-3 text-emerald-400 bg-slate-800 h-full font-mono text-[11px] leading-tight hover:bg-slate-700">
+<span class="material-symbols-outlined text-sm" data-icon="terminal">terminal</span>
+                Console
+            </button>
+<button class="flex items-center gap-2 px-3 text-slate-400 font-mono text-[11px] leading-tight hover:bg-slate-800 hover:text-white">
+<span class="material-symbols-outlined text-sm" data-icon="filter_list">filter_list</span>
+                Filters
+            </button>
+</div>
+<div class="flex-1 px-8 overflow-hidden whitespace-nowrap">
+<p class="font-mono text-[10px] text-emerald-500/60 truncate">
+                [SYSTEM] Harmonic coefficients verified... Success. Initiating Gaussian filter application on L2 data stream.
+            </p>
+</div>
+<div class="flex items-center gap-4">
+<button class="flex items-center gap-2 px-3 text-slate-400 font-mono text-[11px] leading-tight hover:bg-slate-800 hover:text-white">
+<span class="material-symbols-outlined text-sm" data-icon="delete_sweep">delete_sweep</span>
+                Clear
+            </button>
+<div class="w-[1px] h-4 bg-slate-700"></div>
+<span class="font-mono text-[10px] text-slate-500 uppercase tracking-tighter">Cluster: HPC-ALPHA-09</span>
+</div>
+</footer>
+</body></html>

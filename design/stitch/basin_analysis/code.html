@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Basin Workflow | GRACE Level-2 Pipeline</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "on-error-container": "#752121",
+                        "primary-fixed-dim": "#bfd5ff",
+                        "on-primary-container": "#00519e",
+                        "on-error": "#fff7f6",
+                        "on-secondary": "#f2faff",
+                        "surface-bright": "#f7f9fc",
+                        "surface-container-high": "#e1e9f0",
+                        "inverse-on-surface": "#9a9da0",
+                        "background": "#f7f9fc",
+                        "primary-container": "#d6e3ff",
+                        "tertiary-fixed": "#b2faa9",
+                        "secondary-fixed": "#cfe6f2",
+                        "secondary": "#4d626c",
+                        "on-tertiary-fixed-variant": "#2a6c2c",
+                        "tertiary-fixed-dim": "#a4eb9c",
+                        "surface-container-low": "#f0f4f8",
+                        "on-tertiary": "#eaffe2",
+                        "surface-container": "#e8eff4",
+                        "surface-variant": "#d9e4ec",
+                        "on-primary-fixed-variant": "#005bb0",
+                        "error-dim": "#4e0309",
+                        "surface-container-highest": "#d9e4ec",
+                        "outline-variant": "#a8b3bb",
+                        "on-secondary-container": "#40555f",
+                        "secondary-dim": "#415660",
+                        "secondary-container": "#cfe6f2",
+                        "on-surface": "#29343a",
+                        "on-surface-variant": "#566168",
+                        "outline": "#717c84",
+                        "surface": "#f7f9fc",
+                        "on-primary": "#f6f7ff",
+                        "tertiary-dim": "#1d5f21",
+                        "on-background": "#29343a",
+                        "inverse-primary": "#5f9efb",
+                        "on-tertiary-container": "#1f6223",
+                        "primary-fixed": "#d6e3ff",
+                        "tertiary": "#2a6c2c",
+                        "surface-tint": "#005db5",
+                        "tertiary-container": "#b2faa9",
+                        "error": "#9f403d",
+                        "primary": "#005db5",
+                        "on-tertiary-fixed": "#054e12",
+                        "error-container": "#fe8983",
+                        "on-secondary-fixed-variant": "#495f69",
+                        "on-secondary-fixed": "#2d424c",
+                        "secondary-fixed-dim": "#c1d8e4",
+                        "primary-dim": "#0052a0",
+                        "on-primary-fixed": "#003f7d",
+                        "inverse-surface": "#0b0f11",
+                        "surface-dim": "#cedce5",
+                        "surface-container-lowest": "#ffffff"
+                    },
+                    fontFamily: {
+                        "headline": ["Inter"],
+                        "body": ["Inter"],
+                        "label": ["Inter"],
+                        "mono": ["JetBrains Mono"]
+                    },
+                    borderRadius: { "DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem" },
+                },
+            },
+        }
+    </script>
+<style>
+        body { font-family: 'Inter', sans-serif; }
+        .mono { font-family: 'JetBrains Mono', monospace; }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            vertical-align: middle;
+        }
+        ::-webkit-scrollbar { width: 4px; height: 4px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #d9e4ec; border-radius: 2px; }
+        .ghost-border { border: 1px solid rgba(168, 179, 187, 0.15); }
+    </style>
+</head>
+<body class="bg-background text-on-background antialiased overflow-hidden selection:bg-primary-container">
+<!-- SideNavBar -->
+<aside class="fixed left-0 top-0 h-full flex flex-col h-screen w-64 bg-slate-100 dark:bg-slate-900 font-sans antialiased text-sm tracking-tight z-50">
+<div class="px-6 py-8">
+<h1 class="text-lg font-mono font-bold text-slate-900 dark:text-slate-100">GRACE-L2</h1>
+<p class="text-xs text-secondary uppercase tracking-widest mt-1">Precision Pipeline</p>
+</div>
+<nav class="flex-1 space-y-0.5">
+<a class="flex items-center gap-3 px-4 py-3 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors" href="#">
+<span class="material-symbols-outlined" data-icon="dashboard">dashboard</span>
+<span>Dashboard</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors" href="#">
+<span class="material-symbols-outlined" data-icon="folder_open">folder_open</span>
+<span>Data &amp; Paths</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors" href="#">
+<span class="material-symbols-outlined" data-icon="settings_input_component">settings_input_component</span>
+<span>Processing Setup</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors" href="#">
+<span class="material-symbols-outlined" data-icon="water_drop">water_drop</span>
+<span>Leakage</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-blue-700 dark:text-blue-400 border-l-2 border-blue-700 dark:border-blue-500 bg-slate-200/50 dark:bg-slate-800/50" href="#">
+<span class="material-symbols-outlined" data-icon="terrain" style="font-variation-settings: 'FILL' 1;">terrain</span>
+<span>Basin</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors" href="#">
+<span class="material-symbols-outlined" data-icon="visibility">visibility</span>
+<span>Preview</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors" href="#">
+<span class="material-symbols-outlined" data-icon="monitoring">monitoring</span>
+<span>Run Monitor</span>
+</a>
+</nav>
+<div class="mt-auto p-4 bg-slate-200 dark:bg-slate-800 w-[1px] h-full hidden"></div>
+</aside>
+<!-- TopAppBar -->
+<header class="flex items-center justify-between px-6 ml-64 w-[calc(100%-16rem)] h-14 bg-slate-50 dark:bg-slate-950 font-mono text-xs uppercase tracking-widest z-40">
+<div class="flex items-center gap-4">
+<span class="font-bold text-slate-800 dark:text-slate-200">GRACE Level-2 Pipeline</span>
+<span class="text-outline-variant">/</span>
+<span class="text-blue-700 font-medium">Basin Workflow</span>
+</div>
+<div class="flex items-center gap-6">
+<button class="text-slate-500 hover:text-blue-600 dark:hover:text-blue-400 flex items-center gap-1 cursor-pointer transition-opacity">
+<span class="material-symbols-outlined text-[18px]" data-icon="pause">pause</span>
+<span>Pause</span>
+</button>
+<button class="text-blue-700 font-bold hover:text-blue-600 dark:hover:text-blue-400 flex items-center gap-1 cursor-pointer transition-opacity">
+<span class="material-symbols-outlined text-[18px]" data-icon="play_arrow">play_arrow</span>
+<span>Run</span>
+</button>
+<div class="h-4 w-px bg-surface-container-high mx-2"></div>
+<span class="material-symbols-outlined text-slate-500 hover:text-blue-600 cursor-pointer" data-icon="stop">stop</span>
+<span class="material-symbols-outlined text-slate-500 hover:text-blue-600 cursor-pointer" data-icon="settings">settings</span>
+</div>
+</header>
+<!-- Main Content -->
+<main class="ml-64 w-[calc(100%-16rem)] h-[calc(100vh-3.5rem-3rem)] overflow-y-auto p-6 bg-background space-y-6 pb-20">
+<!-- Action Header -->
+<div class="flex items-center justify-between bg-surface-container-lowest p-4 rounded-sm ghost-border">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-primary" data-icon="settings_input_antenna">settings_input_antenna</span>
+<div>
+<h2 class="text-label-md font-medium text-on-surface">Basin Analysis Control</h2>
+<p class="text-[10px] text-secondary tracking-tight">Global toggle for spatial averaging modules</p>
+</div>
+</div>
+<label class="relative inline-flex items-center cursor-pointer">
+<input checked="" class="sr-only peer" type="checkbox"/>
+<div class="w-11 h-5 bg-surface-container-high peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary"></div>
+<span class="ml-3 text-xs font-mono font-medium text-primary uppercase">Active</span>
+</label>
+</div>
+<!-- Layout Grid -->
+<div class="grid grid-cols-12 gap-6">
+<!-- Basin Definition Card -->
+<div class="col-span-8 bg-surface-container-lowest rounded-sm ghost-border flex flex-col overflow-hidden">
+<div class="bg-surface-container-low px-4 py-2.5 flex items-center justify-between">
+<span class="text-xs font-medium text-secondary uppercase tracking-wider">Basin Definition</span>
+<span class="material-symbols-outlined text-outline text-[16px]" data-icon="info">info</span>
+</div>
+<div class="p-4 space-y-6">
+<div class="space-y-2">
+<label class="text-[11px] font-medium text-secondary uppercase">Boundary File Path (.shp, .json, .kml)</label>
+<div class="flex gap-2">
+<input class="flex-1 bg-background border-none text-xs font-mono p-2 focus:ring-1 focus:ring-primary rounded-sm ghost-border" type="text" value="/mnt/nas_01/spatial_masks/global_hydrology_basins_v4.2.shp"/>
+<button class="px-3 bg-surface-container-high hover:bg-surface-container-highest transition-colors flex items-center">
+<span class="material-symbols-outlined text-[18px]" data-icon="file_open">file_open</span>
+</button>
+</div>
+</div>
+<div class="space-y-2">
+<label class="text-[11px] font-medium text-secondary uppercase">Basin Selection Mode</label>
+<div class="grid grid-cols-3 gap-3">
+<div class="p-3 bg-surface-container-low border-l-2 border-primary cursor-pointer">
+<span class="block text-xs font-semibold text-on-surface">Multi-Selector</span>
+<span class="text-[10px] text-secondary">Custom batch extraction</span>
+</div>
+<div class="p-3 bg-background border-l-2 border-transparent hover:bg-surface-container-low transition-colors cursor-pointer">
+<span class="block text-xs font-semibold text-on-surface">Global Scan</span>
+<span class="text-[10px] text-secondary">All defined boundaries</span>
+</div>
+<div class="p-3 bg-background border-l-2 border-transparent hover:bg-surface-container-low transition-colors cursor-pointer">
+<span class="block text-xs font-semibold text-on-surface">Point Buffer</span>
+<span class="text-[10px] text-secondary">Radial area around coords</span>
+</div>
+</div>
+</div>
+<div class="space-y-2">
+<label class="text-[11px] font-medium text-secondary uppercase">Entity Filter List</label>
+<div class="h-48 overflow-y-auto bg-background rounded-sm ghost-border font-mono text-[11px]">
+<table class="w-full text-left">
+<thead class="sticky top-0 bg-surface-container-high text-on-surface-variant uppercase text-[10px]">
+<tr>
+<th class="p-2 w-10"><input type="checkbox"/></th>
+<th class="p-2">ID</th>
+<th class="p-2">Basin Name</th>
+<th class="p-2">Area (km²)</th>
+<th class="p-2">Region</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-outline-variant/10">
+<tr class="hover:bg-primary/5">
+<td class="p-2"><input checked="" type="checkbox"/></td>
+<td class="p-2 text-primary font-bold">AMZ_01</td>
+<td class="p-2">Amazon Basin</td>
+<td class="p-2">6,144,727</td>
+<td class="p-2 text-secondary">South America</td>
+</tr>
+<tr class="hover:bg-primary/5 bg-primary/5">
+<td class="p-2"><input checked="" type="checkbox"/></td>
+<td class="p-2 text-primary font-bold">MSI_04</td>
+<td class="p-2">Mississippi-Missouri</td>
+<td class="p-2">3,202,230</td>
+<td class="p-2 text-secondary">North America</td>
+</tr>
+<tr class="hover:bg-primary/5">
+<td class="p-2"><input type="checkbox"/></td>
+<td class="p-2 text-primary font-bold">NLE_02</td>
+<td class="p-2">Nile River</td>
+<td class="p-2">3,349,000</td>
+<td class="p-2 text-secondary">Africa</td>
+</tr>
+<tr class="hover:bg-primary/5">
+<td class="p-2"><input checked="" type="checkbox"/></td>
+<td class="p-2 text-primary font-bold">YGT_09</td>
+<td class="p-2">Yangtze (Chang Jiang)</td>
+<td class="p-2">1,808,500</td>
+<td class="p-2 text-secondary">East Asia</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</div>
+</div>
+<!-- Side Config Panels -->
+<div class="col-span-4 space-y-6">
+<!-- Output Options Card -->
+<div class="bg-surface-container-lowest rounded-sm ghost-border flex flex-col overflow-hidden">
+<div class="bg-surface-container-low px-4 py-2.5 flex items-center">
+<span class="text-xs font-medium text-secondary uppercase tracking-wider">Output Options</span>
+</div>
+<div class="p-4 space-y-4">
+<div class="space-y-1.5">
+<label class="text-[10px] text-secondary uppercase">Export Format</label>
+<select class="w-full bg-background border-none text-xs p-2 rounded-sm ghost-border focus:ring-1 focus:ring-primary">
+<option>Scientific NetCDF (.nc)</option>
+<option>Tidy CSV (.csv)</option>
+<option>Binary Flat File (.bin)</option>
+<option>Hierarchical Data Format (.hdf5)</option>
+</select>
+</div>
+<div class="space-y-1.5">
+<label class="text-[10px] text-secondary uppercase">Data Destination</label>
+<div class="flex gap-2">
+<input class="flex-1 bg-background border-none text-xs font-mono p-2 rounded-sm ghost-border" type="text" value="./outputs/basin_series_v1/"/>
+</div>
+</div>
+<div class="pt-2 flex items-center justify-between border-t border-outline-variant/10">
+<span class="text-[11px] text-on-surface">Enable Metadata Injection</span>
+<input checked="" class="rounded-none border-outline text-primary focus:ring-primary" type="checkbox"/>
+</div>
+<div class="flex items-center justify-between">
+<span class="text-[11px] text-on-surface">Compress Files (LZO)</span>
+<input class="rounded-none border-outline text-primary focus:ring-primary" type="checkbox"/>
+</div>
+</div>
+</div>
+<!-- Temporal Handling Card -->
+<div class="bg-surface-container-lowest rounded-sm ghost-border flex flex-col overflow-hidden">
+<div class="bg-surface-container-low px-4 py-2.5 flex items-center">
+<span class="text-xs font-medium text-secondary uppercase tracking-wider">Temporal Handling</span>
+</div>
+<div class="p-4 space-y-4">
+<div class="space-y-1.5">
+<label class="text-[10px] text-secondary uppercase">Aggregation Strategy</label>
+<div class="space-y-2">
+<div class="flex items-center gap-2">
+<input checked="" class="text-primary focus:ring-primary" name="temp" type="radio"/>
+<span class="text-xs">Calendar Month Mean</span>
+</div>
+<div class="flex items-center gap-2">
+<input class="text-primary focus:ring-primary" name="temp" type="radio"/>
+<span class="text-xs">10-Day Sliding Window</span>
+</div>
+</div>
+</div>
+<div class="space-y-2 pt-2">
+<label class="text-[10px] text-secondary uppercase">Missing Month Fallback</label>
+<select class="w-full bg-background border-none text-xs p-2 rounded-sm ghost-border focus:ring-1 focus:ring-primary">
+<option>Linear Interpolation</option>
+<option>Seasonal Climatology Substitute</option>
+<option>Omit from Series (NaN)</option>
+<option>Spline Smoothing</option>
+</select>
+</div>
+<div class="bg-error/5 p-3 border-l-2 border-error/40">
+<div class="flex items-center gap-2 text-on-error-container">
+<span class="material-symbols-outlined text-[14px]" data-icon="warning">warning</span>
+<span class="text-[10px] font-bold uppercase">Critical Alert</span>
+</div>
+<p class="text-[10px] text-on-error-container mt-1">Gaps &gt; 3 months will trigger pipeline halt by default.</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+</main>
+<!-- BottomNavBar / Console -->
+<footer class="fixed bottom-0 left-64 w-[calc(100%-16rem)] z-50 flex justify-between items-center px-4 bg-slate-900 dark:bg-black h-12 border-t border-slate-800 font-mono text-[11px] leading-tight shadow-2xl">
+<div class="flex items-center gap-6 h-full">
+<div class="flex items-center gap-2 px-3 text-emerald-400 bg-slate-800 h-full border-b-2 border-emerald-500">
+<span class="material-symbols-outlined text-[16px]" data-icon="terminal">terminal</span>
+<span>Console</span>
+</div>
+<div class="flex items-center gap-2 px-3 text-slate-400 hover:bg-slate-800 hover:text-white transition-all duration-150 cursor-pointer h-full">
+<span class="material-symbols-outlined text-[16px]" data-icon="filter_list">filter_list</span>
+<span>Filters</span>
+</div>
+<div class="flex items-center gap-2 px-3 text-slate-400 hover:bg-slate-800 hover:text-white transition-all duration-150 cursor-pointer h-full">
+<span class="material-symbols-outlined text-[16px]" data-icon="delete_sweep">delete_sweep</span>
+<span>Clear</span>
+</div>
+</div>
+<div class="flex items-center gap-4 text-slate-500">
+<div class="flex items-center gap-2">
+<div class="w-2 h-2 rounded-full bg-emerald-500"></div>
+<span>CORE_ENGINE: ACTIVE</span>
+</div>
+<div class="w-px h-4 bg-slate-700"></div>
+<span>LOGS: 1,402 EVENTS</span>
+<div class="w-px h-4 bg-slate-700"></div>
+<span>MEM: 14.2 GB / 32 GB</span>
+</div>
+</footer>
+<!-- Overlay Visualization (Example of a scientific tool detail) -->
+<div class="fixed top-20 right-10 w-64 bg-surface-container-lowest/90 backdrop-blur-lg shadow-2xl ghost-border p-4 z-30 rounded-sm">
+<div class="flex items-center justify-between mb-3">
+<span class="text-[10px] font-bold text-secondary uppercase">Preview: Amazon_01</span>
+<span class="material-symbols-outlined text-[14px] text-primary" data-icon="close">close</span>
+</div>
+<div class="h-32 bg-surface-container-high relative overflow-hidden flex items-center justify-center">
+<img class="opacity-40 grayscale mix-blend-multiply w-full h-full object-cover" data-alt="Satellite thermal map of river basin" src="https://lh3.googleusercontent.com/aida-public/AB6AXuB-9sowH_W6_m8lMpMcDLp-xQtTBa7eB7CIJF5XvO8V4bHPRwEVjKaUzK9uwkQHELH94pVfwxUHSL8HQeal-UhJjcPU1ITmHNvvmlO25wzChQI0fnaogiKmY4jT-5COZaB4ETcSJTzuMIxp523z2x8syLVmQhBVZjSeboroK21jbrfCwjS4k9wLkzW9PEEIdWULqYgSGYhjr0P4wbhu-xGkGZCeV-8hgOvUOsZLDmEU4AlfUmAZ81H3QBjTS0JIbKB0CBR0w1fmSg"/>
+<div class="absolute inset-0 border-2 border-primary/20 flex items-center justify-center">
+<div class="w-16 h-16 border-2 border-dashed border-primary animate-pulse"></div>
+</div>
+<span class="absolute bottom-2 right-2 text-[8px] bg-primary text-white px-1">L2-MASK-ACTIVE</span>
+</div>
+<div class="mt-3 space-y-1">
+<div class="flex justify-between text-[10px]">
+<span class="text-secondary">Centroid Lat:</span>
+<span class="font-mono">-3.4653°</span>
+</div>
+<div class="flex justify-between text-[10px]">
+<span class="text-secondary">Centroid Lon:</span>
+<span class="font-mono">-62.2159°</span>
+</div>
+<div class="h-1 bg-surface-container-high mt-2">
+<div class="h-full bg-primary w-2/3"></div>
+</div>
+<span class="text-[8px] text-secondary italic">Spectral coherence: 0.92</span>
+</div>
+</div>
+</body></html>

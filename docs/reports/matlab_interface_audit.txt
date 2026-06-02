@@ -1,0 +1,92 @@
+== MATLAB Interface Audit ==
+Root: matlab\src
+
+-- Files By Module --
+basin        6
+core         13
+filters      10
+inversion    14
+io           18
+leakage      11
+main         28
+metrics      11
+plot         6
+tools        142
+
+-- Filename/Primary Function Mismatch (0) --
+
+-- Duplicate Primary Function Names (0) --
+
+-- Long Files > 300 lines (22) --
+ 2996  matlab\src\tools\m_map\m_colmap.m
+ 2895  matlab\src\tools\m_map\s_colmap.m
+  985  matlab\src\tools\m_map\m_grid.m
+  821  matlab\src\tools\m_map\private\mu_coast.m
+  714  matlab\src\filters\HSA.m
+  644  matlab\src\tools\plm2xyz.m
+  644  matlab\src\tools\plm2xyz_error.m
+  469  matlab\src\tools\m_map\m_vec.m
+  427  matlab\src\tools\m_map\m_ginput.m
+  374  matlab\src\tools\m_map\private\mp_utm.m
+  371  matlab\src\tools\m_map\private\mu_util.m
+  364  matlab\src\filters\filter_grid_hsaf_adaptive_profile.m
+  363  matlab\src\main\main_try_load_reference.m
+  358  matlab\src\tools\m_map\m_shaperead.m
+  353  matlab\src\tools\m_map\m_demo.m
+  342  matlab\src\tools\gmt\gmt_harmonic.m
+  339  matlab\src\tools\m_map\m_hatch.m
+  323  matlab\src\tools\m_map\private\mp_conic.m
+  314  matlab\src\plot\plot_map_basin.m
+  310  matlab\src\tools\m_map\m_shadedrelief.m
+  307  matlab\src\tools\m_map\m_etopo2.m
+  303  matlab\src\tools\m_map\m_ruler.m
+
+-- High Arity Signatures > 8 args (12) --
+in=4, out=13  matlab\src\tools\gmt\gmt_harmonic.m
+in=12, out=0  matlab\src\main\pipeline_finalize_month.m
+in=11, out=1  matlab\src\main\pipeline_run_basin_stage.m
+in=11, out=4  matlab\src\main\pipeline_build_stacks_stage.m
+in=2, out=11  matlab\src\tools\addmon.m
+in=10, out=2  matlab\src\main\pipeline_run_hsaf_stack_stage.m
+in=10, out=1  matlab\src\main\pipeline_prepare_month_input.m
+in=9, out=1  matlab\src\main\pipeline_load_or_compute_month.m
+in=9, out=2  matlab\src\main\pipeline_eval_month_metrics.m
+in=9, out=2  matlab\src\metrics\metrics_eval_month.m
+in=9, out=1  matlab\src\metrics\metrics_acc_update.m
+in=9, out=2  matlab\src\tools\m_map\m_ellipse.m
+
+-- Varargin/Varargout Usage (60) --
+varargin           matlab\src\core\checkpoint_manager.m
+varargin           matlab\src\core\perf_tracker.m
+varargin           matlab\src\core\progress_bar.m
+varargin           matlab\src\io\io_save_mat.m
+varargin,varargout matlab\src\tools\GRACE-filter-master\src\matlab\filterSH.m
+varargin           matlab\src\tools\GRACE-filter-master\src\matlab\read_BIN.m
+varargin           matlab\src\tools\GRACE-filter-master\src\matlab\readSH.m
+varargin           matlab\src\tools\m_map\m_annotation.m
+varargin           matlab\src\tools\m_map\m_coast.m
+varargin           matlab\src\tools\m_map\m_contfbar.m
+varargin           matlab\src\tools\m_map\m_contour.m
+varargin           matlab\src\tools\m_map\m_contourf.m
+varargin           matlab\src\tools\m_map\m_elev.m
+varargin,varargout matlab\src\tools\m_map\m_ellipse.m
+varargin           matlab\src\tools\m_map\m_etopo2.m
+varargin           matlab\src\tools\m_map\m_geodesic.m
+varargin           matlab\src\tools\m_map\m_ginput.m
+varargin           matlab\src\tools\m_map\m_grid.m
+varargin           matlab\src\tools\m_map\m_gshhs.m
+varargin           matlab\src\tools\m_map\m_gshhs_c.m
+varargin           matlab\src\tools\m_map\m_gshhs_f.m
+varargin           matlab\src\tools\m_map\m_gshhs_h.m
+varargin           matlab\src\tools\m_map\m_gshhs_i.m
+varargin           matlab\src\tools\m_map\m_gshhs_l.m
+varargin           matlab\src\tools\m_map\m_hatch.m
+varargin           matlab\src\tools\m_map\m_image.m
+varargin           matlab\src\tools\m_map\m_legend.m
+varargin           matlab\src\tools\m_map\m_line.m
+varargin           matlab\src\tools\m_map\m_ll2xy.m
+varargin           matlab\src\tools\m_map\m_northarrow.m
+
+-- Non-main Modules Calling main/* (0) --
+
+Audit completed.

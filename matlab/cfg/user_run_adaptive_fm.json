@@ -1,0 +1,84 @@
+{
+  "__template": "HPC full filters + basin + leakage FM (HSAF adaptive, legacy lat bands)",
+  "path": {
+    "GFC": "${ROOT}/data/GRACE/GSM",
+    "OUTPUT": "${ROOT}/output",
+    "AUX": "${ROOT}/data/Aux",
+    "DDK": "${ROOT}/data/Aux/DDK",
+    "BOUNDARY": "${ROOT}/data/Boundary/boundary_cache"
+  },
+  "time": {
+    "auto_detect_gfc": true
+  },
+  "reference": {
+    "mascon_dir": "${ROOT}/data/Reference/Mascon",
+    "mascon_pattern": "Mascon_{YYYYMM}.nc",
+    "allow_nearest_month": true,
+    "nearest_month_tolerance_days": 45
+  },
+  "gldas": {
+    "dir": ""
+  },
+  "io": {
+    "return_stacks": false,
+    "return_metrics": false,
+    "return_basin": true,
+    "resume": false
+  },
+  "metrics": {
+    "enable": false
+  },
+  "parallel": {
+    "enable": true,
+    "nWorkers": 52
+  },
+  "filter": {
+    "pre_hankel_input": "P4M6",
+    "gaussian": { "enable": true },
+    "p4m6": { "enable": true },
+    "fan": { "enable": true },
+    "ddk": { "enable": true, "type": "DDK4" },
+    "hankel": {
+      "stack_mode": true,
+      "variant": "adaptive",
+      "Ts": 1,
+      "params": { "p": 60, "K": 30, "wl_band_deg": [5, 60] },
+      "adaptive": [
+        { "lat_range": [-90, -60], "params": { "p": 50, "K": 20, "wl_band_deg": [5, 60] } },
+        { "lat_range": [-60, 60],  "params": { "p": 60, "K": 30, "wl_band_deg": [5, 60] } },
+        { "lat_range": [60, 90],   "params": { "p": 50, "K": 20, "wl_band_deg": [5, 60] } }
+      ]
+    }
+  },
+  "basin": {
+    "analysis_enable": false,
+    "boundary_file": "${ROOT}/data/Boundary/boundary_cache/LargeBasin.shp",
+    "name": "LargeBasin"
+  },
+  "leakage": {
+    "enable": true,
+    "method": "FM",
+    "apply_to": ["RAW","P4M6","GAUSS","FAN","P4M6_GAUSS","P4M6_FAN","DDK","HSAF"],
+    "Lmax": 60,
+    "grid_interval": 1,
+    "FM": {
+      "nIter": 2
+    }
+  },
+  "inversion": {
+    "Lmax": 60,
+    "remove_mean": true,
+    "lowdeg": {
+      "enable": true,
+      "replace_C20": true,
+      "replace_C10": true,
+      "replace_S20": false,
+      "files": {
+        "C20": "${ROOT}/data/GRACE/LowDegree/TN-14_C30_C20_GSFC_SLR.txt",
+        "DEGREE1": "${ROOT}/data/GRACE/LowDegree/TN-13_GEOC_CSR_RL06.txt"
+      }
+    }
+  }
+}
+
+

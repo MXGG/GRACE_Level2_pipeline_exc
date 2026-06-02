@@ -1,0 +1,88 @@
+{
+  "__template": "Local HSAF adaptive (OLA) only",
+  "path": {
+    "OUTPUT": "${ROOT}/output"
+  },
+  "io": {
+    "save_monthly_mat": true,
+    "save_stack_mat": true,
+    "export_txt": false,
+    "resume": false,
+    "return_stacks": false,
+    "return_metrics": false,
+    "return_basin": false
+  },
+  "metrics": {
+    "enable": false
+  },
+  "reference": {
+    "type": "none"
+  },
+  "basin": {
+    "analysis_enable": false
+  },
+  "leakage": {
+    "enable": false
+  },
+  "parallel": {
+    "enable": true,
+    "nWorkers": 8
+  },
+  "filter": {
+    "pre_hankel_input": "P4M6",
+    "gaussian": { "enable": false },
+    "p4m6": { "enable": true },
+    "fan": { "enable": false },
+    "ddk": { "enable": false },
+    "hankel": {
+      "enable": true,
+      "stack_mode": true,
+      "log_progress": true,
+      "variant": "adaptive",
+      "Ts": 1,
+      "params": {
+        "p": 80,
+        "K": 28,
+        "wl_band_deg": [3, 35],
+        "opt": {
+          "detrend_mode": "constant",
+          "taper_alpha": 0.02,
+          "force_conjugate_pairs": true,
+          "min_mode_energy_ratio": 0,
+          "protect_wl_gt_deg": 1e9,
+          "use_sliding": true,
+          "win_min": 60,
+          "win_overlap": 0.90,
+          "ola_window": "hann",
+          "ola_tukey_alpha": 0.25,
+          "p_cap_ratio": 0.3333,
+          "p_min_win": 24,
+          "k_min": 6,
+          "k_max": 28,
+          "k_per_window": false,
+          "k_energy": 0.95,
+          "circular": true
+        }
+      },
+      "adaptive": [
+        { "lat_range": [-90, -60], "params": { "p": 70, "K": 24, "wl_band_deg": [3, 35] } },
+        { "lat_range": [-60, -30], "params": { "p": 80, "K": 28, "wl_band_deg": [3, 35] } },
+        { "lat_range": [-30,  30], "params": { "p": 100, "K": 32, "wl_band_deg": [3, 35] } },
+        { "lat_range": [ 30,  60], "params": { "p": 80, "K": 28, "wl_band_deg": [3, 35] } },
+        { "lat_range": [ 60,  90], "params": { "p": 70, "K": 24, "wl_band_deg": [3, 35] } }
+      ]
+    }
+  },
+  "inversion": {
+    "lowdeg": {
+      "enable": true,
+      "replace_C20": true,
+      "replace_C10": true,
+      "replace_S20": false,
+      "files": {
+        "C20": "${ROOT}/data/GRACE/LowDegree/TN-14_C30_C20_GSFC_SLR.txt",
+        "DEGREE1": "${ROOT}/data/GRACE/LowDegree/TN-13_GEOC_CSR_RL06.txt"
+      }
+    }
+  }
+}

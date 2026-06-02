@@ -1,0 +1,120 @@
+{
+  "__template": "LOCAL full flow - adaptive HSAF with OLA",
+  "path": {
+    "GFC": "${ROOT}/data/GRACE/GSM",
+    "OUTPUT": "${ROOT}/output/local",
+    "AUX": "${ROOT}/data/Aux",
+    "DDK": "${ROOT}/data/Aux/DDK",
+    "BOUNDARY": "${ROOT}/data/Boundary/boundary_cache"
+  },
+  "time": {
+    "auto_detect_gfc": true
+  },
+  "reference": {
+    "type": "mascon",
+    "mascon_dir": "${ROOT}/data/Reference/Mascon",
+    "mascon_pattern": "Mascon_{YYYYMM}.nc",
+    "allow_nearest_month": true,
+    "nearest_month_tolerance_days": 45,
+    "mascon_undo": {
+      "enable": false,
+      "gad_file": "CSR_GRACE_GRACE-FO_RL0603_Mascons_GAD-component.nc",
+      "gia_file": "CSR_GRACE_GRACE-FO_RL0603_Mascons_GIA-component.nc"
+    }
+  },
+  "gldas": {
+    "dir": ""
+  },
+  "parallel": {
+    "enable": true,
+    "nWorkers": 8
+  },
+  "io": {
+    "save_monthly_mat": true,
+    "save_stack_mat": true,
+    "export_txt": true,
+    "resume": false,
+    "return_stacks": false,
+    "return_metrics": false,
+    "return_basin": false
+  },
+  "metrics": {
+    "enable": true
+  },
+  "filter": {
+    "pre_hankel_input": "P4M6",
+    "gaussian": { "enable": true },
+    "p4m6": { "enable": true },
+    "fan": { "enable": true },
+    "ddk": { "enable": true, "type": "DDK4" },
+    "hankel": {
+      "enable": true,
+      "stack_mode": true,
+      "variant": "adaptive",
+      "Ts": 1,
+      "params": {
+        "p": 80,
+        "K": 28,
+        "wl_band_deg": [3, 35],
+        "opt": {
+          "detrend_mode": "constant",
+          "taper_alpha": 0.02,
+          "force_conjugate_pairs": true,
+          "min_mode_energy_ratio": 0,
+          "protect_wl_gt_deg": 1e9,
+          "use_sliding": true,
+          "win_min": 60,
+          "win_overlap": 0.90,
+          "ola_window": "hann",
+          "ola_tukey_alpha": 0.25,
+          "p_cap_ratio": 0.3333,
+          "p_min_win": 24,
+          "k_min": 6,
+          "k_max": 28,
+          "k_per_window": false,
+          "k_energy": 0.95,
+          "circular": true
+        }
+      },
+      "adaptive": [
+        { "lat_range": [-90, -60], "params": { "p": 70, "K": 24, "wl_band_deg": [3, 35] } },
+        { "lat_range": [-60, -30], "params": { "p": 80, "K": 28, "wl_band_deg": [3, 35] } },
+        { "lat_range": [-30,  30], "params": { "p": 100, "K": 32, "wl_band_deg": [3, 35] } },
+        { "lat_range": [ 30,  60], "params": { "p": 80, "K": 28, "wl_band_deg": [3, 35] } },
+        { "lat_range": [ 60,  90], "params": { "p": 70, "K": 24, "wl_band_deg": [3, 35] } }
+      ]
+    }
+  },
+  "basin": {
+    "analysis_enable": true,
+    "boundary_file": "${ROOT}/data/Boundary/boundary_cache/LargeBasin.shp",
+    "name": "LargeBasin"
+  },
+  "leakage": {
+    "enable": true,
+    "method": "FM",
+    "apply_to": ["RAW","P4M6","GAUSS","FAN","P4M6_GAUSS","P4M6_FAN","DDK","HSAF"],
+    "Lmax": 60,
+    "grid_interval": 1,
+    "FM": { "nIter": 2 }
+  },
+  "inversion": {
+    "Lmax": 60,
+    "remove_mean": true,
+    "lowdeg": {
+      "enable": true,
+      "replace_C20": true,
+      "replace_C10": true,
+      "replace_S20": false,
+      "files": {
+        "C20": "${ROOT}/data/GRACE/LowDegree/TN-14_C30_C20_GSFC_SLR.txt",
+        "DEGREE1": "${ROOT}/data/GRACE/LowDegree/TN-13_GEOC_CSR_RL06.txt"
+      }
+    },
+    "gia": {
+      "enable": false,
+      "file": "${ROOT}/data/GRACE/GIA/GIA_Stokes_ICE-6G_D.txt",
+      "Lmax": 60
+    }
+  }
+}

@@ -1,0 +1,297 @@
+{
+  "_comment": "GRACE Level-2 Processing Pipeline Configuration",
+  "_doc": "See cfg/README.md for detailed parameter documentation",
+  "path": {
+    "_comment": "Directory paths - G:\\GRACE_Level2_pipeline_exc is auto-resolved to project root",
+    "ROOT": "G:\\GRACE_Level2_pipeline_exc",
+    "GFC": "G:\\GRACE_Level2_pipeline_exc\\data\\GRACE\\SLR\\IGG-SLR-DORR",
+    "OUTPUT": "G:\\GRACE_Level2_pipeline_exc\\output",
+    "AUX": "G:\\GRACE_Level2_pipeline_exc\\data\\Aux",
+    "DDK": "G:\\GRACE_Level2_pipeline_exc\\data\\DDK",
+    "BOUNDARY": "G:\\GRACE_Level2_pipeline_exc\\data\\Boundary\\boundary_cache",
+    "TOOLBOX": {
+      "tool_functions": "G:\\GRACE_Level2_pipeline_exc/src/tools",
+      "m_map": "G:\\GRACE_Level2_pipeline_exc/src/tools/m_map",
+      "gmt": "G:\\GRACE_Level2_pipeline_exc/src/tools/gmt"
+    }
+  },
+  "reference": {
+    "_comment": "Reference data for metrics evaluation",
+    "type": "mascon",
+    "mascon_dir": "G:\\GRACE_Level2_pipeline_exc\\data\\Reference\\Mascon",
+    "mascon_pattern": "CSR_GRACE_GRACE-FO_RL06_Mascons_all-corrections_v02.nc",
+    "allow_nearest_month": true,
+    "nearest_month_tolerance_days": 45,
+    "mascon_undo": {
+      "gad_file": "G:\\GRACE_Level2_pipeline_exc\\data\\Reference\\Mascon\\CSR_GRACE_GRACE-FO_RL0603_Mascons_GAD-component.nc",
+      "enable": false,
+      "gia_file": "G:\\GRACE_Level2_pipeline_exc\\data\\Reference\\Mascon\\CSR_GRACE_GRACE-FO_RL0603_Mascons_GIA-component.nc"
+    }
+  },
+  "gldas": {
+    "_comment": "GLDAS data for GWSA computation (optional)",
+    "dir": "",
+    "pattern": "GLDAS_NOAH_{YYYYMM}.nc",
+    "vars": {
+      "tws": "lwe_thickness",
+      "soil": [
+        "SoilMoi00_10cm_inst",
+        "SoilMoi10_40cm_inst",
+        "SoilMoi40_100cm_inst"
+      ],
+      "snow": "SWE_inst",
+      "canopy": "CanopyWater_inst"
+    }
+  },
+  "time": {
+    "_comment": "Time range configuration",
+    "auto_detect_gfc": true,
+    "start_ym": "1984-01",
+    "end_ym": "2023-12",
+    "product_type": "GSM",
+    "file_ext": ".gfc"
+  },
+  "grid": {
+    "_comment": "Output grid specification",
+    "lon": [
+      -179.75,
+      179.75
+    ],
+    "lat": [
+      -89.75,
+      89.75
+    ],
+    "dlon": 0.5,
+    "dlat": 0.5,
+    "unit": "mmEWH"
+  },
+  "inversion": {
+    "_comment": "Spherical harmonic inversion parameters",
+    "Lmax": 60,
+    "remove_mean": true,
+    "mean_start_ym": "2004-01",
+    "mean_end_ym": "2009-12",
+    "lowdeg": {
+      "enable": false,
+      "replace_C20": true,
+      "replace_degree1": true,
+      "replace_C10": true,
+      "replace_C30": true,
+      "files": {
+        "C20": "G:\\GRACE_Level2_pipeline_exc\\data\\GRACE\\LowDegree\\TN-14_C30_C20_GSFC_SLR.txt",
+        "DEGREE1": "G:\\GRACE_Level2_pipeline_exc\\data\\GRACE\\LowDegree\\TN-13_GEOC_CSR_RL06.txt"
+      },
+      "replace_S20": false
+    },
+    "gia": {
+      "enable": false,
+      "file": "G:\\GRACE_Level2_pipeline_exc\\data\\GRACE\\GIA\\GIA_Stokes_ICE-6G_D.txt",
+      "Lmax": 60
+    }
+  },
+  "filter": {
+    "_comment": "Spectral and spatial filter settings",
+    "gaussian": {
+      "_comment": "Isotropic Gaussian smoothing",
+      "enable": false,
+      "radius_km": 300.0
+    },
+    "p4m6": {
+      "_comment": "Polynomial destriping (P=poly_deg, M=m_start)",
+      "enable": false,
+      "poly_deg": 4,
+      "m_start": 6
+    },
+    "fan": {
+      "_comment": "Anisotropic Fan filter",
+      "enable": false,
+      "radius1_km": 300.0,
+      "radius2_km": 300.0
+    },
+    "ddk": {
+      "_comment": "DDK decorrelation filter (DDK1=strongest, DDK8=weakest)",
+      "enable": true,
+      "type": "DDK4",
+      "data_dir": "G:\\GRACE_Level2_pipeline_exc\\data\\DDK"
+    },
+    "hankel": {
+      "_comment": "HSAF grid-domain filter - variant: 'global' (same params) or 'adaptive' (lat-dependent)",
+      "_adaptive_example": "For adaptive mode, configure: adaptive: [{lat_range: [-90,-60], params: {p:60, K:20, wl_band_deg:[5,60]}}]",
+      "enable": false,
+      "variant": "global",
+      "engine": "matlab_v3",
+      "adaptive": [
+        {
+          "lat_range": [
+            -90.0,
+            -30.0
+          ],
+          "params": {
+            "N": 30,
+            "P": 8,
+            "K": 4,
+            "J": 1
+          }
+        },
+        {
+          "lat_range": [
+            -30.0,
+            30.0
+          ],
+          "params": {
+            "N": 30,
+            "P": 8,
+            "K": 4,
+            "J": 1
+          }
+        },
+        {
+          "lat_range": [
+            30.0,
+            90.0
+          ],
+          "params": {
+            "N": 30,
+            "P": 8,
+            "K": 4,
+            "J": 1
+          }
+        }
+      ],
+      "mode": "profile",
+      "params": {
+        "N": 30,
+        "P": 8,
+        "K": 4,
+        "J": 1,
+        "iterations": 1,
+        "alpha_cutoff": 0.0035,
+        "convergence_tol": 1e-07
+      },
+      "stack_mode": true
+    },
+    "pre_hankel_input": "P4M6",
+    "combinations": {
+      "gaussian_pnmn": false,
+      "fan_pnmn": false
+    }
+  },
+  "basin": {
+    "_comment": "Basin analysis settings (optional)",
+    "analysis_enable": false,
+    "boundary_file": "",
+    "name": "",
+    "data_file": "",
+    "name_field": "Name",
+    "output_dir": "G:\\GRACE_Level2_pipeline_exc\\output\\local\\basin",
+    "aggregation_strategy": "Calendar Month Mean",
+    "missing_month_fallback": "Linear Interpolation"
+  },
+  "leakage": {
+    "_comment": "Leakage Reduction/Correction (SF or FM)",
+    "enable": true,
+    "scope": "global",
+    "method": "SF",
+    "sf_factor": 1.0,
+    "sf_auto": false,
+    "sf_method": "Auto",
+    "sf_gauss_km": 300.0,
+    "sf_fan_r1_km": 300,
+    "sf_fan_r2_km": 300,
+    "sf_ddk_type": "DDK4",
+    "sf_p4_deg": 4,
+    "sf_p4_m": 6,
+    "sf_grid_interval": 0.5,
+    "sf_hsa_window": 60,
+    "sf_hsa_p": 20,
+    "sf_hsa_order": 6,
+    "sf_hsa_buffer": 10,
+    "sf_hsa_ts": 1,
+    "fm_max_iter": 40,
+    "fm_autocap_hsaf_iter": true,
+    "fm_hsaf_iter_cap": 40,
+    "fm_allow_hsaf_parallel": true,
+    "fm_hsaf_use_process_pool": true,
+    "fm_hsaf_outer_workers_cap": 12,
+    "fm_hsaf_inner_workers": 1,
+    "fm_min_iter": 3,
+    "fm_tol": 0.01,
+    "fm_patience": 8,
+    "fm_min_improve": 0.0001,
+    "fm_accel": 1.1,
+    "fm_metric": "land_weighted_mean",
+    "sf_toolbox": "",
+    "input": "",
+    "output": "",
+    "format": "mat",
+    "boundary_file": "",
+    "script_global": "G:/2Simulation_Global_Signal_No_Error/2Simulation_Global_Signal_No_Error/MatlabWork/2ForwardModeling/FM_HPC_new.m",
+    "script_region": "G:/HSAF/Software/caspian_leakage_reduction_05.m",
+    "matlab": "matlab",
+    "strategy_family": "global_regularized",
+    "correction_strategy": "auto",
+    "official_mode": "auto",
+    "scene_override": "auto",
+    "reference_mode": "trend",
+    "reference_input": "",
+    "coastal_buffer_cells": 3,
+    "coastal_attenuation_gain": 1.0,
+    "regularized_lambda": 0.18,
+    "regularized_step_size": 0.9,
+    "regularized_sigma": 1.2,
+    "regularized_iter": 10
+  },
+  "metrics": {
+    "_comment": "Evaluation metrics settings",
+    "enable": false,
+    "compute_spectrum": false
+  },
+  "io": {
+    "_comment": "Input/output settings",
+    "save_monthly_mat": true,
+    "save_stack_mat": true,
+    "export_txt": false,
+    "txt_format": "lonlatval",
+    "resume": false,
+    "return_stacks": false,
+    "return_basin": false,
+    "return_metrics": false,
+    "save_stack_hdf5": true
+  },
+  "plot": {
+    "_comment": "Visualization settings",
+    "quicklook": false,
+    "metrics_ts": true,
+    "metrics_maps": true,
+    "stack_mean": true,
+    "stack_trend_amp": true,
+    "basin_overlay": true,
+    "caxis": {
+      "ewh": [
+        -30,
+        30
+      ],
+      "trend": [
+        -5,
+        5
+      ],
+      "amp": [
+        -15,
+        15
+      ]
+    }
+  },
+  "parallel": {
+    "_comment": "Parallel processing settings",
+    "enable": true,
+    "nWorkers": 52
+  },
+  "perf": {
+    "_comment": "Runtime performance toggles",
+    "allow_frozen_parallel": false,
+    "runtime_profile": "balanced",
+    "frozen_max_workers": 0
+  },
+  "__template": "Machine-specific configuration (HPC Cluster)",
+  "__memory_note": "OPTIMIZED: Disabled parallel pool to prevent OOM - HPC memory per job is limited"
+}

@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Data &amp; Paths - GRACE Level-2 Pipeline</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "on-error-container": "#752121",
+              "primary-fixed-dim": "#bfd5ff",
+              "on-primary-container": "#00519e",
+              "on-error": "#fff7f6",
+              "on-secondary": "#f2faff",
+              "surface-bright": "#f7f9fc",
+              "surface-container-high": "#e1e9f0",
+              "inverse-on-surface": "#9a9da0",
+              "background": "#f7f9fc",
+              "primary-container": "#d6e3ff",
+              "tertiary-fixed": "#b2faa9",
+              "secondary-fixed": "#cfe6f2",
+              "secondary": "#4d626c",
+              "on-tertiary-fixed-variant": "#2a6c2c",
+              "tertiary-fixed-dim": "#a4eb9c",
+              "surface-container-low": "#f0f4f8",
+              "on-tertiary": "#eaffe2",
+              "surface-container": "#e8eff4",
+              "surface-variant": "#d9e4ec",
+              "on-primary-fixed-variant": "#005bb0",
+              "error-dim": "#4e0309",
+              "surface-container-highest": "#d9e4ec",
+              "outline-variant": "#a8b3bb",
+              "on-secondary-container": "#40555f",
+              "secondary-dim": "#415660",
+              "secondary-container": "#cfe6f2",
+              "on-surface": "#29343a",
+              "on-surface-variant": "#566168",
+              "outline": "#717c84",
+              "surface": "#f7f9fc",
+              "on-primary": "#f6f7ff",
+              "tertiary-dim": "#1d5f21",
+              "on-background": "#29343a",
+              "inverse-primary": "#5f9efb",
+              "on-tertiary-container": "#1f6223",
+              "primary-fixed": "#d6e3ff",
+              "tertiary": "#2a6c2c",
+              "surface-tint": "#005db5",
+              "tertiary-container": "#b2faa9",
+              "error": "#9f403d",
+              "primary": "#005db5",
+              "on-tertiary-fixed": "#054e12",
+              "error-container": "#fe8983",
+              "on-secondary-fixed-variant": "#495f69",
+              "on-secondary-fixed": "#2d424c",
+              "secondary-fixed-dim": "#c1d8e4",
+              "primary-dim": "#0052a0",
+              "on-primary-fixed": "#003f7d",
+              "inverse-surface": "#0b0f11",
+              "surface-dim": "#cedce5",
+              "surface-container-lowest": "#ffffff"
+            },
+            fontFamily: {
+              "headline": ["Inter"],
+              "body": ["Inter"],
+              "label": ["Inter"],
+              "mono": ["JetBrains Mono"]
+            },
+            borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+          },
+        },
+      }
+    </script>
+<style>
+      .material-symbols-outlined {
+        font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        vertical-align: middle;
+      }
+      body {
+        font-family: 'Inter', sans-serif;
+      }
+      .mono-text {
+        font-family: 'JetBrains Mono', monospace;
+      }
+      .glass-accent {
+        background: linear-gradient(15deg, #005db5, #0052a0);
+      }
+      /* Custom styles for details/summary disclosure */
+      details summary::-webkit-details-marker {
+        display: none;
+      }
+    </style>
+</head>
+<body class="bg-background text-on-background antialiased overflow-hidden h-screen flex">
+<!-- SideNavBar -->
+<aside class="fixed left-0 top-0 h-full flex flex-col h-screen w-64 border-r-0 bg-slate-100 dark:bg-slate-900 font-sans antialiased text-sm tracking-tight z-50">
+<div class="px-6 py-8">
+<h1 class="text-lg font-mono font-bold text-slate-900 dark:text-slate-100 uppercase tracking-tighter">GRACE-L2</h1>
+<p class="text-[10px] text-secondary tracking-widest uppercase opacity-70">Precision Pipeline</p>
+</div>
+<nav class="flex-1 flex flex-col">
+<a class="flex items-center gap-3 px-4 py-3 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors scale-98 active:opacity-80" href="#">
+<span class="material-symbols-outlined" data-icon="dashboard">dashboard</span>
+<span>Dashboard</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-blue-700 dark:text-blue-400 border-l-2 border-blue-700 dark:border-blue-500 bg-slate-200/50 dark:bg-slate-800/50 scale-98 active:opacity-80" href="#">
+<span class="material-symbols-outlined" data-icon="folder_open">folder_open</span>
+<span class="font-medium">Data &amp; Paths</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors scale-98 active:opacity-80" href="#">
+<span class="material-symbols-outlined" data-icon="settings_input_component">settings_input_component</span>
+<span>Processing Setup</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors scale-98 active:opacity-80" href="#">
+<span class="material-symbols-outlined" data-icon="water_drop">water_drop</span>
+<span>Leakage</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors scale-98 active:opacity-80" href="#">
+<span class="material-symbols-outlined" data-icon="terrain">terrain</span>
+<span>Basin</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors scale-98 active:opacity-80" href="#">
+<span class="material-symbols-outlined" data-icon="visibility">visibility</span>
+<span>Preview</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors scale-98 active:opacity-80" href="#">
+<span class="material-symbols-outlined" data-icon="monitoring">monitoring</span>
+<span>Run Monitor</span>
+</a>
+</nav>
+<div class="p-4 bg-slate-200 dark:bg-slate-800/50">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 glass-accent rounded-sm flex items-center justify-center text-white font-mono text-xs">SYS</div>
+<div class="flex flex-col">
+<span class="text-[10px] font-bold text-on-surface uppercase tracking-tighter leading-none">Status: Ready</span>
+<span class="text-[9px] text-secondary font-mono">v4.12.0-stable</span>
+</div>
+</div>
+</div>
+</aside>
+<!-- Main Wrapper -->
+<div class="flex-1 flex flex-col ml-64 min-w-0">
+<!-- TopAppBar -->
+<header class="flex items-center justify-between px-6 w-full h-14 bg-slate-50 dark:bg-slate-950 font-mono text-xs uppercase tracking-widest z-40">
+<div class="flex items-center gap-4">
+<span class="font-bold text-slate-800 dark:text-slate-200">GRACE Level-2 Pipeline</span>
+<span class="text-slate-400">/</span>
+<span class="text-blue-700 font-medium">Data &amp; Paths</span>
+</div>
+<div class="flex items-center gap-4">
+<button class="px-3 py-1 flex items-center gap-2 bg-primary text-white font-bold hover:opacity-90 transition-opacity">
+<span class="material-symbols-outlined text-[14px]" data-icon="play_arrow">play_arrow</span>
+                Run
+            </button>
+<button class="px-3 py-1 flex items-center gap-2 bg-surface-container-high text-on-surface-variant font-bold hover:opacity-90 transition-opacity">
+<span class="material-symbols-outlined text-[14px]" data-icon="pause">pause</span>
+                Pause
+            </button>
+<div class="flex items-center gap-2 pl-4 border-l border-outline-variant/30">
+<span class="material-symbols-outlined text-slate-500 cursor-pointer hover:text-blue-600" data-icon="stop">stop</span>
+<span class="material-symbols-outlined text-slate-500 cursor-pointer hover:text-blue-600" data-icon="settings">settings</span>
+</div>
+</div>
+</header>
+<!-- Main Workspace (Canvas) -->
+<main class="flex-1 overflow-y-auto p-6 space-y-6 pb-20 bg-background">
+<div class="flex items-end justify-between">
+<div>
+<h2 class="text-2xl font-headline font-semibold text-on-surface tracking-tight">Data &amp; Path Configuration</h2>
+<p class="text-sm text-secondary mt-1">Define environmental variables and directory pointers for processing modules.</p>
+</div>
+<button class="glass-accent text-white px-4 py-2 text-sm font-medium rounded-sm flex items-center gap-2 shadow-sm">
+<span class="material-symbols-outlined text-[18px]" data-icon="sync_alt">sync_alt</span>
+                Validate All Paths
+            </button>
+</div>
+<!-- Bento Grid Layout for Sections -->
+<div class="grid grid-cols-12 gap-6">
+<!-- Input Directories Card -->
+<div class="col-span-12 lg:col-span-6 bg-surface-container-lowest border border-outline-variant/15 rounded-sm overflow-hidden flex flex-col">
+<div class="px-4 py-3 bg-surface-container-low flex justify-between items-center">
+<span class="text-xs font-medium uppercase tracking-wider text-secondary flex items-center gap-2">
+<span class="material-symbols-outlined text-[16px]" data-icon="input">input</span>
+                        Input Directories
+                    </span>
+<span class="px-2 py-0.5 bg-tertiary-container text-on-tertiary-container text-[10px] font-bold rounded-sm">2 ACTIVE</span>
+</div>
+<div class="p-4 space-y-4">
+<!-- Path Item 1 -->
+<div class="space-y-1.5">
+<div class="flex justify-between items-center">
+<label class="text-[11px] font-medium text-secondary-dim uppercase tracking-tight">GFC input directory</label>
+<span class="flex items-center gap-1 text-[10px] text-tertiary font-medium">
+<span class="material-symbols-outlined text-[14px]" data-icon="check_circle" data-weight="fill" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+                                Verified
+                            </span>
+</div>
+<div class="flex gap-1">
+<input class="flex-1 bg-surface-container-low border-0 text-xs mono-text p-2 focus:ring-1 focus:ring-primary outline-none" type="text" value="/mnt/scientific/grace/v2/gfc_raw_2024"/>
+<button class="px-3 bg-surface-container-high hover:bg-surface-variant transition-colors flex items-center">
+<span class="material-symbols-outlined text-[18px]" data-icon="folder_open">folder_open</span>
+</button>
+</div>
+</div>
+<!-- Path Item 2 -->
+<div class="space-y-1.5">
+<div class="flex justify-between items-center">
+<label class="text-[11px] font-medium text-secondary-dim uppercase tracking-tight">DDK data directory</label>
+<span class="flex items-center gap-1 text-[10px] text-error font-medium">
+<span class="material-symbols-outlined text-[14px]" data-icon="error" data-weight="fill" style="font-variation-settings: 'FILL' 1;">error</span>
+                                Invalid Path
+                            </span>
+</div>
+<div class="flex gap-1">
+<input class="flex-1 bg-surface-container-low border-0 text-xs mono-text p-2 focus:ring-1 focus:ring-primary outline-none border-l-2 border-error" type="text" value="/data/filters/ddk_v5/null"/>
+<button class="px-3 bg-surface-container-high hover:bg-surface-variant transition-colors flex items-center">
+<span class="material-symbols-outlined text-[18px]" data-icon="folder_open">folder_open</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+<!-- Output Directories Card -->
+<div class="col-span-12 lg:col-span-6 bg-surface-container-lowest border border-outline-variant/15 rounded-sm overflow-hidden flex flex-col">
+<div class="px-4 py-3 bg-surface-container-low flex justify-between items-center">
+<span class="text-xs font-medium uppercase tracking-wider text-secondary flex items-center gap-2">
+<span class="material-symbols-outlined text-[16px]" data-icon="output">output</span>
+                        Output Directories
+                    </span>
+<div class="flex items-center gap-2">
+<label class="text-[9px] text-secondary-dim font-bold">REMOTE SYNC</label>
+<div class="w-8 h-4 bg-primary rounded-full relative p-0.5 cursor-pointer">
+<div class="w-3 h-3 bg-white rounded-full absolute right-0.5"></div>
+</div>
+</div>
+</div>
+<div class="p-4 space-y-4">
+<div class="space-y-1.5">
+<div class="flex justify-between items-center">
+<label class="text-[11px] font-medium text-secondary-dim uppercase tracking-tight">Main output root</label>
+<span class="flex items-center gap-1 text-[10px] text-tertiary font-medium">
+<span class="material-symbols-outlined text-[14px]" data-icon="check_circle" data-weight="fill" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+                                Verified
+                            </span>
+</div>
+<div class="flex gap-1">
+<input class="flex-1 bg-surface-container-low border-0 text-xs mono-text p-2 focus:ring-1 focus:ring-primary outline-none" type="text" value="/mnt/storage/out/grace_L2_run_alpha"/>
+<button class="px-3 bg-surface-container-high hover:bg-surface-variant transition-colors flex items-center">
+<span class="material-symbols-outlined text-[18px]" data-icon="folder_open">folder_open</span>
+</button>
+</div>
+</div>
+<div class="space-y-1.5">
+<div class="flex justify-between items-center">
+<label class="text-[11px] font-medium text-secondary-dim uppercase tracking-tight">Logs directory</label>
+<span class="flex items-center gap-1 text-[10px] text-on-secondary-container font-medium opacity-60 italic">
+<span class="material-symbols-outlined text-[14px]" data-icon="pending">pending</span>
+                                Auto-generated
+                            </span>
+</div>
+<div class="flex gap-1">
+<input class="flex-1 bg-surface-container-low border-0 text-xs mono-text p-2 opacity-50 cursor-not-allowed" disabled="" type="text" value="/mnt/storage/out/grace_L2_run_alpha/logs"/>
+<button class="px-3 bg-surface-container-high cursor-not-allowed flex items-center" disabled="">
+<span class="material-symbols-outlined text-[18px] opacity-40" data-icon="lock">lock</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+<!-- Reference Paths (Wide Section) -->
+<div class="col-span-12 bg-surface-container-lowest border border-outline-variant/15 rounded-sm overflow-hidden flex flex-col">
+<div class="px-4 py-3 bg-surface-container-low border-b border-outline-variant/10 flex justify-between items-center">
+<span class="text-xs font-medium uppercase tracking-wider text-secondary flex items-center gap-2">
+<span class="material-symbols-outlined text-[16px]" data-icon="link">link</span>
+                        Reference Paths
+                    </span>
+<div class="flex gap-4">
+<span class="text-[10px] flex items-center gap-1 text-tertiary font-bold"><span class="w-1.5 h-1.5 rounded-full bg-tertiary"></span> 4 OK</span>
+<span class="text-[10px] flex items-center gap-1 text-on-error-container font-bold"><span class="w-1.5 h-1.5 rounded-full bg-error"></span> 1 WARNING</span>
+</div>
+</div>
+<div class="p-4 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-x-8 gap-y-5">
+<!-- Reference Item 1 -->
+<div class="space-y-1.5">
+<div class="flex justify-between">
+<label class="text-[11px] font-medium text-secondary-dim uppercase tracking-tight">AUX path</label>
+<span class="material-symbols-outlined text-[14px] text-tertiary" data-icon="check_circle">check_circle</span>
+</div>
+<div class="flex gap-1">
+<input class="flex-1 bg-background border-0 text-[10px] mono-text p-1.5 outline-none focus:bg-surface-container-lowest border-l border-outline-variant/30" type="text" value="/usr/lib/grace/aux_data"/>
+<button class="px-2 bg-surface-container-high hover:bg-surface-variant transition-colors"><span class="material-symbols-outlined text-[16px]" data-icon="edit">edit</span></button>
+</div>
+</div>
+<!-- Reference Item 2 -->
+<div class="space-y-1.5">
+<div class="flex justify-between">
+<label class="text-[11px] font-medium text-secondary-dim uppercase tracking-tight">boundary path</label>
+<span class="material-symbols-outlined text-[14px] text-tertiary" data-icon="check_circle">check_circle</span>
+</div>
+<div class="flex gap-1">
+<input class="flex-1 bg-background border-0 text-[10px] mono-text p-1.5 outline-none focus:bg-surface-container-lowest border-l border-outline-variant/30" type="text" value="/data/ref/boundaries/world_geom.shp"/>
+<button class="px-2 bg-surface-container-high hover:bg-surface-variant transition-colors"><span class="material-symbols-outlined text-[16px]" data-icon="edit">edit</span></button>
+</div>
+</div>
+<!-- Reference Item 3 -->
+<div class="space-y-1.5">
+<div class="flex justify-between">
+<label class="text-[11px] font-medium text-secondary-dim uppercase tracking-tight">low-degree path</label>
+<span class="material-symbols-outlined text-[14px] text-amber-500" data-icon="warning">warning</span>
+</div>
+<div class="flex gap-1">
+<input class="flex-1 bg-background border-0 text-[10px] mono-text p-1.5 outline-none focus:bg-surface-container-lowest border-l-2 border-amber-500" type="text" value="/data/ref/low_deg/TN13_slr_C20.txt"/>
+<button class="px-2 bg-surface-container-high hover:bg-surface-variant transition-colors"><span class="material-symbols-outlined text-[16px]" data-icon="edit">edit</span></button>
+</div>
+</div>
+<!-- Reference Item 4 -->
+<div class="space-y-1.5">
+<div class="flex justify-between">
+<label class="text-[11px] font-medium text-secondary-dim uppercase tracking-tight">GIA model path</label>
+<span class="material-symbols-outlined text-[14px] text-tertiary" data-icon="check_circle">check_circle</span>
+</div>
+<div class="flex gap-1">
+<input class="flex-1 bg-background border-0 text-[10px] mono-text p-1.5 outline-none focus:bg-surface-container-lowest border-l border-outline-variant/30" type="text" value="/data/ref/gia/ice6g_d.nc"/>
+<button class="px-2 bg-surface-container-high hover:bg-surface-variant transition-colors"><span class="material-symbols-outlined text-[16px]" data-icon="edit">edit</span></button>
+</div>
+</div>
+<!-- Reference Item 5 -->
+<div class="space-y-1.5">
+<div class="flex justify-between">
+<label class="text-[11px] font-medium text-secondary-dim uppercase tracking-tight">mascon reference</label>
+<span class="material-symbols-outlined text-[14px] text-tertiary" data-icon="check_circle">check_circle</span>
+</div>
+<div class="flex gap-1">
+<input class="flex-1 bg-background border-0 text-[10px] mono-text p-1.5 outline-none focus:bg-surface-container-lowest border-l border-outline-variant/30" type="text" value="/data/ref/mascons/jpl_rl06_v2.nc"/>
+<button class="px-2 bg-surface-container-high hover:bg-surface-variant transition-colors"><span class="material-symbols-outlined text-[16px]" data-icon="edit">edit</span></button>
+</div>
+</div>
+</div>
+</div>
+<!-- Advanced Settings Section -->
+<div class="col-span-12">
+<details class="group bg-surface-container-lowest border border-outline-variant/15 rounded-sm overflow-hidden">
+<summary class="px-4 py-3 bg-slate-50 dark:bg-slate-900/50 cursor-pointer flex justify-between items-center hover:bg-slate-100 dark:hover:bg-slate-900 transition-colors list-none">
+<span class="text-xs font-medium uppercase tracking-wider text-secondary flex items-center gap-2">
+<span class="material-symbols-outlined text-[16px]" data-icon="admin_panel_settings">admin_panel_settings</span>
+                            Advanced Path &amp; Validation Settings
+                        </span>
+<div class="flex items-center gap-2">
+<span class="text-[10px] text-secondary-dim font-bold uppercase tracking-widest group-open:hidden">Show Advanced</span>
+<span class="text-[10px] text-secondary-dim font-bold uppercase tracking-widest hidden group-open:block">Hide Advanced</span>
+<span class="material-symbols-outlined text-secondary transition-transform group-open:rotate-180" data-icon="expand_more">expand_more</span>
+</div>
+</summary>
+<div class="p-6 grid grid-cols-1 md:grid-cols-3 gap-8 border-t border-outline-variant/10">
+<!-- Setting 1: Verification Strategy -->
+<div class="space-y-3">
+<div class="flex flex-col">
+<label class="text-[11px] font-bold text-on-surface uppercase tracking-tight">Path Verification Strategy</label>
+<p class="text-[10px] text-secondary leading-relaxed mt-1">Determine the depth of validation for network and local file pointers.</p>
+</div>
+<div class="flex bg-surface-container-low p-1 rounded-sm w-fit">
+<button class="px-4 py-1.5 text-[10px] font-bold bg-white shadow-sm rounded-sm text-primary">QUICK</button>
+<button class="px-4 py-1.5 text-[10px] font-bold text-secondary-dim hover:text-on-surface">DEEP</button>
+</div>
+</div>
+<!-- Setting 2: Metadata Injection -->
+<div class="space-y-3">
+<div class="flex flex-col">
+<label class="text-[11px] font-bold text-on-surface uppercase tracking-tight">Metadata Injection Controls</label>
+<p class="text-[10px] text-secondary leading-relaxed mt-1">Automatically embed source path lineage into generated NetCDF headers.</p>
+</div>
+<div class="flex items-center gap-3">
+<div class="w-10 h-5 bg-primary rounded-full relative p-1 cursor-pointer">
+<div class="w-3 h-3 bg-white rounded-full absolute right-1"></div>
+</div>
+<span class="text-[10px] font-mono text-primary font-bold">ENABLED</span>
+</div>
+</div>
+<!-- Setting 3: Symlink Handling -->
+<div class="space-y-3">
+<div class="flex flex-col">
+<label class="text-[11px] font-bold text-on-surface uppercase tracking-tight">Symbolic Link Handling</label>
+<p class="text-[10px] text-secondary leading-relaxed mt-1">Choose how the pipeline interacts with virtual directory structures.</p>
+</div>
+<select class="w-full bg-surface-container-low border-0 text-[10px] mono-text p-2 focus:ring-1 focus:ring-primary outline-none">
+<option>FOLLOW (DEFAULT)</option>
+<option>PRESERVE (STRICT)</option>
+<option>RESOLVE FULL PATH</option>
+<option>IGNORE/SKIP</option>
+</select>
+</div>
+</div>
+</details>
+</div>
+</div>
+</main>
+<!-- BottomNavBar / Console -->
+<footer class="fixed bottom-0 left-64 w-[calc(100%-16rem)] z-50 flex justify-between items-center px-4 bg-slate-900 dark:bg-black h-12 border-t border-slate-800 shadow-2xl font-mono text-[11px] leading-tight">
+<div class="flex h-full">
+<div class="flex items-center gap-2 px-3 text-emerald-400 bg-slate-800 transition-all duration-150 cursor-pointer">
+<span class="material-symbols-outlined text-[16px]" data-icon="terminal">terminal</span>
+                Console
+            </div>
+<div class="flex items-center gap-2 px-3 text-slate-400 hover:bg-slate-800 hover:text-white transition-all duration-150 cursor-pointer">
+<span class="material-symbols-outlined text-[16px]" data-icon="filter_list">filter_list</span>
+                Filters
+            </div>
+</div>
+<div class="flex items-center gap-6">
+<div class="flex items-center gap-4 text-slate-500">
+<span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-emerald-500"></span> ENGINE ONLINE</span>
+<span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-slate-700"></span> DB LATENCY: 12ms</span>
+</div>
+<div class="flex items-center gap-2 px-3 text-slate-400 hover:bg-slate-800 hover:text-white transition-all duration-150 cursor-pointer h-full">
+<span class="material-symbols-outlined text-[16px]" data-icon="delete_sweep">delete_sweep</span>
+                Clear
+            </div>
+</div>
+</footer>
+</div>
+<!-- Floating UI elements for scientific context -->
+<div class="fixed top-20 right-8 w-48 pointer-events-none opacity-20 hidden xl:block">
+<div class="relative w-full aspect-square border border-outline-variant/30 rounded-full flex items-center justify-center">
+<div class="absolute inset-0 border border-outline-variant/20 rounded-full scale-75"></div>
+<div class="absolute inset-0 border border-outline-variant/10 rounded-full scale-50"></div>
+<div class="w-1 h-32 bg-primary/40 rotate-45"></div>
+<div class="w-32 h-1 bg-primary/40 -rotate-12"></div>
+</div>
+<p class="text-[8px] font-mono text-center mt-4 tracking-widest text-on-surface-variant">GRAVITY MAPPING SYSTEM COORDINATES</p>
+</div>
+</body></html>

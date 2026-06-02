@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "on-error-container": "#752121",
+              "primary-fixed-dim": "#bfd5ff",
+              "on-primary-container": "#00519e",
+              "on-error": "#fff7f6",
+              "on-secondary": "#f2faff",
+              "surface-bright": "#f7f9fc",
+              "surface-container-high": "#e1e9f0",
+              "inverse-on-surface": "#9a9da0",
+              "background": "#f7f9fc",
+              "primary-container": "#d6e3ff",
+              "tertiary-fixed": "#b2faa9",
+              "secondary-fixed": "#cfe6f2",
+              "secondary": "#4d626c",
+              "on-tertiary-fixed-variant": "#2a6c2c",
+              "tertiary-fixed-dim": "#a4eb9c",
+              "surface-container-low": "#f0f4f8",
+              "on-tertiary": "#eaffe2",
+              "surface-container": "#e8eff4",
+              "surface-variant": "#d9e4ec",
+              "on-primary-fixed-variant": "#005bb0",
+              "error-dim": "#4e0309",
+              "surface-container-highest": "#d9e4ec",
+              "outline-variant": "#a8b3bb",
+              "on-secondary-container": "#40555f",
+              "secondary-dim": "#415660",
+              "secondary-container": "#cfe6f2",
+              "on-surface": "#29343a",
+              "on-surface-variant": "#566168",
+              "outline": "#717c84",
+              "surface": "#f7f9fc",
+              "on-primary": "#f6f7ff",
+              "tertiary-dim": "#1d5f21",
+              "on-background": "#29343a",
+              "inverse-primary": "#5f9efb",
+              "on-tertiary-container": "#1f6223",
+              "primary-fixed": "#d6e3ff",
+              "tertiary": "#2a6c2c",
+              "surface-tint": "#005db5",
+              "tertiary-container": "#b2faa9",
+              "error": "#9f403d",
+              "primary": "#005db5",
+              "on-tertiary-fixed": "#054e12",
+              "error-container": "#fe8983",
+              "on-secondary-fixed-variant": "#495f69",
+              "on-secondary-fixed": "#2d424c",
+              "secondary-fixed-dim": "#c1d8e4",
+              "primary-dim": "#0052a0",
+              "on-primary-fixed": "#003f7d",
+              "inverse-surface": "#0b0f11",
+              "surface-dim": "#cedce5",
+              "surface-container-lowest": "#ffffff"
+            },
+            fontFamily: {
+              "headline": ["Inter"],
+              "body": ["Inter"],
+              "label": ["Inter"],
+              "mono": ["JetBrains Mono"]
+            },
+            borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+          },
+        },
+      }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            font-size: 20px;
+        }
+        .mono-text { font-family: 'JetBrains Mono', monospace; }
+        .glass-panel { backdrop-filter: blur(20px); background-color: rgba(247, 249, 252, 0.85); }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .map-grid-overlay {
+            background-image: 
+                linear-gradient(to right, rgba(0,0,0,0.05) 1px, transparent 1px),
+                linear-gradient(to bottom, rgba(0,0,0,0.05) 1px, transparent 1px);
+            background-size: 40px 40px;
+        }
+    </style>
+</head>
+<body class="bg-background text-on-surface font-body overflow-hidden">
+<!-- SideNavBar (Navigation Rail) -->
+<aside class="fixed left-0 top-0 h-full flex flex-col w-64 bg-slate-100 dark:bg-slate-900 font-sans antialiased text-sm tracking-tight z-50 shadow-lg">
+<div class="px-6 py-8">
+<h1 class="text-lg font-mono font-bold text-slate-900 dark:text-slate-100">GRACE-L2</h1>
+<p class="text-[10px] uppercase tracking-[0.2em] text-secondary opacity-70">Precision Pipeline</p>
+</div>
+<nav class="flex-1 flex flex-col gap-1">
+<div class="flex items-center gap-3 px-4 py-3 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors cursor-pointer">
+<span class="material-symbols-outlined">dashboard</span>
+<span>Dashboard</span>
+</div>
+<div class="flex items-center gap-3 px-4 py-3 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors cursor-pointer">
+<span class="material-symbols-outlined">folder_open</span>
+<span>Data &amp; Paths</span>
+</div>
+<div class="flex items-center gap-3 px-4 py-3 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors cursor-pointer">
+<span class="material-symbols-outlined">settings_input_component</span>
+<span>Processing Setup</span>
+</div>
+<div class="flex items-center gap-3 px-4 py-3 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors cursor-pointer">
+<span class="material-symbols-outlined">water_drop</span>
+<span>Leakage</span>
+</div>
+<div class="flex items-center gap-3 px-4 py-3 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors cursor-pointer">
+<span class="material-symbols-outlined">terrain</span>
+<span>Basin</span>
+</div>
+<!-- Active State -->
+<div class="flex items-center gap-3 px-4 py-3 text-blue-700 dark:text-blue-400 border-l-2 border-blue-700 dark:border-blue-500 bg-slate-200/50 dark:bg-slate-800/50 scale-98 active:opacity-80">
+<span class="material-symbols-outlined">visibility</span>
+<span>Preview</span>
+</div>
+<div class="flex items-center gap-3 px-4 py-3 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors cursor-pointer">
+<span class="material-symbols-outlined">monitoring</span>
+<span>Run Monitor</span>
+</div>
+</nav>
+<div class="bg-slate-200 dark:bg-slate-800 w-[1px] h-full absolute right-0 top-0"></div>
+</aside>
+<!-- Main Content Area -->
+<main class="ml-64 flex flex-col h-screen">
+<!-- TopAppBar -->
+<header class="flex items-center justify-between px-6 h-14 w-full bg-slate-100 dark:bg-slate-900 font-mono text-xs uppercase tracking-widest border-b border-outline-variant/10 z-10">
+<div class="flex items-center gap-4">
+<span class="font-bold text-slate-800 dark:text-slate-200">GRACE Level-2 Pipeline</span>
+<span class="text-outline">/</span>
+<span class="text-primary font-medium">Preview &amp; Analysis</span>
+</div>
+<div class="flex items-center gap-4">
+<button class="flex items-center gap-2 text-slate-500 hover:text-blue-600 dark:hover:text-blue-400 transition-opacity">
+<span class="material-symbols-outlined text-[18px]">pause</span>
+<span>Pause</span>
+</button>
+<button class="flex items-center gap-2 bg-primary text-white px-4 py-1.5 rounded-sm hover:bg-primary-dim transition-colors">
+<span class="material-symbols-outlined text-[18px]">play_arrow</span>
+<span>Run</span>
+</button>
+<div class="w-px h-4 bg-outline-variant/30"></div>
+<span class="material-symbols-outlined cursor-pointer hover:text-blue-600">stop</span>
+<span class="material-symbols-outlined cursor-pointer hover:text-blue-600">settings</span>
+</div>
+</header>
+<!-- Workbench Layout -->
+<div class="flex-1 flex overflow-hidden">
+<!-- Left Config Sidebar -->
+<aside class="w-72 bg-surface-container-low overflow-y-auto no-scrollbar flex flex-col p-4 gap-6 border-r border-outline-variant/10">
+<!-- Dataset Source -->
+<section>
+<label class="block text-[10px] font-bold text-secondary uppercase tracking-wider mb-2">Dataset Source</label>
+<div class="bg-surface-container-lowest border border-outline-variant/20 px-3 py-1.5 text-xs flex items-center justify-between rounded-sm">
+<div class="flex items-center overflow-hidden">
+<span class="opacity-40 material-symbols-outlined mr-2 scale-75">insert_drive_file</span>
+<span class="truncate opacity-60">stack_v2_grace_jpl.nc</span>
+</div>
+<button class="text-[10px] text-primary hover:underline font-medium">Browse</button>
+</div>
+</section>
+<!-- Time Index -->
+<section>
+<label class="block text-[10px] font-bold text-secondary uppercase tracking-wider mb-2">Time Index</label>
+<div class="space-y-3">
+<div class="flex justify-between text-[10px] mono-text opacity-70">
+<span>2002-04-15</span>
+<span>2023-11-20</span>
+</div>
+<input class="w-full h-1 bg-outline-variant/30 rounded-lg appearance-none cursor-pointer accent-primary" max="100" min="0" type="range" value="75"/>
+<div class="text-center text-[11px] font-mono font-semibold text-primary bg-primary/5 py-1.5 border border-primary/10">Index: 2018-06-15</div>
+</div>
+</section>
+<!-- Projection -->
+<section>
+<label class="block text-[10px] font-bold text-secondary uppercase tracking-wider mb-2">Projection</label>
+<select class="w-full bg-surface-container-lowest border border-outline-variant/20 px-3 py-2 text-xs focus:ring-0 rounded-sm">
+<option>Robinson (Global)</option>
+<option>Plate Carrée</option>
+<option>Orthographic</option>
+<option>Mollweide</option>
+</select>
+</section>
+<!-- Layer Stack Control -->
+<section class="border-t border-outline-variant/10 pt-4 flex-1">
+<div class="flex items-center justify-between mb-3">
+<label class="block text-[10px] font-bold text-secondary uppercase tracking-wider">Layer Stack</label>
+<button class="text-primary"><span class="material-symbols-outlined text-[16px]">add</span></button>
+</div>
+<div class="space-y-1">
+<!-- Layer 1: Active Data -->
+<div class="flex items-center justify-between p-2 rounded-sm bg-primary/10 border border-primary/20 cursor-pointer group">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[16px] text-primary">layers</span>
+<span class="text-xs font-semibold text-primary">Data: Mass Anomaly</span>
+</div>
+<input checked="" class="rounded-sm text-primary focus:ring-primary w-4 h-4 border-outline-variant/40" type="checkbox"/>
+</div>
+<!-- Layer 2: Vector Layers -->
+<div class="flex items-center justify-between p-2 rounded-sm hover:bg-surface-container-highest cursor-pointer group">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[16px] text-outline opacity-70">polyline</span>
+<span class="text-xs group-hover:text-primary transition-colors">Coastlines</span>
+</div>
+<input checked="" class="rounded-sm text-primary focus:ring-primary w-4 h-4 border-outline-variant/40" type="checkbox"/>
+</div>
+<div class="flex items-center justify-between p-2 rounded-sm hover:bg-surface-container-highest cursor-pointer group">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[16px] text-outline opacity-70">public</span>
+<span class="text-xs group-hover:text-primary transition-colors">Basin Boundaries</span>
+</div>
+<input checked="" class="rounded-sm text-primary focus:ring-primary w-4 h-4 border-outline-variant/40" type="checkbox"/>
+</div>
+<div class="flex items-center justify-between p-2 rounded-sm hover:bg-surface-container-highest cursor-pointer group">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[16px] text-outline opacity-70">grid_4x4</span>
+<span class="text-xs group-hover:text-primary transition-colors">Grid Lines</span>
+</div>
+<input checked="" class="rounded-sm text-primary focus:ring-primary w-4 h-4 border-outline-variant/40" type="checkbox"/>
+</div>
+<div class="flex items-center justify-between p-2 rounded-sm hover:bg-surface-container-highest cursor-pointer group">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[16px] text-outline opacity-70">water</span>
+<span class="text-xs group-hover:text-primary transition-colors">River Networks</span>
+</div>
+<input class="rounded-sm text-primary focus:ring-primary w-4 h-4 border-outline-variant/40" type="checkbox"/>
+</div>
+</div>
+</section>
+<!-- Export Section -->
+<section class="border-t border-outline-variant/10 pt-4 pb-2">
+<button class="w-full bg-[#005FB8] text-white text-[11px] font-bold py-2.5 rounded-sm hover:opacity-90 transition-opacity flex items-center justify-center gap-2 shadow-sm uppercase tracking-wider">
+<span class="material-symbols-outlined text-[16px]">file_download</span>
+<span>Export Figure</span>
+</button>
+</section>
+</aside>
+<!-- Main Interactive Plot Area (Optimized for 1920x1080) -->
+<section class="flex-1 bg-surface-container p-6 flex flex-col relative overflow-hidden">
+<!-- Map Metadata Header -->
+<div class="mb-4 flex flex-col">
+<span class="text-[10px] font-mono uppercase tracking-[0.4em] text-secondary/60">Spatial Mass Change Anomaly</span>
+<h2 class="text-2xl font-headline font-semibold text-on-surface">Robinson Projection: June 2018</h2>
+</div>
+<!-- Visualization Canvas -->
+<div class="flex-1 relative flex flex-col bg-surface-container-lowest shadow-inner border border-outline-variant/20 overflow-hidden">
+<!-- Axis Ticks: Latitude (Left) -->
+<div class="absolute left-0 top-0 bottom-0 w-8 flex flex-col justify-between py-12 text-[9px] font-mono text-secondary z-20 pointer-events-none opacity-60">
+<span>90°N</span><span>60°N</span><span>30°N</span><span>0°</span><span>30°S</span><span>60°S</span><span>90°S</span>
+</div>
+<!-- Axis Ticks: Longitude (Bottom) -->
+<div class="absolute bottom-0 left-0 right-0 h-6 flex justify-between px-12 text-[9px] font-mono text-secondary z-20 pointer-events-none opacity-60">
+<span>180°W</span><span>120°W</span><span>60°W</span><span>0°</span><span>60°E</span><span>120°E</span><span>180°E</span>
+</div>
+<!-- Tools Overlay (Top Left) -->
+<div class="absolute top-4 left-10 z-30 flex flex-col gap-1 bg-white/90 backdrop-blur-md p-1 border border-outline-variant/20 shadow-sm rounded-sm">
+<button class="p-1.5 hover:text-primary transition-colors" title="Zoom In"><span class="material-symbols-outlined">zoom_in</span></button>
+<button class="p-1.5 hover:text-primary transition-colors" title="Zoom Out"><span class="material-symbols-outlined">zoom_out</span></button>
+<button class="p-1.5 hover:text-primary transition-colors" title="Pan"><span class="material-symbols-outlined">pan_tool</span></button>
+<button class="p-1.5 hover:text-primary transition-colors" title="Reset View"><span class="material-symbols-outlined">home</span></button>
+<div class="h-px bg-outline-variant/20 mx-1 my-1"></div>
+<button class="p-1.5 hover:text-primary transition-colors" title="Measure"><span class="material-symbols-outlined">straighten</span></button>
+</div>
+<!-- Main Map Rendering Viewport -->
+<div class="absolute inset-8 z-0 overflow-hidden">
+<div class="w-full h-full bg-[#f8fafc] relative map-grid-overlay">
+<!-- Simulated Data Layer -->
+<img alt="Global mass change map visualization" class="w-full h-full object-contain opacity-80" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAlYZ0gThH-UeGeJSIpgmd3kbA8SAoH9nXdAEli0_EisV1Gf7BPMES-qurDyCCqI2guKEkCkweXK6Xj6ezGq2-lpi248U6CMzEYpch4p8PGDpsFqEj84E2XYj58KH-vr_BtYA4xmfQbpi23cwh3uvnRsRD7cfPpkRsmBD4bjhqWhic1O1aiKiajOU50pj-IbhLYMNshuIGfEB1IoEznpOd5m7OfYzcPv5a0DvivUl2UsdCjKM9ZePLkX0xkrzJCO30fgu5WGYcYmw"/>
+<!-- Dynamic Info Overlays -->
+<!-- North Arrow -->
+<div class="absolute top-4 right-4 flex flex-col items-center opacity-60 bg-white/50 p-2 rounded-full">
+<div class="w-0.5 h-8 bg-on-surface relative">
+<div class="absolute -top-1 -left-[3px] w-0 h-0 border-l-[4px] border-l-transparent border-r-[4px] border-r-transparent border-b-[8px] border-b-on-surface"></div>
+</div>
+<span class="text-[9px] font-mono font-bold mt-1">N</span>
+</div>
+<!-- Scale Bar (Bottom Right) -->
+<div class="absolute bottom-8 right-8 flex flex-col gap-1 opacity-80 bg-white/60 backdrop-blur px-3 py-2 border border-outline-variant/20 rounded-sm">
+<div class="flex h-1.5 w-48 border border-on-surface/50">
+<div class="w-1/4 bg-on-surface h-full"></div>
+<div class="w-1/4 bg-transparent h-full"></div>
+<div class="w-1/4 bg-on-surface h-full"></div>
+<div class="w-1/4 bg-transparent h-full"></div>
+</div>
+<div class="flex justify-between w-48 text-[8px] font-mono font-bold text-on-surface">
+<span>0</span>
+<span>2500 km</span>
+<span>5000 km</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Colorbar / Legend (Bottom Center) -->
+<div class="absolute bottom-10 left-1/2 -translate-x-1/2 z-30 flex flex-col items-center w-full max-w-xl">
+<div class="bg-white/90 backdrop-blur-md p-4 border border-outline-variant/30 shadow-lg rounded-sm w-full">
+<div class="h-3 w-full bg-gradient-to-r from-[#003066] via-white to-[#8B0000] border border-outline-variant/20"></div>
+<div class="flex justify-between w-full text-[10px] mono-text mt-2 font-bold text-secondary">
+<span>-25 cm</span>
+<span>-12.5</span>
+<span>0</span>
+<span>+12.5</span>
+<span>+25 cm</span>
+</div>
+<div class="text-[9px] uppercase tracking-[0.2em] mt-2 text-center text-outline font-semibold">Mass Change (Liquid Water Equivalent)</div>
+</div>
+</div>
+</div>
+<!-- Cursor & Performance Stats (Bottom Row) -->
+<div class="mt-4 flex justify-between items-center">
+<div class="flex items-center gap-4 text-xs mono-text text-secondary/80">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-sm">info</span>
+<span>GRACE Level-2 (JPL Release) RL06.1 v03</span>
+</div>
+</div>
+<div class="glass-panel border border-outline-variant/20 px-6 py-2 rounded-sm flex gap-12 shadow-sm">
+<div class="flex flex-col">
+<span class="text-[8px] uppercase tracking-widest text-secondary mb-1">Cursor Position</span>
+<span class="text-xs mono-text font-bold">78.22° N, 15.65° E</span>
+</div>
+<div class="w-px h-6 bg-outline-variant/20 self-center"></div>
+<div class="flex flex-col">
+<span class="text-[8px] uppercase tracking-widest text-secondary mb-1">Grid Value</span>
+<span class="text-xs mono-text text-error font-bold">-12.44 cm</span>
+</div>
+<div class="w-px h-6 bg-outline-variant/20 self-center"></div>
+<div class="flex flex-col">
+<span class="text-[8px] uppercase tracking-widest text-secondary mb-1">Engine Latency</span>
+<span class="text-xs mono-text text-emerald-600 font-bold">42ms</span>
+</div>
+</div>
+</div>
+</section>
+</div>
+<!-- Bottom Console -->
+<footer class="fixed bottom-0 left-64 w-[calc(100%-16rem)] z-50 flex justify-between items-center px-4 bg-slate-900 dark:bg-black h-12 border-t border-slate-700 font-mono text-[11px] leading-tight text-emerald-500">
+<div class="flex gap-4">
+<div class="flex items-center gap-2 px-3 text-emerald-400 bg-slate-800 h-full">
+<span class="material-symbols-outlined text-[16px]">terminal</span>
+<span class="uppercase tracking-tighter">Console Output</span>
+</div>
+<div class="flex items-center gap-2 px-3 text-slate-400 hover:bg-slate-800 hover:text-white transition-all cursor-pointer">
+<span class="material-symbols-outlined text-[16px]">filter_list</span>
+<span>Filters</span>
+</div>
+</div>
+<div class="flex items-center gap-6">
+<div class="flex items-center gap-2">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_#10b981]"></span>
+<span class="opacity-70 uppercase tracking-tighter">Ready: Idle</span>
+</div>
+<div class="opacity-40 border-l border-slate-800 pl-4">MEM: 1.2GB / 8.0GB</div>
+<div class="opacity-40 border-l border-slate-800 pl-4">UTC: 14:02:44</div>
+</div>
+</footer>
+</main>
+</body></html>

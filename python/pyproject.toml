@@ -1,0 +1,74 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "grace-pipeline"
+version = "1.0.0"
+description = "GRACE Level-2 Satellite Gravity Data Processing Pipeline"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.9"
+authors = [
+    {name = "GRACE Pipeline Team"}
+]
+keywords = ["GRACE", "gravity", "satellite", "geodesy", "hydrology", "spherical-harmonics"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: GIS",
+    "Topic :: Scientific/Engineering :: Physics",
+]
+dependencies = [
+    "numpy>=1.21.0",
+    "scipy>=1.7.0",
+    "matplotlib>=3.5.0",
+    "PySide6>=6.7.0",
+    "netCDF4>=1.5.0",
+    "h5py>=3.0.0",
+    "tqdm>=4.60.0",
+    "pyyaml>=6.0",
+    "click>=8.0.0",
+    "joblib>=1.1.0",
+    "pyshp>=2.1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "black>=23.0.0",
+    "flake8>=6.0.0",
+    "mypy>=1.0.0",
+]
+build = [
+    "pyinstaller>=5.0.0",
+]
+
+[project.scripts]
+grace-pipeline = "grace_pipeline.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/grace-pipeline/grace-level2-pipeline"
+Documentation = "https://grace-pipeline.readthedocs.io"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["grace_pipeline*"]
+
+[tool.black]
+line-length = 100
+target-version = ['py39', 'py310', 'py311']
+
+[tool.mypy]
+python_version = "3.9"
+warn_return_any = true
+warn_unused_configs = true
+ignore_missing_imports = true

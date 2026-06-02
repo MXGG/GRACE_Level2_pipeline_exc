@@ -1,0 +1,24 @@
+{
+  "__template": "HSAF RAW input test",
+  "filter": {
+    "pre_hankel_input": "RAW",
+    "hankel": {
+      "Ts": 1,
+      "params": {
+        "N": 30,
+        "P": 10,
+        "K": 6,
+        "J": 1
+      }
+    }
+  },
+  "inversion": {
+    "lowdeg": {
+      "files": {
+        "C20": "${ROOT}/data/GRACE/LowDegree/TN-14_C30_C20_GSFC_SLR.txt",
+        "DEGREE1": "${ROOT}/data/GRACE/LowDegree/TN-13_GEOC_CSR_RL06.txt"
+      }
+    }
+  }
+}
+

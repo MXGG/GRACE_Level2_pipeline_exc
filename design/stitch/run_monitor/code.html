@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Roboto+Mono&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "on-error-container": "#752121",
+              "primary-fixed-dim": "#bfd5ff",
+              "on-primary-container": "#00519e",
+              "on-error": "#fff7f6",
+              "on-secondary": "#f2faff",
+              "surface-bright": "#f7f9fc",
+              "surface-container-high": "#e1e9f0",
+              "inverse-on-surface": "#9a9da0",
+              "background": "#f7f9fc",
+              "primary-container": "#d6e3ff",
+              "tertiary-fixed": "#b2faa9",
+              "secondary-fixed": "#cfe6f2",
+              "secondary": "#4d626c",
+              "on-tertiary-fixed-variant": "#2a6c2c",
+              "tertiary-fixed-dim": "#a4eb9c",
+              "surface-container-low": "#f0f4f8",
+              "on-tertiary": "#eaffe2",
+              "surface-container": "#e8eff4",
+              "surface-variant": "#d9e4ec",
+              "on-primary-fixed-variant": "#005bb0",
+              "error-dim": "#4e0309",
+              "surface-container-highest": "#d9e4ec",
+              "outline-variant": "#a8b3bb",
+              "on-secondary-container": "#40555f",
+              "secondary-dim": "#415660",
+              "secondary-container": "#cfe6f2",
+              "on-surface": "#29343a",
+              "on-surface-variant": "#566168",
+              "outline": "#717c84",
+              "surface": "#f7f9fc",
+              "on-primary": "#f6f7ff",
+              "tertiary-dim": "#1d5f21",
+              "on-background": "#29343a",
+              "inverse-primary": "#5f9efb",
+              "on-tertiary-container": "#1f6223",
+              "primary-fixed": "#d6e3ff",
+              "tertiary": "#2a6c2c",
+              "surface-tint": "#005db5",
+              "tertiary-container": "#b2faa9",
+              "error": "#9f403d",
+              "primary": "#005db5",
+              "on-tertiary-fixed": "#054e12",
+              "error-container": "#fe8983",
+              "on-secondary-fixed-variant": "#495f69",
+              "on-secondary-fixed": "#2d424c",
+              "secondary-fixed-dim": "#c1d8e4",
+              "primary-dim": "#0052a0",
+              "on-primary-fixed": "#003f7d",
+              "inverse-surface": "#0b0f11",
+              "surface-dim": "#cedce5",
+              "surface-container-lowest": "#ffffff"
+            },
+            fontFamily: {
+              "headline": ["Inter"],
+              "body": ["Inter"],
+              "label": ["Inter"],
+              "mono": ["Roboto Mono"]
+            },
+            borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+          },
+        },
+      }
+    </script>
+<style>
+      .material-symbols-outlined {
+        font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+      }
+      .monospace { font-family: 'Roboto Mono', monospace; }
+      .glass-panel {
+        backdrop-filter: blur(20px);
+        background: rgba(247, 249, 252, 0.8);
+      }
+    </style>
+</head>
+<body class="bg-background text-on-background font-body selection:bg-primary-container selection:text-on-primary-container">
+<!-- SideNavBar Shell -->
+<aside class="fixed left-0 top-0 h-full flex flex-col h-screen w-64 border-r-0 bg-slate-100 dark:bg-slate-900 font-sans antialiased text-sm tracking-tight z-40">
+<div class="px-6 py-8">
+<h1 class="text-lg font-mono font-bold text-slate-900 dark:text-slate-100">GRACE-L2</h1>
+<p class="text-xs text-secondary tracking-widest uppercase mt-1">Precision Pipeline</p>
+</div>
+<nav class="flex-1 space-y-1">
+<a class="flex items-center gap-3 px-4 py-3 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors" href="#">
+<span class="material-symbols-outlined">dashboard</span>
+<span>Dashboard</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors" href="#">
+<span class="material-symbols-outlined">folder_open</span>
+<span>Data &amp; Paths</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors" href="#">
+<span class="material-symbols-outlined">settings_input_component</span>
+<span>Processing Setup</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors" href="#">
+<span class="material-symbols-outlined">water_drop</span>
+<span>Leakage</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors" href="#">
+<span class="material-symbols-outlined">terrain</span>
+<span>Basin</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors" href="#">
+<span class="material-symbols-outlined">visibility</span>
+<span>Preview</span>
+</a>
+<!-- Active Navigation -->
+<a class="flex items-center gap-3 px-4 py-3 text-blue-700 dark:text-blue-400 border-l-2 border-blue-700 dark:border-blue-500 bg-slate-200/50 dark:bg-slate-800/50 scale-98 active:opacity-80" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">monitoring</span>
+<span>Run Monitor</span>
+</a>
+</nav>
+<div class="p-4 mt-auto">
+<div class="bg-slate-200 dark:bg-slate-800 w-full h-[1px] mb-4"></div>
+<div class="flex items-center gap-3 px-2">
+<div class="w-8 h-8 rounded-full bg-primary-container flex items-center justify-center text-on-primary-container font-bold text-xs">JD</div>
+<div class="overflow-hidden">
+<p class="text-xs font-medium truncate">Principal Scientist</p>
+<p class="text-[10px] text-secondary truncate">node-04.hpc.cluster</p>
+</div>
+</div>
+</div>
+</aside>
+<!-- TopAppBar Shell -->
+<header class="flex items-center justify-between px-6 ml-64 w-[calc(100%-16rem)] h-14 border-b-0 bg-slate-50 dark:bg-slate-950 font-mono text-xs uppercase tracking-widest fixed top-0 z-30">
+<div class="flex items-center gap-4">
+<span class="font-bold text-slate-800 dark:text-slate-200">GRACE Level-2 Pipeline</span>
+<div class="h-4 w-[1px] bg-outline-variant/30"></div>
+<span class="text-blue-700 font-medium">Run Monitor</span>
+</div>
+<div class="flex items-center gap-6">
+<div class="flex items-center gap-2 text-slate-500">
+<span class="material-symbols-outlined text-sm">circle</span>
+<span>HPC STATUS: OPTIMAL</span>
+</div>
+<div class="flex items-center gap-3">
+<button class="flex items-center gap-2 px-3 py-1 bg-primary text-on-primary rounded-sm transition-opacity hover:opacity-90">
+<span class="material-symbols-outlined text-sm">play_arrow</span>
+<span>Run</span>
+</button>
+<button class="flex items-center gap-2 px-3 py-1 bg-surface-container-high text-on-surface-variant rounded-sm transition-opacity hover:opacity-90">
+<span class="material-symbols-outlined text-sm">pause</span>
+<span>Pause</span>
+</button>
+<div class="w-[1px] h-4 bg-outline-variant/30"></div>
+<span class="material-symbols-outlined text-slate-500 cursor-pointer hover:text-blue-600 transition-colors">stop</span>
+<span class="material-symbols-outlined text-slate-500 cursor-pointer hover:text-blue-600 transition-colors">settings</span>
+</div>
+</div>
+</header>
+<!-- Main Content Canvas -->
+<main class="ml-64 mt-14 p-6 min-h-screen">
+<!-- Dashboard Grid -->
+<div class="grid grid-cols-12 gap-6">
+<!-- Left Column: Status & Progress (Bento Style) -->
+<div class="col-span-12 lg:col-span-4 space-y-6">
+<!-- Status Card -->
+<div class="bg-surface-container-lowest p-6 rounded-sm shadow-sm border-l-4 border-primary">
+<div class="flex justify-between items-start mb-4">
+<div>
+<p class="text-[10px] font-bold text-secondary uppercase tracking-widest mb-1">Current Status</p>
+<h2 class="text-2xl font-bold text-on-surface">Processing...</h2>
+</div>
+<div class="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+<span class="material-symbols-outlined text-primary animate-pulse">sync</span>
+</div>
+</div>
+<div class="space-y-4">
+<div>
+<div class="flex justify-between text-[11px] mb-1.5">
+<span class="text-secondary uppercase">Overall Progress</span>
+<span class="font-mono font-medium">68.4%</span>
+</div>
+<div class="h-1.5 w-full bg-surface-container-highest rounded-none overflow-hidden">
+<div class="h-full bg-gradient-to-r from-primary to-primary-dim" style="width: 68.4%"></div>
+</div>
+</div>
+<div>
+<div class="flex justify-between text-[11px] mb-1.5">
+<span class="text-secondary uppercase">Current Task: Spherical Harmonics</span>
+<span class="font-mono font-medium">42.1%</span>
+</div>
+<div class="h-1.5 w-full bg-surface-container-highest rounded-none overflow-hidden">
+<div class="h-full bg-primary/40" style="width: 42.1%"></div>
+</div>
+</div>
+</div>
+</div>
+<!-- Resource Usage Bento -->
+<div class="grid grid-cols-2 gap-4">
+<div class="bg-surface-container-low p-4 rounded-sm">
+<p class="text-[10px] font-bold text-secondary uppercase tracking-widest mb-2">CPU LOAD</p>
+<div class="flex items-baseline gap-1">
+<span class="text-xl font-mono font-bold">84</span>
+<span class="text-[10px] text-secondary">%</span>
+</div>
+<div class="mt-3 flex gap-0.5 h-6 items-end">
+<div class="w-full bg-primary/20 h-2"></div>
+<div class="w-full bg-primary/20 h-3"></div>
+<div class="w-full bg-primary/20 h-5"></div>
+<div class="w-full bg-primary h-6"></div>
+<div class="w-full bg-primary h-4"></div>
+</div>
+</div>
+<div class="bg-surface-container-low p-4 rounded-sm">
+<p class="text-[10px] font-bold text-secondary uppercase tracking-widest mb-2">RAM USAGE</p>
+<div class="flex items-baseline gap-1">
+<span class="text-xl font-mono font-bold">12.4</span>
+<span class="text-[10px] text-secondary">GB</span>
+</div>
+<div class="mt-3 flex gap-0.5 h-6 items-end">
+<div class="w-full bg-primary/40 h-4"></div>
+<div class="w-full bg-primary/40 h-4"></div>
+<div class="w-full bg-primary/40 h-5"></div>
+<div class="w-full bg-primary/40 h-5"></div>
+<div class="w-full bg-primary/40 h-5"></div>
+</div>
+</div>
+</div>
+<!-- Control Panel -->
+<div class="bg-surface-container-lowest p-6 rounded-sm border border-outline-variant/10">
+<p class="text-[10px] font-bold text-secondary uppercase tracking-widest mb-4">Pipeline Controls</p>
+<div class="grid grid-cols-1 gap-2">
+<button class="flex items-center justify-center gap-3 px-4 py-3 bg-surface-container-high text-on-surface hover:bg-surface-container-highest transition-colors font-medium">
+<span class="material-symbols-outlined text-sm">pause_circle</span>
+<span>Pause Current Run</span>
+</button>
+<button class="flex items-center justify-center gap-3 px-4 py-3 bg-error/10 text-error hover:bg-error/20 transition-colors font-medium">
+<span class="material-symbols-outlined text-sm">stop_circle</span>
+<span>Abort Pipeline</span>
+</button>
+<button class="flex items-center justify-center gap-3 px-4 py-3 bg-surface-container-low text-secondary hover:text-on-surface transition-colors font-medium">
+<span class="material-symbols-outlined text-sm">refresh</span>
+<span>Restart Instance</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Right Column: Visualization & Summary -->
+<div class="col-span-12 lg:col-span-8 space-y-6">
+<!-- Main Visualization Panel -->
+<div class="bg-surface-container-lowest rounded-sm overflow-hidden border border-outline-variant/10 flex flex-col h-[32rem]">
+<div class="bg-surface-container-low px-4 py-3 flex justify-between items-center">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-sm text-primary">analytics</span>
+<span class="text-xs font-bold uppercase tracking-wider">Spatial Residuals (L2 Matrix)</span>
+</div>
+<div class="flex gap-2">
+<span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+<span class="text-[10px] text-secondary uppercase font-mono">LIVE FEED</span>
+</div>
+</div>
+<div class="flex-1 relative bg-slate-50 flex items-center justify-center p-8">
+<!-- Simulated Scientific Visualization Map -->
+<div class="w-full h-full border border-outline-variant/20 relative overflow-hidden bg-slate-200">
+<img alt="Satellite data visualization showing global gravitational anomalies" class="w-full h-full object-cover opacity-60 mix-blend-multiply" data-alt="Scientific earth satellite data heatmap visualization" data-location="Global" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAVsr6SEF5bkzbhkl1Rh2SyEF_L3TkZ1AOfIPqB5r6V37OHSPfx7UBh5XpWErY1VxZD_-sHdxiL2AMmiVQaADZXCBQf7m0ZjVU5wS121Npf-qXVWSWqJTv4LLVNVVNuNUoQvFm_nXXA-cldXhwqfKHP1fUqwgKXOciPTAZkwmSqzhqJndUHnGVu_TbttkH8sPZb8Xur5xxvnA4HVKOjKB9OgTHGhzcGGRebl6cybGpUOs9fX7DsyrOeOcxhLgKHUVJIj4BBwFmM4A"/>
+<!-- Overlay Data Points -->
+<div class="absolute inset-0 grid grid-cols-12 grid-rows-12 gap-0.5 opacity-20">
+<div class="border border-white/50"></div><div class="border border-white/50"></div><div class="border border-white/50"></div><div class="border border-white/50"></div><div class="border border-white/50"></div><div class="border border-white/50"></div><div class="border border-white/50"></div><div class="border border-white/50"></div><div class="border border-white/50"></div><div class="border border-white/50"></div><div class="border border-white/50"></div><div class="border border-white/50"></div>
+</div>
+<div class="absolute top-4 left-4 bg-black/80 text-white font-mono text-[10px] p-2 leading-tight">
+                                 LAT: 42.3601<br/>LON: -71.0589<br/>RES: 0.0034mGal
+                             </div>
+</div>
+</div>
+</div>
+<!-- Warnings & Notifications -->
+<div class="bg-surface-container-lowest rounded-sm border border-outline-variant/10 overflow-hidden">
+<div class="bg-surface-container-low px-4 py-2 border-b border-outline-variant/10">
+<span class="text-[10px] font-bold text-secondary uppercase tracking-widest">Alerts &amp; Warnings</span>
+</div>
+<div class="divide-y divide-outline-variant/5">
+<div class="flex items-center gap-4 px-4 py-3 hover:bg-surface-container-low transition-colors">
+<span class="material-symbols-outlined text-error text-lg">warning</span>
+<div class="flex-1">
+<p class="text-xs font-medium">Inconsistent metadata in Level-1B source file 'GRACE_2023_201.dat'</p>
+<p class="text-[10px] text-secondary font-mono">14:22:01 | WARNING_MD_04</p>
+</div>
+<span class="material-symbols-outlined text-slate-400 cursor-pointer">close</span>
+</div>
+<div class="flex items-center gap-4 px-4 py-3 hover:bg-surface-container-low transition-colors">
+<span class="material-symbols-outlined text-amber-500 text-lg">info</span>
+<div class="flex-1">
+<p class="text-xs font-medium">HPC Cluster node switching detected. Job migrating to node-05.</p>
+<p class="text-[10px] text-secondary font-mono">14:18:45 | INFO_SYS_02</p>
+</div>
+<span class="material-symbols-outlined text-slate-400 cursor-pointer">close</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Bottom Live Log Console -->
+<div class="col-span-12">
+<div class="bg-slate-900 text-emerald-500 p-0 rounded-sm overflow-hidden shadow-2xl border border-slate-700">
+<div class="bg-slate-800 px-4 py-2 flex justify-between items-center">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-sm">terminal</span>
+<span class="font-mono text-[11px] uppercase tracking-widest text-slate-300">Live Process Logs</span>
+</div>
+<div class="flex items-center gap-4">
+<div class="flex items-center gap-2">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+<span class="font-mono text-[10px] text-emerald-400/70">STREAMING</span>
+</div>
+<span class="material-symbols-outlined text-sm text-slate-400 cursor-pointer hover:text-white">content_copy</span>
+<span class="material-symbols-outlined text-sm text-slate-400 cursor-pointer hover:text-white">close_fullscreen</span>
+</div>
+</div>
+<div class="p-4 h-64 overflow-y-auto font-mono text-[12px] leading-relaxed space-y-1">
+<p><span class="text-slate-500">[2023-10-27 14:25:01]</span> <span class="text-blue-400">INFO:</span> Initializing SH conversion module...</p>
+<p><span class="text-slate-500">[2023-10-27 14:25:04]</span> <span class="text-blue-400">INFO:</span> Loading spherical harmonics coefficients up to degree 60.</p>
+<p><span class="text-slate-500">[2023-10-27 14:25:08]</span> <span class="text-emerald-400">SUCCESS:</span> Coefficients validated. Chi-square: 1.042.</p>
+<p><span class="text-slate-500">[2023-10-27 14:25:12]</span> <span class="text-blue-400">INFO:</span> Commencing spatial grid interpolation (0.25deg resolution).</p>
+<p><span class="text-slate-500">[2023-10-27 14:25:15]</span> <span class="text-blue-400">INFO:</span> Applying Gaussian smoothing filter (r=300km)...</p>
+<p><span class="text-slate-500">[2023-10-27 14:25:20]</span> <span class="text-amber-400">WARN:</span> Node-04 memory headroom approaching threshold (&lt; 15%).</p>
+<p><span class="text-slate-500">[2023-10-27 14:25:22]</span> <span class="text-blue-400">INFO:</span> Submitting job partition 'GRACE_L2_A_32' to HPC scheduler...</p>
+<p><span class="text-slate-500">[2023-10-27 14:25:25]</span> <span class="text-emerald-400">SUCCESS:</span> Partition assigned. Cluster node affinity: [high].</p>
+<p><span class="text-slate-500">[2023-10-27 14:25:30]</span> <span class="text-blue-400">INFO:</span> Processing tile 42 of 180...</p>
+<p><span class="animate-pulse">_</span></p>
+</div>
+</div>
+</div>
+</div>
+</main>
+<!-- BottomNavBar Shell -->
+<footer class="fixed bottom-0 left-64 w-[calc(100%-16rem)] z-50 flex justify-between items-center px-4 bg-slate-900 dark:bg-black h-12 border-t border-slate-800 shadow-2xl font-mono text-[11px] leading-tight text-emerald-500 dark:text-emerald-400">
+<div class="flex items-center h-full">
+<div class="flex items-center gap-2 px-3 text-emerald-400 bg-slate-800 h-full transition-all duration-150">
+<span class="material-symbols-outlined text-sm">terminal</span>
+<span>Console</span>
+</div>
+<div class="flex items-center gap-2 px-3 text-slate-400 hover:bg-slate-800 hover:text-white h-full transition-all duration-150 cursor-pointer">
+<span class="material-symbols-outlined text-sm">filter_list</span>
+<span>Filters</span>
+</div>
+</div>
+<div class="flex items-center gap-6 px-4">
+<div class="flex items-center gap-2">
+<span class="text-slate-500">JOB_ID:</span>
+<span class="text-white">GRL2-9902-X</span>
+</div>
+<div class="flex items-center gap-2">
+<span class="text-slate-500">ELAPSED:</span>
+<span class="text-white">00:42:15</span>
+</div>
+<div class="flex items-center gap-2 text-slate-400 hover:text-white cursor-pointer transition-colors">
+<span class="material-symbols-outlined text-sm">delete_sweep</span>
+<span>Clear</span>
+</div>
+</div>
+</footer>
+</body></html>

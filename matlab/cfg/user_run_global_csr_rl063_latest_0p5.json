@@ -1,0 +1,92 @@
+{
+  "__template": "Global 0.5deg JPL RL06+RL06.3 latest low-degree/GIA",
+  "path": {
+    "GFC": "G:\\\\GRACE_Level2_pipeline_exc\\\\data\\\\GRACE\\\\GSM\\\\CSR_RL06_RL063",
+    "OUTPUT": "G:\\\\GRACE_Level2_pipeline_exc\\\\output\\\\local\\\\csr_global_0p5_rl063_latest_20260415"
+  },
+  "time": {
+    "auto_detect_gfc": true,
+    "product_type": "GSM",
+    "file_ext": ".gfc"
+  },
+  "grid": {
+    "lon": [-179.75, 179.75],
+    "lat": [-89.75, 89.75],
+    "dlon": 0.5,
+    "dlat": 0.5
+  },
+  "inversion": {
+    "Lmax": 60,
+    "remove_mean": true,
+    "mean_mode": "mission_full_period",
+    "lowdeg": {
+      "enable": true,
+      "replace_C20": true,
+      "replace_degree1": true,
+      "replace_C10": true,
+      "replace_C30": true,
+      "c30_scope": "grace_fo",
+      "c30_start_ym": "2018-06",
+      "files": {
+        "C20": "${ROOT}/data/GRACE/LowDegree/TN-14_C30_C20_GSFC_SLR.txt",
+        "DEGREE1": "${ROOT}/data/GRACE/LowDegree/TN-13_GEOC_CSR_RL0603.txt",
+        "DEGREE1_CSR": "${ROOT}/data/GRACE/LowDegree/TN-13_GEOC_CSR_RL0603.txt",
+        "DEGREE1_JPL": "${ROOT}/data/GRACE/LowDegree/TN-13_GEOC_JPL_RL0603.txt",
+        "DEGREE1_GFZ": "${ROOT}/data/GRACE/LowDegree/TN-13_GEOC_GFZ_RL0603.txt"
+      }
+    },
+    "gia": {
+      "enable": true,
+      "file": "${ROOT}/data/GRACE/GIA/GIA_Stokes_ICE-6G_D.txt",
+      "Lmax": 60
+    }
+  },
+  "filter": {
+    "gaussian": {
+      "enable": true,
+      "radius_km": 300
+    },
+    "p4m6": {
+      "enable": true,
+      "poly_deg": 4,
+      "m_start": 6
+    },
+    "fan": {
+      "enable": true,
+      "radius1_km": 300,
+      "radius2_km": 300
+    },
+    "ddk": {
+      "enable": true,
+      "type": "DDK4",
+      "types": ["DDK3", "DDK4", "DDK5"],
+      "data_dir": "${ROOT}/data/DDK"
+    },
+    "hankel": {
+      "enable": false
+    },
+    "pre_hankel_input": "P4M6"
+  },
+  "basin": {
+    "analysis_enable": false,
+    "boundary_file": "",
+    "name": ""
+  },
+  "metrics": {
+    "enable": false
+  },
+  "parallel": {
+    "enable": true,
+    "nWorkers": 8
+  },
+  "io": {
+    "resume": true,
+    "save_monthly_mat": true,
+    "save_stack_mat": true,
+    "export_txt": false,
+    "return_stacks": false,
+    "return_basin": false,
+    "return_metrics": false
+  }
+}
+
