@@ -1,0 +1,57 @@
+{
+  "__template": "HPC-specific configuration template. Copy to configs/user.hpc.json or merge into configs/user.json.",
+  "path": {
+    "GFC": "${ROOT}/data/GRACE/GSM",
+    "OUTPUT": "${ROOT}/outputs",
+    "AUX": "${ROOT}/data/Aux",
+    "DDK": "${ROOT}/data/DDK",
+    "BOUNDARY": "${ROOT}/data/Boundary/boundary_cache"
+  },
+  "time": {
+    "auto_detect_gfc": true
+  },
+  "io": {
+    "save_stack_hdf5": true,
+    "return_stacks": false,
+    "return_metrics": false,
+    "return_basin": false,
+    "resume": true
+  },
+  "metrics": {
+    "enable": false
+  },
+  "parallel": {
+    "enable": true,
+    "nWorkers": 52
+  },
+  "perf": {
+    "allow_frozen_parallel": false,
+    "runtime_profile": "hpc",
+    "frozen_max_workers": 0
+  },
+  "filter": {
+    "pre_hankel_input": "P4M6",
+    "gaussian": {
+      "enable": true
+    },
+    "p4m6": {
+      "enable": true
+    },
+    "fan": {
+      "enable": true
+    },
+    "ddk": {
+      "enable": true,
+      "type": "DDK4"
+    },
+    "hankel": {
+      "stack_mode": true,
+      "params": {
+        "N": 30,
+        "P": 8,
+        "K": 4,
+        "J": 1
+      }
+    }
+  }
+}
