@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import argparse
-import importlib.util
+import importlib
 import platform
 import sys
 from dataclasses import dataclass
@@ -35,8 +35,15 @@ CORE_MODULES = [
 GUI_MODULES = ["PySide6"]
 
 
-def _module_available(module_name: str) -> bool:
-    return importlib.util.find_spec(module_name) is not None
+def _module_import_check(module_name: str, required: bool = True) -> CheckResult:
+    """Import a module to catch binary dependency failures, not just missing specs."""
+    try:
+        module = importlib.import_module(module_name)
+        version = getattr(module, "__version__", "")
+        detail = "importable" if not version else f"importable ({version})"
+        return CheckResult(f"module.{module_name}", True, detail, required=required)
+    except Exception as exc:
+        return CheckResult(f"module.{module_name}", not required, f"missing or broken: {exc}", required=required)
 
 
 def _path_check(name: str, value: Optional[str], required: bool = True, writable: bool = False) -> CheckResult:
@@ -68,19 +75,10 @@ def run_doctor(cfg=None, default_config: Optional[str] = None, check_gui: bool =
     results.append(CheckResult("runtime.frozen", True, str(bool(getattr(sys, "frozen", False))), required=False))
 
     for module_name in CORE_MODULES:
-        ok = _module_available(module_name)
-        results.append(CheckResult(f"module.{module_name}", ok, "importable" if ok else "missing"))
+        results.append(_module_import_check(module_name, required=True))
 
     for module_name in GUI_MODULES:
-        ok = _module_available(module_name)
-        results.append(
-            CheckResult(
-                f"module.{module_name}",
-                ok or not check_gui,
-                "importable" if ok else "missing; install with .[gui]",
-                required=check_gui,
-            )
-        )
+        results.append(_module_import_check(module_name, required=check_gui))
 
     default_path = Path(default_config).expanduser() if default_config else find_default_config(root)
     results.append(CheckResult("config.default", bool(default_path and Path(default_path).exists()), str(default_path) if default_path else "not found"))
