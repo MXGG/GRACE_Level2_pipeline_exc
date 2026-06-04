@@ -37,7 +37,7 @@ export OMP_NUM_THREADS=1
 export NUMEXPR_MAX_THREADS=1
 export PYTHONUNBUFFERED=1
 
-USER_CONFIG="${GRACE_USER_CONFIG:-configs/user.json}"
+USER_CONFIG="${GRACE_USER_CONFIG:-configs/hpc.example.json}"
 DEFAULT_CONFIG="${GRACE_DEFAULT_CONFIG:-configs/default.json}"
 PYTHON_EXEC="${GRACE_PYTHON_BIN:-python3}"
 
