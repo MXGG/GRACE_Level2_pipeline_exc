@@ -7,21 +7,22 @@ Build command:
 
 Output:
     dist/grace-pipeline.exe (Windows)
-    dist/grace-pipeline (Linux/Mac)
+    dist/grace-pipeline-gui.exe (Windows)
+    dist/grace-pipeline (Linux/macOS)
+    dist/grace-pipeline-gui (Linux/macOS)
 """
 
-import sys
 import shutil
+import sys
 from pathlib import Path
+
 from PyInstaller.utils.hooks import collect_data_files, collect_dynamic_libs, collect_submodules
 
-# Get the source directory
 SPEC_DIR = Path(SPECPATH)
 SRC_DIR = SPEC_DIR
 REPO_ROOT = SRC_DIR.parent
 APP_ICON = REPO_ROOT / "installer" / "grace-l2.ico"
 
-# Shared settings
 extra_binaries = []
 extra_binaries += collect_dynamic_libs("netCDF4")
 extra_binaries += collect_dynamic_libs("h5py")
@@ -54,104 +55,72 @@ for _pattern, _alias in [
 ]:
     _add_netcdf_alias(_pattern, _alias)
 
-# Optional snappy.dll for netCDF4 blosc compression (drop-in supported)
 snappy_candidates = [
-    Path(sys.prefix) / "Library" / "bin" / "snappy.dll",  # conda
+    Path(sys.prefix) / "Library" / "bin" / "snappy.dll",
     Path(sys.prefix) / "DLLs" / "snappy.dll",
     Path(sys.prefix) / "snappy.dll",
     Path(sys.prefix) / "Lib" / "site-packages" / "netCDF4.libs" / "snappy.dll",
     Path(sys.prefix) / "Lib" / "site-packages" / "snappy.libs" / "snappy.dll",
     Path(sys.prefix) / "Lib" / "site-packages" / "python_snappy.libs" / "snappy.dll",
-    SRC_DIR.parent / "vendor" / "snappy.dll",
+    REPO_ROOT / "vendor" / "snappy.dll",
     SPEC_DIR / "vendor" / "snappy.dll",
 ]
 for cand in snappy_candidates:
     if cand.exists():
         extra_binaries.append((str(cand), "."))
         break
+
+# Bundle canonical configs first; keep legacy matlab/cfg as a fallback during migration.
 datas = [
-    (str(SRC_DIR.parent / 'matlab' / 'cfg' / '*.json'), 'cfg'),
-    (str(SRC_DIR.parent / 'data' / 'Boundary'), 'data/Boundary'),
-    (str(SRC_DIR.parent / 'data' / 'GRACE' / 'LowDegree'), 'data/GRACE/LowDegree'),
-    (str(SRC_DIR.parent / 'data' / 'GRACE' / 'GIA'), 'data/GRACE/GIA'),
-    (str(SRC_DIR / 'grace_pipeline' / '__init__.py'), 'grace_pipeline'),
-    (str(SRC_DIR / 'grace_pipeline' / 'gui.py'), 'grace_pipeline'),
+    (str(REPO_ROOT / "configs" / "*.json"), "configs"),
+    (str(REPO_ROOT / "matlab" / "cfg" / "*.json"), "cfg"),
+    (str(REPO_ROOT / "data" / "Boundary"), "data/Boundary"),
+    (str(REPO_ROOT / "data" / "GRACE" / "LowDegree"), "data/GRACE/LowDegree"),
+    (str(REPO_ROOT / "data" / "GRACE" / "GIA"), "data/GRACE/GIA"),
+    (str(SRC_DIR / "grace_pipeline" / "__init__.py"), "grace_pipeline"),
+    (str(SRC_DIR / "grace_pipeline" / "gui.py"), "grace_pipeline"),
 ]
 datas += collect_data_files("matplotlib", includes=["mpl-data/*"])
+
 hiddenimports = sorted(set(collect_submodules("grace_pipeline") + collect_submodules("netCDF4") + collect_submodules("h5py") + [
-    'numpy',
-    'scipy',
-    'scipy.io',
-    'scipy.linalg',
-    'scipy.special',
-    'scipy.interpolate',
-    'scipy.ndimage',
-    'click',
-    'tqdm',
-    'h5py',
-    'netCDF4',
-    'matplotlib',
-    'matplotlib.pyplot',
-    'matplotlib.backends.backend_qtagg',
-    'PySide6',
-    'PySide6.QtCore',
-    'PySide6.QtGui',
-    'PySide6.QtWidgets',
-    'shiboken6',
-    'grace_pipeline',
-    'grace_pipeline.core',
-    'grace_pipeline.core.config',
-    'grace_pipeline.core.time_index',
-    'grace_pipeline.core.grid',
-    'grace_pipeline.core.utils',
-    'grace_pipeline.inversion',
-    'grace_pipeline.inversion.gfc_reader',
-    'grace_pipeline.inversion.sh_synthesis',
-    'grace_pipeline.inversion.low_degree',
-    'grace_pipeline.inversion.gia',
-    'grace_pipeline.filters',
-    'grace_pipeline.filters.gaussian',
-    'grace_pipeline.filters.p4m6',
-    'grace_pipeline.filters.ddk',
-    'grace_pipeline.filters.fan',
-    'grace_pipeline.filters.hsaf',
-    'grace_pipeline.io',
-    'grace_pipeline.io.product',
-    'grace_pipeline.io.stack',
-    'grace_pipeline.main',
-    'grace_pipeline.main.pipeline',
-    'grace_pipeline.gui',
-    'grace_pipeline.gui_entry',
-    'grace_pipeline.metrics',
-    'grace_pipeline.metrics.evaluate',
-    'grace_pipeline.metrics.accumulator',
-    'grace_pipeline.metrics.correlation',
-    'grace_pipeline.basin',
-    'grace_pipeline.basin.boundary',
-    'grace_pipeline.basin.mask',
-    'grace_pipeline.basin.timeseries',
-    'grace_pipeline.basin.fitting',
-    'shapefile',
-    'typing_extensions',
+    "numpy",
+    "scipy",
+    "scipy.io",
+    "scipy.linalg",
+    "scipy.special",
+    "scipy.interpolate",
+    "scipy.ndimage",
+    "click",
+    "tqdm",
+    "h5py",
+    "netCDF4",
+    "matplotlib",
+    "matplotlib.pyplot",
+    "matplotlib.backends.backend_qtagg",
+    "PySide6",
+    "PySide6.QtCore",
+    "PySide6.QtGui",
+    "PySide6.QtWidgets",
+    "shiboken6",
+    "shapefile",
+    "typing_extensions",
 ]))
+
 excludes = [
-    'PyQt5',
-    'PyQt6',
-    'PySide2',
-    'wx',
-    'IPython',
-    'jupyter',
-    'notebook',
+    "PyQt5",
+    "PyQt6",
+    "PySide2",
+    "wx",
+    "IPython",
+    "jupyter",
+    "notebook",
 ]
 runtime_hooks = [str(SRC_DIR / "pyi_rth_netcdf_plugins.py")]
-
 block_cipher = None
 
-# Collect all Python files in the package
-package_path = SRC_DIR / 'grace_pipeline'
-
+# CLI executable.
 a = Analysis(
-    [str(SRC_DIR / 'grace_pipeline' / 'cli.py')],
+    [str(SRC_DIR / "grace_pipeline" / "entrypoints.py")],
     pathex=[str(SRC_DIR)],
     binaries=extra_binaries,
     datas=datas,
@@ -166,9 +135,9 @@ a = Analysis(
     noarchive=False,
 )
 
-# Separate analysis for GUI entry (windowed)
+# GUI executable.
 a_gui = Analysis(
-    [str(SRC_DIR / 'grace_pipeline' / 'gui_entry.py')],
+    [str(SRC_DIR / "grace_pipeline" / "gui_entry.py")],
     pathex=[str(SRC_DIR)],
     binaries=extra_binaries,
     datas=datas,
@@ -193,7 +162,7 @@ exe = EXE(
     a.zipfiles,
     a.datas,
     [],
-    name='grace-pipeline',
+    name="grace-pipeline",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -216,7 +185,7 @@ exe_gui = EXE(
     a_gui.zipfiles,
     a_gui.datas,
     [],
-    name='grace-pipeline-gui',
+    name="grace-pipeline-gui",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
