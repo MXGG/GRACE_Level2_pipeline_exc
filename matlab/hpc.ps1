@@ -3,7 +3,7 @@ param(
   [string]$Runtime = "matlab",
   [string]$RemoteRoot = "~/GRACE_Level2_pipeline",
   [string]$SlurmScript = "",
-  [string]$ConfigPath = "configs/user.json",
+  [string]$ConfigPath = "configs/hpc.example.json",
   [string]$DefaultConfigPath = "configs/default.json",
   [string]$Remote = "",
   [int]$RemotePort = 22,
