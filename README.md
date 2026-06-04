@@ -66,6 +66,52 @@ data/
 
 See `data/INPUT_FILES.md` and `docs/data/` for data notes.
 
+## Windows desktop installer
+
+The Windows desktop edition is distributed through GitHub Releases when installer assets are available.
+
+Recommended install path:
+
+1. Open the repository Releases page.
+2. Download the latest `grace-l2-pipeline-vX.Y.Z-win-x64-setup.exe` installer, or the portable `grace-l2-pipeline-vX.Y.Z-win-x64-portable.zip` package.
+3. Run the installer and follow the setup wizard.
+4. Keep large input data outside the installation directory, preferably under a dedicated workspace such as `Documents\GRACE-L2-Workspace`.
+5. Copy `configs\user.example.json` to `configs\user.json` and adjust local data paths before running scientific workflows.
+
+Example after installation:
+
+```powershell
+# Installed desktop executable; exact path depends on installer settings.
+"C:\Program Files\GRACE Level-2 Pipeline\grace-pipeline-gui.exe"
+```
+
+Portable package:
+
+```powershell
+Expand-Archive .\grace-l2-pipeline-vX.Y.Z-win-x64-portable.zip -DestinationPath D:\Tools\GRACE-L2
+D:\Tools\GRACE-L2\grace-pipeline-gui.exe
+```
+
+### WinGet status
+
+The project is not installable by `winget install` until a Windows Package Manager manifest is submitted and accepted. A GitHub Release installer alone is not enough.
+
+After an official manifest is published, the expected command format will be:
+
+```powershell
+winget search grace
+winget install --id <Publisher.PackageId> -e
+```
+
+For local testing before publication, a manifest can be validated or installed from a local manifest directory:
+
+```powershell
+winget validate .\packaging\windows\winget\manifests\<Publisher.PackageId>
+winget install --manifest .\packaging\windows\winget\manifests\<Publisher.PackageId>
+```
+
+The installer should support silent installation before public WinGet submission.
+
 ## Python: install and run
 
 Legacy path, currently safest:
@@ -138,22 +184,48 @@ addpath(genpath('src/matlab/src'));
 OUT = run_oneclick_cfg('configs/user.json');
 ```
 
-## Linux batch usage
+## Linux installation and batch usage
 
-Python CLI:
+Python CLI from source:
 
 ```bash
+git clone https://github.com/MXGG/GRACE_Level2_pipeline_exc.git
+cd GRACE_Level2_pipeline_exc
+cp configs/user.example.json configs/user.json
 cd python
 python3 -m venv .venv
 source .venv/bin/activate
+python -m pip install --upgrade pip
 python -m pip install -e .
-grace-pipeline run -c ../configs/user.json -d ../configs/default.json
+grace-pipeline info -c ../configs/user.json -d ../configs/default.json
+grace-pipeline run  -c ../configs/user.json -d ../configs/default.json
+```
+
+Future staged source layout:
+
+```bash
+bash scripts/dev/stage_repository_layout.sh
+cd src/python
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -e .
+grace-pipeline run -c ../../configs/user.json -d ../../configs/default.json
 ```
 
 MATLAB batch:
 
 ```bash
 matlab -batch "run('matlab/src/main/run_oneclick.m')"
+```
+
+If a Linux CLI release archive is provided:
+
+```bash
+tar -xzf grace-l2-pipeline-vX.Y.Z-linux-x86_64-cli.tar.gz
+cd grace-l2-pipeline-vX.Y.Z-linux-x86_64-cli
+./grace-pipeline --help
+./grace-pipeline run -c configs/user.json -d configs/default.json
 ```
 
 ## HPC submission
