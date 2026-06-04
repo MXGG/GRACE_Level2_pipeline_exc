@@ -12,6 +12,10 @@ venv*/
 python/venv/
 python/venv*/
 python/.venv-build/
+src/python/venv/
+src/python/venv*/
+src/python/.venv/
+src/python/.venv-build/
 
 # Build artifacts
 build/
@@ -27,10 +31,21 @@ python/_pyi_dll_aliases/
 python/.venv312_ready
 python/files.zip
 python/tests/files.zip
+src/python/build/
+src/python/build_preview/
+src/python/dist/
+src/python/output/
+src/python/_pyi_dll_aliases/
+src/python/.venv312_ready
+src/python/files.zip
+src/python/tests/files.zip
+packaging/artifacts/
 
 # Vendored tool sample/input data.
 matlab/src/tools/GRACE-filter-master/data/
 matlab/src/tools/GRACE-filter-master/tests/GSM-*
+src/matlab/src/tools/GRACE-filter-master/data/
+src/matlab/src/tools/GRACE-filter-master/tests/GSM-*
 
 # Input data: keep only directory placeholders and the manifest.
 /data/**
@@ -38,16 +53,31 @@ matlab/src/tools/GRACE-filter-master/tests/GSM-*
 !/data/**/
 !/data/.gitignore
 !/data/INPUT_FILES.md
+!/data/README.md
+!/data/manifest.example.json
 !/data/**/.gitkeep
 /data/Aux/
 
-# Outputs: keep only local/remote directory placeholders.
+# Legacy outputs: keep only local/remote directory placeholders.
 /output/**
 !/output/
 !/output/local/
 !/output/remote/
 !/output/local/.gitkeep
 !/output/remote/.gitkeep
+
+# Canonical outputs: keep only placeholders and README.
+/outputs/**
+!/outputs/
+!/outputs/README.md
+!/outputs/local/
+!/outputs/remote/
+!/outputs/figures/
+!/outputs/logs/
+!/outputs/local/.gitkeep
+!/outputs/remote/.gitkeep
+!/outputs/figures/.gitkeep
+!/outputs/logs/.gitkeep
 
 # Local scratch and archives
 _archive/
@@ -57,4 +87,3 @@ tmp/
 # Logs and temp files
 *.log
 *.tmp
-
