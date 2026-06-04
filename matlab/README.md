@@ -2,116 +2,83 @@
 
 ## Purpose
 
-**English**
-
-`matlab/` contains the production-oriented MATLAB backend, the shared configuration bridge, source modules under `src/`, and the MATLAB side of the HPC submission workflow.
-
-**中文**
-
-`matlab/` 目录包含面向生产运行的 MATLAB 后端、共享配置桥接层、`src/` 下的源码模块，以及 HPC 提交流程中 MATLAB 侧所需的内容。
+`matlab/` contains the production-oriented MATLAB backend, the shared configuration bridge, source modules under `src/`, and compatibility wrappers for older MATLAB-side run scripts.
 
 ## Layout
 
-| Path | English | 中文 |
-| --- | --- | --- |
-| `cfg/` | Shared JSON configs and config helpers | 共用 JSON 配置与配置辅助函数 |
-| `src/` | MATLAB source modules grouped by responsibility | 按职责划分的 MATLAB 源码模块 |
-| `scripts/` | Run, audit, analysis, plot, and performance scripts | 运行、审计、分析、绘图与性能脚本 |
-| `hpc.ps1` | MATLAB-side HPC helper logic | MATLAB 侧 HPC 辅助逻辑 |
-| `_legacy/` | Historical code kept only for reference | 仅供参考的历史代码 |
+| Path | Purpose |
+| --- | --- |
+| `cfg/` | Legacy JSON configs and config helpers retained for compatibility. |
+| `src/` | MATLAB source modules grouped by responsibility. |
+| `scripts/` | Run, audit, analysis, plot, and performance scripts. |
+| `hpc.ps1` | Compatibility wrapper that delegates to `packaging/hpc/hpc.ps1`. |
+| `_legacy/` | Historical code kept only for reference. |
 
-## Local Run
+## Local run
 
-### One-click entry
-
-**English**
-
-Use this entry for the standard local MATLAB run with the shared config pair.
-
-**中文**
-
-这是使用共享配置对进行本地 MATLAB 标准运行的主入口。
+Standard one-click entry from the repository root:
 
 ```matlab
-run('G:\GRACE_Level2_pipeline_exc\matlab\src\main\run_oneclick.m')
+run('matlab/src/main/run_oneclick.m')
 ```
 
-### Explicit config entry
-
-**English**
-
-Use the config-specific entry when you want to point MATLAB to a specific user config file.
-
-**中文**
-
-当你希望显式指定某个用户配置文件时，使用这个入口。
+Explicit shared configuration:
 
 ```matlab
-OUT = run_oneclick_cfg('G:\GRACE_Level2_pipeline_exc\matlab\cfg\user.json');
+addpath(genpath('matlab/src'));
+OUT = run_oneclick_cfg('configs/user.json');
 ```
 
-### Manual setup
-
-**English**
-
-Use the manual path when debugging environment setup, path loading, or individual pipeline stages.
-
-**中文**
-
-当你需要调试环境初始化、路径加载或单个流程阶段时，使用手动初始化方式。
+Manual setup for debugging:
 
 ```matlab
 addpath(genpath('matlab/src'));
 addpath('matlab/cfg');
-cfg = cfg_load('matlab/cfg/user.json', 'matlab/cfg/default.json');
+cfg = cfg_load('configs/user.json', 'configs/default.json');
 setup_env(cfg);
 OUT = run_pipeline(cfg);
 ```
 
-## HPC Usage
+The MATLAB entries prefer `configs/user.json` and `configs/default.json`. `matlab/cfg/` remains a fallback during the staged migration.
 
-**English**
+## HPC usage
 
-From the repository root, the recommended user-facing entry is:
-
-```powershell
-.\hpc.ps1 -Runtime matlab
-```
-
-This root-level helper is responsible for sync, submit, and result pullback. The default SLURM script used for the MATLAB backend is:
-
-- [matlab/scripts/run/run.slurm](/G:/GRACE_Level2_pipeline_exc/matlab/scripts/run/run.slurm)
-
-**中文**
-
-从仓库根目录出发，推荐的用户入口是：
+Use the canonical wrapper from the repository root:
 
 ```powershell
-.\hpc.ps1 -Runtime matlab
+.\packaging\hpc\hpc.ps1 -Runtime matlab -Remote user@host -RemoteRoot /remote/path/GRACE_Level2_pipeline
 ```
 
-这个根目录脚本负责同步、提交以及结果拉回。MATLAB 后端默认使用的 SLURM 脚本是：
+The legacy `matlab/hpc.ps1` remains as a compatibility wrapper only.
 
-- [matlab/scripts/run/run.slurm](/G:/GRACE_Level2_pipeline_exc/matlab/scripts/run/run.slurm)
+Portable SLURM entry:
 
-## Module Map
+```text
+packaging/hpc/slurm/run_matlab.slurm
+```
 
-| Module | English | 中文 |
-| --- | --- | --- |
-| `src/main/` | Pipeline orchestration and entrypoints | 流水线编排与入口 |
-| `src/core/` | Runtime helpers, planning, indexing, checkpoints | 运行时辅助、计划生成、索引与断点 |
-| `src/inversion/` | GFC reading, low-degree replacement, EWH synthesis, GIA | GFC 读取、低阶项替换、EWH 合成与 GIA |
-| `src/filters/` | GAUSS, FAN, P4M6, DDK, and HSAF filters | GAUSS、FAN、P4M6、DDK 与 HSAF 滤波 |
-| `src/io/` | Outputs, stacks, metadata, and logs | 输出、stack、元信息与日志 |
-| `src/metrics/` | Reference comparison and evaluation | 参考对比与指标评估 |
-| `src/basin/` | Basin analysis and time-series extraction | 流域分析与时间序列提取 |
-| `src/leakage/` | Leakage correction workflows | 泄漏校正流程 |
-| `src/plot/` | Figures and diagnostics | 绘图与诊断 |
-| `src/tools/` | Project helpers and vendored third-party tools | 项目工具函数与随仓库分发的第三方工具 |
+Adjust SLURM partition, QoS, CPU count, wall time, and MATLAB module settings for the target cluster before production use.
 
-## Related Documents
+## Module map
 
-- [README.md](/G:/GRACE_Level2_pipeline_exc/README.md)
-- [matlab/cfg/README.md](/G:/GRACE_Level2_pipeline_exc/matlab/cfg/README.md)
-- [matlab/scripts/README.md](/G:/GRACE_Level2_pipeline_exc/matlab/scripts/README.md)
-- [matlab/src/main/README.md](/G:/GRACE_Level2_pipeline_exc/matlab/src/main/README.md)
+| Module | Purpose |
+| --- | --- |
+| `src/main/` | Pipeline orchestration and entrypoints. |
+| `src/core/` | Runtime helpers, planning, indexing, checkpoints. |
+| `src/inversion/` | GFC reading, low-degree replacement, EWH synthesis, GIA. |
+| `src/filters/` | GAUSS, FAN, P4M6, DDK, and HSAF filters. |
+| `src/io/` | Outputs, stacks, metadata, and logs. |
+| `src/metrics/` | Reference comparison and evaluation. |
+| `src/basin/` | Basin analysis and time-series extraction. |
+| `src/leakage/` | Leakage correction workflows. |
+| `src/plot/` | Figures and diagnostics. |
+| `src/tools/` | Project helpers and vendored third-party tools. |
+
+## Related documents
+
+- `../README.md`
+- `../configs/README.md`
+- `../packaging/hpc/README.md`
+- `matlab/cfg/README.md`
+- `matlab/scripts/README.md`
+- `matlab/src/main/README.md`
