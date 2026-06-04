@@ -17,6 +17,7 @@ from grace_pipeline.core.config import get_data_dir, get_root_dir
 
 # DDK kernel cache
 _ddk_cache: Dict[str, Any] = {}
+_ddk_last_error: Dict[str, str] = {}
 
 _DDK_BIN_MAP = {
     'DDK1': 'Wbd_2-120.a_1d14p_4',
@@ -154,11 +155,12 @@ def _extract_lmin_lmax(kernel: Dict[str, Any], Lmax: int) -> Tuple[int, int]:
 
 
 def _apply_ddk_block(C: np.ndarray, S: np.ndarray, Lmax: int, kernel: Dict[str, Any]) -> Tuple[np.ndarray, np.ndarray]:
+    """Apply a binary DDK block kernel while preserving coefficients outside covered blocks."""
     nminfilt, nmaxfilt = _extract_lmin_lmax(kernel, Lmax)
     nmaxout = min(Lmax, nmaxfilt)
 
-    C_f = np.zeros_like(C)
-    S_f = np.zeros_like(S)
+    C_f = np.array(C, copy=True)
+    S_f = np.array(S, copy=True)
 
     lastblckind = 0
     lastindex = 0
@@ -204,7 +206,7 @@ def load_ddk_kernel(ddk_type: str, data_dir: str, Lmax: int = None) -> Optional[
     Returns:
         DDK kernel matrix or kernel dict (binary) or None
     """
-    global _ddk_cache
+    global _ddk_cache, _ddk_last_error
     ddk_type = str(ddk_type).upper().strip()
 
     cache_key = f"{data_dir}/{ddk_type}/{Lmax or ''}"
@@ -212,6 +214,7 @@ def load_ddk_kernel(ddk_type: str, data_dir: str, Lmax: int = None) -> Optional[
         return _ddk_cache[cache_key]
 
     data_path = Path(data_dir)
+    last_error = ""
 
     # Prefer binary kernels when available (GRACE-filter-master)
     if data_path.exists():
@@ -222,16 +225,18 @@ def load_ddk_kernel(ddk_type: str, data_dir: str, Lmax: int = None) -> Optional[
                 try:
                     kernel = _read_bin_ddk(bin_path)
                     _ddk_cache[cache_key] = kernel
+                    _ddk_last_error.pop(cache_key, None)
                     return kernel
-                except Exception:
-                    pass
+                except Exception as exc:
+                    last_error = f"failed to read binary kernel {bin_path}: {exc}"
     files = []
     if data_path.is_file():
         files = [data_path]
     elif data_path.exists():
         try:
             files = list(data_path.rglob('*.mat'))
-        except Exception:
+        except Exception as exc:
+            last_error = f"failed to scan {data_path}: {exc}"
             files = []
 
     # Common filename patterns
@@ -258,7 +263,6 @@ def load_ddk_kernel(ddk_type: str, data_dir: str, Lmax: int = None) -> Optional[
         return 3
 
     files = sorted({str(f): f for f in files}.values(), key=_score_file)
-
     ncoeff = None
     if Lmax is not None:
         ncoeff = (Lmax + 1) ** 2
@@ -284,8 +288,10 @@ def load_ddk_kernel(ddk_type: str, data_dir: str, Lmax: int = None) -> Optional[
             kernel = _select_kernel(data)
             if kernel is not None:
                 _ddk_cache[cache_key] = kernel
+                _ddk_last_error.pop(cache_key, None)
                 return kernel
-        except Exception:
+        except Exception as exc:
+            last_error = f"failed to read MAT kernel {fp}: {exc}"
             continue
 
     # Final fallback: try ROOT/data/DDK if a different path was provided
@@ -298,10 +304,13 @@ def load_ddk_kernel(ddk_type: str, data_dir: str, Lmax: int = None) -> Optional[
                 if bin_path.exists():
                     kernel = _read_bin_ddk(bin_path)
                     _ddk_cache[cache_key] = kernel
+                    _ddk_last_error.pop(cache_key, None)
                     return kernel
-    except Exception:
-        pass
+    except Exception as exc:
+        last_error = f"failed fallback ROOT/data/DDK lookup: {exc}"
 
+    if last_error:
+        _ddk_last_error[cache_key] = last_error
     return None
 
 
@@ -353,6 +362,7 @@ def filter_sh_ddk(
 ) -> Tuple[np.ndarray, np.ndarray, Dict[str, Any]]:
     """Apply DDK decorrelation filter to SH coefficients."""
     ddk_type = str(ddk_type).upper().strip()
+    cache_key = f"{data_dir}/{ddk_type}/{Lmax or ''}"
     kernel = load_ddk_kernel(ddk_type, data_dir, Lmax)
 
     if kernel is None:
@@ -361,13 +371,15 @@ def filter_sh_ddk(
             'applied': False,
             'error': 'DDK kernel not found',
         }
+        if cache_key in _ddk_last_error:
+            meta['detail'] = _ddk_last_error[cache_key]
         return C.copy(), S.copy(), meta
 
     is_3d = C.ndim == 3
     Nt = C.shape[2] if is_3d else 1
 
-    C_f = np.zeros_like(C)
-    S_f = np.zeros_like(S)
+    C_f = np.array(C, copy=True)
+    S_f = np.array(S, copy=True)
 
     for it in range(Nt):
         C_t = C[:, :, it] if is_3d else C
@@ -378,7 +390,8 @@ def filter_sh_ddk(
         else:
             vec = sh_to_vector(C_t, S_t, Lmax)
             if len(vec) <= kernel.shape[0]:
-                vec_f = kernel[:len(vec), :len(vec)] @ vec
+                vec_f = vec.copy()
+                vec_f[:len(vec)] = kernel[:len(vec), :len(vec)] @ vec
             else:
                 n = kernel.shape[0]
                 vec_f = vec.copy()
