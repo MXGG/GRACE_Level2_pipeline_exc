@@ -56,7 +56,7 @@ build = [
 ]
 
 [project.scripts]
-grace-pipeline = "grace_pipeline.cli:main"
+grace-pipeline = "grace_pipeline.entrypoints:main"
 grace-pipeline-doctor = "grace_pipeline.infra.doctor:main"
 
 [project.urls]
