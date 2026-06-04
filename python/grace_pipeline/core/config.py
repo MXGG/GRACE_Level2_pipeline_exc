@@ -3,11 +3,11 @@ Configuration management for GRACE pipeline.
 Handles loading JSON configs with placeholder resolution and merging.
 """
 
+import configparser
 import json
 import os
 import re
 import sys
-import configparser
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, Optional, Union
@@ -60,19 +60,33 @@ def get_bundle_dir() -> Path:
     return get_root_dir()
 
 
+def _looks_like_repo_root(path: Path) -> bool:
+    return (
+        (path / "configs").is_dir()
+        or (path / "python" / "grace_pipeline").is_dir()
+        or (path / "matlab" / "src").is_dir()
+        or (path / "grace-l2.ini").exists()
+    )
+
+
 def get_root_dir() -> Path:
     """
-    Get the project root directory.
-    
-    For frozen executable: parent of the executable's directory
-      (assumes dist/grace-pipeline.exe with data/ alongside dist/)
-    For development: current working directory
-    """
-    if getattr(sys, "frozen", False):
-        env_root = _existing_path(os.environ.get("GRACE_L2_HOME"))
-        if env_root:
-            return env_root
+    Return the active project/install root.
 
+    Frozen installer layout:
+        <root>/dist/grace-pipeline-gui.exe
+        <root>/configs
+        <root>/data
+        <root>/outputs
+
+    Source layout:
+        repository root containing configs/, python/, and matlab/.
+    """
+    env_root = _existing_path(os.environ.get("GRACE_L2_HOME"))
+    if env_root:
+        return env_root
+
+    if getattr(sys, "frozen", False):
         exe_dir = Path(sys.executable).resolve().parent
         ini = _read_install_ini(exe_dir)
         ini_root = _existing_path(ini.get("homedir"))
@@ -81,99 +95,101 @@ def get_root_dir() -> Path:
 
         candidates = [exe_dir.parent, exe_dir] if exe_dir.name.lower() == "dist" else [exe_dir, exe_dir.parent]
         for candidate in candidates:
-            if (candidate / "data").is_dir() or (candidate / "grace-l2.ini").exists():
+            if _looks_like_repo_root(candidate):
                 return candidate.resolve()
         return candidates[0].resolve()
 
     cwd = Path.cwd().resolve()
     for candidate in [cwd, *cwd.parents]:
-        if (candidate / "data").is_dir() and (candidate / "output").is_dir():
-            return candidate
-    env_root = _existing_path(os.environ.get("GRACE_L2_HOME"))
-    if env_root:
-        return env_root
+        if _looks_like_repo_root(candidate):
+            return candidate.resolve()
     return cwd
 
 
 def get_data_dir(root_dir: Optional[Union[str, Path]] = None) -> Path:
     """Return the active data directory for source or installed runs."""
     root = Path(root_dir).resolve() if root_dir is not None else get_root_dir()
-    if getattr(sys, "frozen", False):
-        env_data = _existing_path(os.environ.get("GRACE_L2_DATA"))
-        if env_data:
-            return env_data
-        ini_data = _existing_path(_read_install_ini(root).get("datadir"))
-        if ini_data:
-            return ini_data
-        bundle_data = get_bundle_dir() / "data"
-        if bundle_data.exists():
-            return bundle_data
+    env_data = _existing_path(os.environ.get("GRACE_L2_DATA"))
+    if env_data:
+        return env_data
+    ini_data = _existing_path(_read_install_ini(root).get("datadir"))
+    if ini_data:
+        return ini_data
+    bundle_data = get_bundle_dir() / "data" if getattr(sys, "frozen", False) else None
+    if bundle_data and bundle_data.exists():
+        return bundle_data
     return root / "data"
 
 
 def get_output_dir(root_dir: Optional[Union[str, Path]] = None) -> Path:
     """Return the active output directory for source or installed runs."""
     root = Path(root_dir).resolve() if root_dir is not None else get_root_dir()
-    if getattr(sys, "frozen", False):
-        env_output = _existing_path(os.environ.get("GRACE_L2_OUTPUT"))
-        if env_output:
-            return env_output
-        ini_output = _existing_path(_read_install_ini(root).get("outputdir"))
-        if ini_output:
-            return ini_output
-    return root / "output"
-
-
-def find_default_config(root_dir: Optional[Union[str, Path]] = None) -> Optional[Path]:
-    """Find default.json in source, installed, or bundled layouts."""
-    root = Path(root_dir).resolve() if root_dir is not None else get_root_dir()
-    bundle = get_bundle_dir()
-    candidates = [
-        root / "cfg" / "default.json",
-        root / "matlab" / "cfg" / "default.json",
-        bundle / "cfg" / "default.json",
-        bundle / "matlab" / "cfg" / "default.json",
-    ]
-    for candidate in candidates:
-        if candidate.exists():
-            return candidate
-    return None
+    env_output = _existing_path(os.environ.get("GRACE_L2_OUTPUT"))
+    if env_output:
+        return env_output
+    ini_output = _existing_path(_read_install_ini(root).get("outputdir"))
+    if ini_output:
+        return ini_output
+    return root / "outputs"
 
 
 def get_config_dir(root_dir: Optional[Union[str, Path]] = None) -> Path:
-    """Return the user-facing config directory, avoiding PyInstaller temp dirs."""
+    """Return the canonical user-facing config directory."""
     root = Path(root_dir).resolve() if root_dir is not None else get_root_dir()
-    source_cfg = root / "matlab" / "cfg"
-    if source_cfg.exists():
-        return source_cfg
-    return root / "cfg"
+    env_cfg = _existing_path(os.environ.get("GRACE_L2_CONFIG"))
+    if env_cfg:
+        return env_cfg
+    ini_cfg = _existing_path(_read_install_ini(root).get("configdir"))
+    if ini_cfg:
+        return ini_cfg
+    for candidate in [root / "configs", root / "cfg", root / "matlab" / "cfg"]:
+        if candidate.exists():
+            return candidate.resolve()
+    return root / "configs"
+
+
+def find_default_config(root_dir: Optional[Union[str, Path]] = None) -> Optional[Path]:
+    """Find default.json in canonical, installed, bundled, or legacy layouts."""
+    root = Path(root_dir).resolve() if root_dir is not None else get_root_dir()
+    bundle = get_bundle_dir()
+    config_dir = get_config_dir(root)
+    candidates = [
+        config_dir / "default.json",
+        root / "configs" / "default.json",
+        root / "cfg" / "default.json",
+        root / "matlab" / "cfg" / "default.json",
+        bundle / "configs" / "default.json",
+        bundle / "cfg" / "default.json",
+        bundle / "matlab" / "cfg" / "default.json",
+    ]
+    seen = set()
+    for candidate in candidates:
+        if candidate in seen:
+            continue
+        seen.add(candidate)
+        if candidate.exists():
+            return candidate.resolve()
+    return None
 
 
 def resolve_placeholders(obj: Any, root_dir: str) -> Any:
-    """Recursively resolve ${ROOT} and other placeholders in config values."""
+    """Recursively resolve ${ROOT} and other environment placeholders."""
     if isinstance(obj, str):
-        # Replace ${ROOT} with actual root directory
         obj = obj.replace("${ROOT}", root_dir)
-        # Replace environment variables ${VAR}
-        pattern = r'\$\{([^}]+)\}'
-        matches = re.findall(pattern, obj)
-        for match in matches:
+        pattern = r"\$\{([^}]+)\}"
+        for match in re.findall(pattern, obj):
             env_val = os.environ.get(match, "")
             obj = obj.replace(f"${{{match}}}", env_val)
         return obj
-    elif isinstance(obj, dict):
+    if isinstance(obj, dict):
         return {k: resolve_placeholders(v, root_dir) for k, v in obj.items()}
-    elif isinstance(obj, list):
+    if isinstance(obj, list):
         return [resolve_placeholders(item, root_dir) for item in obj]
     return obj
 
 
 def remap_root_paths(obj: Any, source_root: str, target_root: str) -> Any:
-    """
-    Remap absolute paths rooted at source_root to target_root recursively.
-
-    This keeps config files portable between local Windows paths and remote Linux roots.
-    """
+    """Remap absolute paths rooted at source_root to target_root recursively."""
     if not source_root or not target_root:
         return obj
 
@@ -191,13 +207,10 @@ def remap_root_paths(obj: Any, source_root: str, target_root: str) -> Any:
         if replaced and os.name != "nt":
             s = s.replace("\\", "/")
         return s
-
     if isinstance(obj, dict):
         return {k: remap_root_paths(v, source_root, target_root) for k, v in obj.items()}
-
     if isinstance(obj, list):
         return [remap_root_paths(item, source_root, target_root) for item in obj]
-
     return obj
 
 
@@ -325,14 +338,13 @@ class ParallelConfig:
 
 class Config:
     """Main configuration class for GRACE pipeline."""
-    
+
     def __init__(self, config_dict: Dict[str, Any]):
         self._raw = config_dict
         self._parse_config(config_dict)
-    
+
     def _parse_config(self, cfg: Dict):
         """Parse configuration dictionary into typed attributes."""
-        # Paths
         path_cfg = cfg.get("path", {})
         self.path = PathConfig(
             ROOT=path_cfg.get("ROOT", ""),
@@ -343,8 +355,7 @@ class Config:
             BOUNDARY=path_cfg.get("BOUNDARY", ""),
             TOOLBOX=path_cfg.get("TOOLBOX", {}),
         )
-        
-        # Time
+
         time_cfg = cfg.get("time", {})
         self.time = TimeConfig(
             auto_detect_gfc=time_cfg.get("auto_detect_gfc", True),
@@ -353,8 +364,7 @@ class Config:
             product_type=time_cfg.get("product_type", "GSM"),
             file_ext=time_cfg.get("file_ext", ".gfc"),
         )
-        
-        # Grid
+
         grid_cfg = cfg.get("grid", {})
         self.grid = GridConfig(
             lon=tuple(grid_cfg.get("lon", [-179.5, 179.5])),
@@ -363,8 +373,7 @@ class Config:
             dlat=grid_cfg.get("dlat", 1.0),
             unit=grid_cfg.get("unit", "mmEWH"),
         )
-        
-        # Inversion
+
         inv_cfg = cfg.get("inversion", {})
         self.inversion = InversionConfig(
             Lmax=inv_cfg.get("Lmax", 60),
@@ -374,8 +383,7 @@ class Config:
             lowdeg=inv_cfg.get("lowdeg", {}),
             gia=inv_cfg.get("gia", {}),
         )
-        
-        # Filters
+
         filter_cfg = cfg.get("filter", {})
         self.filter = FilterConfig(
             pre_hankel_input=filter_cfg.get("pre_hankel_input", "P4M6"),
@@ -384,22 +392,17 @@ class Config:
         if "gaussian" in filter_cfg:
             g = filter_cfg["gaussian"]
             self.filter.gaussian = GaussianFilterConfig(
-                enable=g.get("enable", True),
-                radius_km=g.get("radius_km", 300.0),
+                enable=g.get("enable", True), radius_km=g.get("radius_km", 300.0)
             )
         if "p4m6" in filter_cfg:
             p = filter_cfg["p4m6"]
             self.filter.p4m6 = P4M6FilterConfig(
-                enable=p.get("enable", True),
-                poly_deg=p.get("poly_deg", 4),
-                m_start=p.get("m_start", 6),
+                enable=p.get("enable", True), poly_deg=p.get("poly_deg", 4), m_start=p.get("m_start", 6)
             )
         if "ddk" in filter_cfg:
             d = filter_cfg["ddk"]
             self.filter.ddk = DDKFilterConfig(
-                enable=d.get("enable", True),
-                type=d.get("type", "DDK4"),
-                data_dir=d.get("data_dir", ""),
+                enable=d.get("enable", True), type=d.get("type", "DDK4"), data_dir=d.get("data_dir", "")
             )
         if "hankel" in filter_cfg:
             h = filter_cfg["hankel"]
@@ -413,8 +416,7 @@ class Config:
                 stack_mode=h.get("stack_mode", False),
             )
         self.filter.fan = filter_cfg.get("fan", {})
-        
-        # IO
+
         io_cfg = cfg.get("io", {})
         self.io = IOConfig(
             save_monthly_mat=io_cfg.get("save_monthly_mat", True),
@@ -427,15 +429,13 @@ class Config:
             return_basin=io_cfg.get("return_basin", False),
             return_metrics=io_cfg.get("return_metrics", False),
         )
-        
-        # Parallel
+
         par_cfg = cfg.get("parallel", {})
         self.parallel = ParallelConfig(
             enable=par_cfg.get("enable", True),
             n_workers=par_cfg.get("nWorkers", par_cfg.get("n_workers", 4)),
         )
-        
-        # Other sections stored as dicts
+
         self.reference = cfg.get("reference", {})
         self.gldas = cfg.get("gldas", {})
         self.basin = cfg.get("basin", {})
@@ -444,11 +444,11 @@ class Config:
         self.plot = cfg.get("plot", {})
         self.perf = cfg.get("perf", {})
         self.fm = cfg.get("fm", {})
-    
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert config back to dictionary."""
         return self._raw
-    
+
     def get(self, key: str, default: Any = None) -> Any:
         """Get a config value by key path (e.g., 'filter.gaussian.radius_km')."""
         keys = key.split(".")
@@ -466,59 +466,41 @@ def load_config(
     default_config: Optional[Union[str, Path]] = None,
     root_dir: Optional[Union[str, Path]] = None,
 ) -> Config:
-    """
-    Load configuration from JSON files.
-    
-    Args:
-        user_config: Path to user configuration JSON file
-        default_config: Path to default configuration JSON file
-        root_dir: Project root directory for placeholder resolution
-    
-    Returns:
-        Config object with merged and resolved configuration
-    """
-    # Determine root directory
+    """Load configuration from JSON files."""
     if root_dir is None:
         root_dir = get_root_dir()
-    root_dir = str(Path(root_dir).resolve())
-    data_dir = get_data_dir(root_dir)
-    output_dir = get_output_dir(root_dir)
+    root_path = Path(root_dir).resolve()
+    root_dir_str = str(root_path)
+    data_dir = get_data_dir(root_path)
+    output_dir = get_output_dir(root_path)
 
     if default_config is None:
-        default_config = find_default_config(root_dir)
-    
-    # Load default config
-    base_cfg = {}
-    if default_config and Path(default_config).exists():
-        with open(default_config, 'r', encoding='utf-8') as f:
-            base_cfg = json.load(f)
-    
-    # Load user config
-    user_cfg = {}
-    if user_config and Path(user_config).exists():
-        with open(user_config, 'r', encoding='utf-8') as f:
-            user_cfg = json.load(f)
-    
-    # Merge configs
-    merged = merge_configs(base_cfg, user_cfg)
-    
-    # Resolve placeholders
-    resolved = resolve_placeholders(merged, root_dir)
+        default_config = find_default_config(root_path)
 
-    # Keep configs portable: if ROOT points to another absolute root (e.g., local Windows),
-    # remap all rooted paths to current runtime root_dir.
-    current_root = str(Path(root_dir).resolve())
+    base_cfg: Dict[str, Any] = {}
+    if default_config and Path(default_config).exists():
+        with open(default_config, "r", encoding="utf-8") as f:
+            base_cfg = json.load(f)
+
+    user_cfg: Dict[str, Any] = {}
+    if user_config and Path(user_config).exists():
+        with open(user_config, "r", encoding="utf-8") as f:
+            user_cfg = json.load(f)
+
+    merged = merge_configs(base_cfg, user_cfg)
+    resolved = resolve_placeholders(merged, root_dir_str)
+
+    current_root = str(root_path)
     configured_root = str(resolved.get("path", {}).get("ROOT", "") or "")
     if configured_root and configured_root != current_root:
         resolved = remap_root_paths(resolved, configured_root, current_root)
-    
-    # Set sensible defaults for paths if not specified
+
     if not resolved.get("path"):
         resolved["path"] = {}
-    
+
     path_cfg = resolved["path"]
     if not path_cfg.get("ROOT"):
-        path_cfg["ROOT"] = root_dir
+        path_cfg["ROOT"] = root_dir_str
     if not path_cfg.get("GFC"):
         path_cfg["GFC"] = str(data_dir / "GRACE" / "GSM")
     if not path_cfg.get("OUTPUT"):
@@ -527,13 +509,12 @@ def load_config(
         path_cfg["DDK"] = str(data_dir / "DDK")
     if not path_cfg.get("BOUNDARY"):
         path_cfg["BOUNDARY"] = str(data_dir / "Boundary")
-    
-    # Also set DDK data_dir in filter config if not set
+
     if "filter" not in resolved:
         resolved["filter"] = {}
     if "ddk" not in resolved["filter"]:
         resolved["filter"]["ddk"] = {}
     if not resolved["filter"]["ddk"].get("data_dir"):
         resolved["filter"]["ddk"]["data_dir"] = path_cfg["DDK"]
-    
+
     return Config(resolved)
