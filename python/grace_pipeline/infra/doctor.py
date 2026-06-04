@@ -7,6 +7,7 @@ import importlib
 import platform
 import sys
 from dataclasses import dataclass
+from importlib import metadata
 from pathlib import Path
 from typing import Iterable, Optional
 
@@ -34,12 +35,25 @@ CORE_MODULES = [
 
 GUI_MODULES = ["PySide6"]
 
+_PACKAGE_NAMES = {
+    "yaml": "PyYAML",
+    "shapefile": "pyshp",
+}
+
+
+def _module_version(module_name: str) -> str:
+    package_name = _PACKAGE_NAMES.get(module_name, module_name)
+    try:
+        return metadata.version(package_name)
+    except metadata.PackageNotFoundError:
+        return ""
+
 
 def _module_import_check(module_name: str, required: bool = True) -> CheckResult:
     """Import a module to catch binary dependency failures, not just missing specs."""
     try:
-        module = importlib.import_module(module_name)
-        version = getattr(module, "__version__", "")
+        importlib.import_module(module_name)
+        version = _module_version(module_name)
         detail = "importable" if not version else f"importable ({version})"
         return CheckResult(f"module.{module_name}", True, detail, required=required)
     except Exception as exc:
