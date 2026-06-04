@@ -1,12 +1,13 @@
 """
-GRACE Level-2 Satellite Gravity Data Processing Pipeline
+GRACE/GRACE-FO Level-2 spherical harmonic processing pipeline.
 
-A comprehensive Python toolkit for processing GRACE/GRACE-FO satellite gravity data,
-including spherical harmonic inversion, filtering, leakage correction, and basin analysis.
+A Python toolkit for processing GRACE/GRACE-FO satellite gravity data,
+including spherical harmonic inversion, filtering, leakage correction,
+and basin analysis.
 """
 
-__version__ = "1.0.0"
-__author__ = "GRACE Pipeline Team"
+__version__ = "0.1.0"
+__author__ = "LLX - HUST National Gravity Laboratory"
 
 __all__ = [
     "__version__",
