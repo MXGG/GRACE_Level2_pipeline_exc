@@ -3,7 +3,7 @@ param(
   [string]$Runtime = "python",
   [string]$RemoteRoot = "~/GRACE_Level2_pipeline",
   [string]$SlurmScript = "",
-  [string]$ConfigPath = "configs/user.json",
+  [string]$ConfigPath = "configs/hpc.example.json",
   [string]$DefaultConfigPath = "configs/default.json",
   [string]$Remote = "",
   [int]$RemotePort = 22,
@@ -50,7 +50,7 @@ function Sync-ProjectViaScp {
   )
 
   Write-Host "1) Sync project to HPC via scp ..." -ForegroundColor Cyan
-  & $SshExe -p $RemotePort $Remote "mkdir -p '$RemoteRoot' '$RemoteRoot/output/logs' '$RemoteRoot/outputs/logs'"
+  & $SshExe -p $RemotePort $Remote "mkdir -p '$RemoteRoot' '$RemoteRoot/outputs/logs' '$RemoteRoot/outputs/remote'"
   if ($LASTEXITCODE -ne 0) { throw "Failed to prepare remote root: $RemoteRoot" }
 
   $items = @("configs", "python", "matlab", "packaging", "docs", "data/INPUT_FILES.md", "README.md", "README.zh-CN.md", "LICENSE")
