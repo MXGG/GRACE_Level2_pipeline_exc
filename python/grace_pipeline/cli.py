@@ -2,20 +2,21 @@
 Command-line interface for GRACE pipeline.
 """
 
-import os
 import sys
 from pathlib import Path
 from typing import Optional
 
 import click
 
+from grace_pipeline import __version__
 from grace_pipeline.infra.runtime import limit_blas_threads
 
+
 @click.group()
-@click.version_option(version="1.0.0", prog_name="GRACE Pipeline")
+@click.version_option(version=__version__, prog_name="GRACE Pipeline")
 def main():
     """GRACE Level-2 Satellite Gravity Data Processing Pipeline.
-    
+
     Process GRACE/GRACE-FO spherical harmonic coefficients into
     filtered gridded equivalent water height (EWH) products.
     """
@@ -47,7 +48,7 @@ def gui():
     help='Override output directory'
 )
 @click.option(
-    '--start', 
+    '--start',
     type=str,
     help='Start date (YYYY-MM format)'
 )
@@ -83,45 +84,42 @@ def run(
     verbose: bool,
 ):
     """Run the full GRACE processing pipeline.
-    
+
     Examples:
-    
-        grace-pipeline run -c cfg/user.json
-        
+
+        grace-pipeline run -c ../configs/user.json -d ../configs/default.json
+
         grace-pipeline run --start 2002-04 --end 2020-12 -j 8
     """
-    from grace_pipeline.infra.config import load_config, merge_configs
+    from grace_pipeline.infra.config import load_config
     from grace_pipeline.app.pipeline import run_pipeline
-    
-    # Load configuration
+
     cfg = load_config(config, default_config)
-    
-    # Apply overrides
+
     if output:
-        cfg._raw['path']['OUTPUT'] = output
+        cfg._raw.setdefault('path', {})['OUTPUT'] = output
         cfg.path.OUTPUT = output
-    
+
     if start:
-        cfg._raw['time']['start_ym'] = start
+        cfg._raw.setdefault('time', {})['start_ym'] = start
         cfg.time.start_ym = start
-    
+
     if end:
-        cfg._raw['time']['end_ym'] = end
+        cfg._raw.setdefault('time', {})['end_ym'] = end
         cfg.time.end_ym = end
-    
+
     if no_parallel:
-        cfg._raw['parallel']['enable'] = False
+        cfg._raw.setdefault('parallel', {})['enable'] = False
         cfg.parallel.enable = False
     elif jobs > 1:
-        cfg._raw['parallel']['enable'] = True
-        cfg._raw['parallel']['nWorkers'] = jobs
+        cfg._raw.setdefault('parallel', {})['enable'] = True
+        cfg._raw.setdefault('parallel', {})['nWorkers'] = jobs
         cfg.parallel.enable = True
         cfg.parallel.n_workers = jobs
-    
-    # Run pipeline
+
     try:
         pipeline_result = run_pipeline(cfg)
-        click.echo(f"\nPipeline completed successfully!")
+        click.echo("\nPipeline completed successfully!")
         click.echo(f"Output directory: {pipeline_result.paths.root}")
         click.echo(f"Processed {len(pipeline_result.time_entries)} months")
         click.echo(f"Products: {', '.join(pipeline_result.plan['order'])}")
@@ -137,35 +135,45 @@ def run(
 @click.option(
     '-c', '--config',
     type=click.Path(exists=True),
-    help='Path to configuration file'
+    help='Path to user configuration JSON file'
 )
-def info(config: Optional[str]):
+@click.option(
+    '-d', '--default-config',
+    type=click.Path(exists=True),
+    help='Path to default configuration JSON file'
+)
+def info(config: Optional[str], default_config: Optional[str]):
     """Show pipeline configuration and available data.
-    
+
     Examples:
-    
+
         grace-pipeline info
-        
-        grace-pipeline info -c cfg/user.json
+
+        grace-pipeline info -c ../configs/user.json -d ../configs/default.json
     """
-    from grace_pipeline.infra.config import load_config
+    from grace_pipeline.infra.config import find_default_config, load_config
     from grace_pipeline.infra.datasets.time_index import build_time_index, detect_gfc_files
-    
-    cfg = load_config(config)
-    
+
+    cfg = load_config(config, default_config)
+    resolved_default = default_config or find_default_config(cfg.path.ROOT)
+
     click.echo("\n=== GRACE Pipeline Configuration ===\n")
-    
-    click.echo("Paths:")
+    click.echo(f"Version: {__version__}")
+    click.echo(f"Default config: {resolved_default}")
+    click.echo(f"User config: {config or '(not supplied)'}")
+
+    click.echo("\nPaths:")
+    click.echo(f"  ROOT: {cfg.path.ROOT}")
     click.echo(f"  GFC directory: {cfg.path.GFC}")
     click.echo(f"  Output: {cfg.path.OUTPUT}")
     click.echo(f"  DDK data: {cfg.filter.ddk.data_dir}")
-    
+    click.echo(f"  Boundary: {cfg.path.BOUNDARY}")
+
     click.echo("\nTime range:")
     click.echo(f"  Auto-detect: {cfg.time.auto_detect_gfc}")
     click.echo(f"  Start: {cfg.time.start_ym}")
     click.echo(f"  End: {cfg.time.end_ym}")
-    
-    # Detect available data
+
     if Path(cfg.path.GFC).exists():
         gfc_files = detect_gfc_files(cfg.path.GFC, cfg.time.product_type, cfg.time.file_ext)
         click.echo(f"\nAvailable GFC files: {len(gfc_files)}")
@@ -177,22 +185,21 @@ def info(config: Optional[str]):
                 click.echo(f"  Last: {time_entries[-1].ym}")
     else:
         click.echo(f"\nGFC directory not found: {cfg.path.GFC}")
-    
+
     click.echo("\nGrid:")
     click.echo(f"  Lon: {cfg.grid.lon[0]} to {cfg.grid.lon[1]}, dlon={cfg.grid.dlon}")
     click.echo(f"  Lat: {cfg.grid.lat[0]} to {cfg.grid.lat[1]}, dlat={cfg.grid.dlat}")
-    
+
     click.echo("\nFilters:")
-    click.echo(f"  Gaussian: {cfg.filter.gaussian.enable} (r={cfg.filter.gaussian.radius_km}km)")
+    click.echo(f"  Gaussian: {cfg.filter.gaussian.enable} (r={cfg.filter.gaussian.radius_km} km)")
     click.echo(f"  P4M6: {cfg.filter.p4m6.enable}")
     click.echo(f"  DDK: {cfg.filter.ddk.enable} ({cfg.filter.ddk.type})")
     click.echo(f"  HSAF: {cfg.filter.hankel.enable}")
-    
+
     click.echo("\nProcessing:")
     click.echo(f"  Max degree: {cfg.inversion.Lmax}")
     click.echo(f"  Remove mean: {cfg.inversion.remove_mean}")
     click.echo(f"  Parallel: {cfg.parallel.enable} ({cfg.parallel.n_workers} workers)")
-    
     click.echo()
 
 
@@ -346,7 +353,7 @@ def filter_gfc_ddk(
 @click.option(
     "--outdir",
     type=click.Path(),
-    help="Optional output directory. Defaults to output/local/compare/hsaf_experiments/<run_id>.",
+    help="Optional output directory. Defaults to outputs/local/compare/hsaf_experiments/<run_id>.",
 )
 def hsaf_experiments(
     config: Optional[str],
@@ -388,7 +395,7 @@ def hsaf_experiments(
 @click.option(
     "--output-dir",
     type=click.Path(),
-    default=str(Path("output") / "local" / "tmp" / "grace_l1b"),
+    default=str(Path("outputs") / "local" / "tmp" / "grace_l1b"),
     show_default=True,
     help="Directory used for downloads and optional extraction.",
 )
@@ -439,86 +446,73 @@ def grace_l1b_fetch(
     help='Output filename'
 )
 def init(template: str, output: str):
-    """Initialize a new configuration file.
-    
-    Templates:
-    
-        default - Standard configuration with common settings
-        
-        minimal - Minimum required settings only
-        
-        full - All options with documentation
-    
-    Examples:
-    
-        grace-pipeline init default -o my_config.json
-    """
+    """Initialize a new configuration file."""
     import json
-    
+
     templates = {
         'default': {
             "path": {
                 "ROOT": "${ROOT}",
                 "GFC": "${ROOT}/data/GRACE/GSM",
-                "OUTPUT": "${ROOT}/output",
-                "DDK": "${ROOT}/data/DDK"
-            },
-            "time": {
-                "auto_detect_gfc": True,
-                "start_ym": "2002-04",
-                "end_ym": "2020-12"
-            },
-            "grid": {
-                "lon": [-179.5, 179.5],
-                "lat": [-89.5, 89.5],
-                "dlon": 1.0,
-                "dlat": 1.0
-            },
-            "inversion": {
-                "Lmax": 60,
-                "remove_mean": True
-            },
-            "filter": {
-                "gaussian": {"enable": True, "radius_km": 300},
-                "p4m6": {"enable": True, "poly_deg": 4, "m_start": 6},
-                "ddk": {"enable": True, "type": "DDK4"},
-                "hankel": {"enable": False}
-            },
-            "parallel": {
-                "enable": True,
-                "nWorkers": 4
-            }
-        },
-        'minimal': {
-            "path": {
-                "GFC": "./data/GSM",
-                "OUTPUT": "./output"
-            },
-            "inversion": {"Lmax": 60}
-        },
-        'full': {
-            "_comment": "GRACE Level-2 Processing Pipeline Configuration",
-            "path": {
-                "ROOT": "${ROOT}",
-                "GFC": "${ROOT}/data/GRACE/GSM",
-                "OUTPUT": "${ROOT}/output",
-                "AUX": "${ROOT}/data/Aux",
+                "OUTPUT": "${ROOT}/outputs",
                 "DDK": "${ROOT}/data/DDK",
-                "BOUNDARY": "${ROOT}/data/Boundary"
             },
             "time": {
                 "auto_detect_gfc": True,
                 "start_ym": "2002-04",
                 "end_ym": "2020-12",
-                "product_type": "GSM",
-                "file_ext": ".gfc"
             },
             "grid": {
                 "lon": [-179.5, 179.5],
                 "lat": [-89.5, 89.5],
                 "dlon": 1.0,
                 "dlat": 1.0,
-                "unit": "mmEWH"
+            },
+            "inversion": {
+                "Lmax": 60,
+                "remove_mean": True,
+            },
+            "filter": {
+                "gaussian": {"enable": True, "radius_km": 300},
+                "p4m6": {"enable": True, "poly_deg": 4, "m_start": 6},
+                "ddk": {"enable": True, "type": "DDK4"},
+                "hankel": {"enable": False},
+            },
+            "parallel": {
+                "enable": True,
+                "nWorkers": 4,
+            },
+        },
+        'minimal': {
+            "path": {
+                "GFC": "./data/GRACE/GSM",
+                "OUTPUT": "./outputs",
+            },
+            "inversion": {"Lmax": 60},
+        },
+        'full': {
+            "_comment": "GRACE Level-2 Processing Pipeline Configuration",
+            "path": {
+                "ROOT": "${ROOT}",
+                "GFC": "${ROOT}/data/GRACE/GSM",
+                "OUTPUT": "${ROOT}/outputs",
+                "AUX": "${ROOT}/data/Aux",
+                "DDK": "${ROOT}/data/DDK",
+                "BOUNDARY": "${ROOT}/data/Boundary",
+            },
+            "time": {
+                "auto_detect_gfc": True,
+                "start_ym": "2002-04",
+                "end_ym": "2020-12",
+                "product_type": "GSM",
+                "file_ext": ".gfc",
+            },
+            "grid": {
+                "lon": [-179.5, 179.5],
+                "lat": [-89.5, 89.5],
+                "dlon": 1.0,
+                "dlat": 1.0,
+                "unit": "mmEWH",
             },
             "inversion": {
                 "Lmax": 60,
@@ -529,13 +523,13 @@ def init(template: str, output: str):
                     "replace_C10": True,
                     "files": {
                         "C20": "${ROOT}/data/GRACE/LowDegree/TN-14_C30_C20_GSFC_SLR.txt",
-                        "DEGREE1": "${ROOT}/data/GRACE/LowDegree/TN-13_GEOC_CSR_RL06.txt"
-                    }
+                        "DEGREE1": "${ROOT}/data/GRACE/LowDegree/TN-13_GEOC_CSR_RL06.txt",
+                    },
                 },
                 "gia": {
                     "enable": False,
-                    "file": "${ROOT}/data/GRACE/GIA/GIA_Stokes_ICE-6G_D.txt"
-                }
+                    "file": "${ROOT}/data/GRACE/GIA/GIA_Stokes_ICE-6G_D.txt",
+                },
             },
             "filter": {
                 "gaussian": {"enable": True, "radius_km": 300},
@@ -546,28 +540,28 @@ def init(template: str, output: str):
                     "enable": True,
                     "variant": "global",
                     "mode": "profile",
-                    "params": {"N": 30, "P": 10, "K": 6, "J": 1}
+                    "params": {"N": 30, "P": 10, "K": 6, "J": 1},
                 },
-                "pre_hankel_input": "P4M6"
+                "pre_hankel_input": "P4M6",
             },
             "io": {
                 "save_monthly_mat": True,
                 "save_stack_mat": True,
                 "export_txt": True,
-                "resume": False
+                "resume": False,
             },
             "parallel": {
                 "enable": True,
-                "nWorkers": 8
-            }
-        }
+                "nWorkers": 8,
+            },
+        },
     }
-    
+
     config = templates[template]
-    
+
     with open(output, 'w', encoding='utf-8') as f:
         json.dump(config, f, indent=2)
-    
+
     click.echo(f"Created configuration file: {output}")
     click.echo(f"Template: {template}")
 
