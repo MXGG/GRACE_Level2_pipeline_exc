@@ -1,0 +1,79 @@
+{
+  "__template": "Machine-specific user configuration template. Copy this file to configs/user.json and adjust local paths.",
+  "path": {
+    "GFC": "${ROOT}/data/GRACE/GSM",
+    "OUTPUT": "${ROOT}/outputs",
+    "AUX": "${ROOT}/data/Aux",
+    "DDK": "${ROOT}/data/DDK",
+    "BOUNDARY": "${ROOT}/data/Boundary/boundary_cache"
+  },
+  "time": {
+    "auto_detect_gfc": true
+  },
+  "reference": {
+    "mascon_dir": "${ROOT}/data/Reference/Mascon",
+    "mascon_pattern": "Mascon_{YYYYMM}.nc",
+    "allow_nearest_month": true,
+    "nearest_month_tolerance_days": 45
+  },
+  "gldas": {
+    "dir": "${ROOT}/data/Hydro/GLDAS"
+  },
+  "io": {
+    "save_stack_hdf5": true,
+    "return_stacks": false,
+    "return_metrics": false,
+    "return_basin": false,
+    "resume": false
+  },
+  "metrics": {
+    "enable": false
+  },
+  "parallel": {
+    "enable": true,
+    "nWorkers": 4
+  },
+  "filter": {
+    "pre_hankel_input": "P4M6",
+    "gaussian": {
+      "enable": true
+    },
+    "p4m6": {
+      "enable": true
+    },
+    "fan": {
+      "enable": true
+    },
+    "ddk": {
+      "enable": true,
+      "type": "DDK4"
+    },
+    "hankel": {
+      "stack_mode": true,
+      "params": {
+        "N": 30,
+        "P": 8,
+        "K": 4,
+        "J": 1
+      }
+    }
+  },
+  "inversion": {
+    "Lmax": 60,
+    "remove_mean": true,
+    "mean_start_ym": "2004-01",
+    "mean_end_ym": "2009-12",
+    "lowdeg": {
+      "enable": true,
+      "replace_C20": true,
+      "replace_degree1": true,
+      "replace_C10": true,
+      "replace_C30": true,
+      "replace_S20": false,
+      "files": {
+        "C20": "${ROOT}/data/GRACE/LowDegree/TN-14_C30_C20_GSFC_SLR.txt",
+        "DEGREE1": "${ROOT}/data/GRACE/LowDegree/TN-13_GEOC_CSR_RL06.txt"
+      }
+    }
+  }
+}
