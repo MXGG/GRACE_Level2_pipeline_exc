@@ -1,44 +1,88 @@
-# HPC Packaging and Submission Helpers
+# HPC Submission
 
-This directory is the canonical location for Windows-to-HPC and SLURM submission helpers.
+This directory contains the canonical HPC submission workflow for the GRACE Level-2 Pipeline.
 
-The current migration is non-destructive. Existing root-level and MATLAB-side HPC scripts are kept in place. During the staged migration, use the compatibility wrappers here or run the legacy scripts directly.
+The workflow is intentionally environment-agnostic. Cluster-specific details such as partition, QoS, CPU count, wall time, MATLAB module names, and Python environment paths must be adjusted before production use.
 
-## Recommended future command
+## Entry point
+
+Run from the repository root on the local workstation:
 
 ```powershell
-.\packaging\hpc\hpc.ps1 -Runtime python -ConfigPath configs\user.json -DefaultConfigPath configs\default.json
-.\packaging\hpc\hpc.ps1 -Runtime matlab -ConfigPath configs\user.json -DefaultConfigPath configs\default.json
+.\packaging\hpc\hpc.ps1 `
+  -Runtime python `
+  -Remote user@host `
+  -RemoteRoot /remote/path/GRACE_Level2_pipeline `
+  -ConfigPath configs/user.json `
+  -DefaultConfigPath configs/default.json
 ```
 
-## Migration note
+MATLAB backend:
 
-The legacy default configuration paths were:
-
-```text
-matlab/cfg/user.json
-matlab/cfg/default.json
+```powershell
+.\packaging\hpc\hpc.ps1 `
+  -Runtime matlab `
+  -Remote user@host `
+  -RemoteRoot /remote/path/GRACE_Level2_pipeline `
+  -ConfigPath configs/user.json `
+  -DefaultConfigPath configs/default.json `
+  -MatlabBin matlab
 ```
 
-The canonical paths are now:
+## Portable SLURM scripts
 
-```text
-configs/user.json
-configs/default.json
+| Script | Runtime |
+| --- | --- |
+| `packaging/hpc/slurm/run_python.slurm` | Python CLI backend |
+| `packaging/hpc/slurm/run_matlab.slurm` | MATLAB backend |
+
+These scripts read runtime paths from environment variables set by `hpc.ps1`:
+
+| Variable | Purpose |
+| --- | --- |
+| `GRACE_REMOTE_ROOT` | Remote project root. |
+| `GRACE_USER_CONFIG` | User config path relative to remote root, or absolute remote path. |
+| `GRACE_DEFAULT_CONFIG` | Default config path relative to remote root, or absolute remote path. |
+| `GRACE_OUTPUT_ROOT` | Output root. Defaults to `<remote-root>/outputs`. |
+| `GRACE_PYTHON_BIN` | Python executable for Python runtime. |
+| `GRACE_MATLAB_BIN` | MATLAB executable for MATLAB runtime. |
+| `GRACE_MATLAB_MODULE` | Optional environment module name for MATLAB. |
+
+## Sync mode
+
+`-SyncMode auto` uses git when a git remote exists, otherwise falls back to scp. For isolated clusters or early testing, use:
+
+```powershell
+.\packaging\hpc\hpc.ps1 -Runtime python -Remote user@host -SyncMode scp
 ```
 
-Full HPC sync logic should eventually sync:
+The scp mode uploads the runtime directories required for submission, including `configs/`, `python/`, `matlab/`, `packaging/`, and selected documentation files.
 
-```text
-configs/
-src/python/
-src/matlab/
-docs/
+## Before production use
+
+Review and update the SLURM headers for the target cluster:
+
+```bash
+#SBATCH --partition=<partition>
+#SBATCH --qos=<qos>
+#SBATCH --cpus-per-task=<n>
+#SBATCH --time=<hh:mm:ss>
 ```
 
-and pull back outputs from:
+For MATLAB clusters that use modules, set the module at submission time:
 
-```text
-outputs/remote/<jobid>/
-outputs/logs/
+```powershell
+$env:GRACE_MATLAB_MODULE = "app/matlab/2023a"
 ```
+
+or edit the remote SLURM script to load the proper module.
+
+## Validation
+
+Python runtime performs a preflight check before running the pipeline:
+
+```bash
+python3 -m grace_pipeline.infra.doctor -c configs/user.json -d configs/default.json
+```
+
+A failed required check stops the SLURM job before long-running processing begins.

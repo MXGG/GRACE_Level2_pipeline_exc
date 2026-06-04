@@ -4,15 +4,15 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "grace-pipeline"
-version = "1.0.0"
-description = "GRACE Level-2 Satellite Gravity Data Processing Pipeline"
+version = "0.1.0"
+description = "GRACE/GRACE-FO Level-2 spherical harmonic processing pipeline"
 readme = "README.md"
 license = {text = "MIT"}
 requires-python = ">=3.9"
 authors = [
-    {name = "GRACE Pipeline Team"}
+    {name = "LLX - HUST National Gravity Laboratory"}
 ]
-keywords = ["GRACE", "gravity", "satellite", "geodesy", "hydrology", "spherical-harmonics"]
+keywords = ["GRACE", "GRACE-FO", "gravity", "satellite", "geodesy", "hydrology", "spherical-harmonics"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Science/Research",
@@ -30,7 +30,6 @@ dependencies = [
     "numpy>=1.21.0",
     "scipy>=1.7.0",
     "matplotlib>=3.5.0",
-    "PySide6>=6.7.0",
     "netCDF4>=1.5.0",
     "h5py>=3.0.0",
     "tqdm>=4.60.0",
@@ -41,6 +40,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+gui = [
+    "PySide6>=6.7.0",
+]
 dev = [
     "pytest>=7.0.0",
     "pytest-cov>=4.0.0",
@@ -49,15 +51,18 @@ dev = [
     "mypy>=1.0.0",
 ]
 build = [
+    "PySide6>=6.7.0",
     "pyinstaller>=5.0.0",
 ]
 
 [project.scripts]
-grace-pipeline = "grace_pipeline.cli:main"
+grace-pipeline = "grace_pipeline.entrypoints:main"
+grace-pipeline-doctor = "grace_pipeline.infra.doctor:main"
 
 [project.urls]
-Homepage = "https://github.com/grace-pipeline/grace-level2-pipeline"
-Documentation = "https://grace-pipeline.readthedocs.io"
+Homepage = "https://github.com/MXGG/GRACE_Level2_pipeline_exc"
+Issues = "https://github.com/MXGG/GRACE_Level2_pipeline_exc/issues"
+Releases = "https://github.com/MXGG/GRACE_Level2_pipeline_exc/releases"
 
 [tool.setuptools.packages.find]
 where = ["."]

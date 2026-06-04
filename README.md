@@ -4,20 +4,18 @@
 
 A MATLAB/Python processing workspace for GRACE/GRACE-FO Level-2 spherical harmonic products. The project supports spherical harmonic inversion, low-degree replacement, GIA correction, Gaussian/Fan/decorrelation/DDK/HSAF filtering, basin-scale TWSA extraction, leakage correction, diagnostics, Windows desktop usage, Linux batch execution, and HPC submission.
 
-This repository is currently in a staged layout migration. The legacy `python/`, `matlab/`, `installer/`, and `output/` paths are kept for compatibility. New commands and documentation should prefer `configs/`, `src/`, `packaging/`, and `outputs/`.
+This repository is in a staged layout migration. Legacy `python/`, `matlab/`, `installer/`, and `output/` paths are kept for compatibility. New runtime commands should prefer `configs/`, `packaging/`, and `outputs/`.
 
 ## Repository layout
 
 | Path | Purpose |
 | --- | --- |
 | `configs/` | Shared JSON configurations for Python and MATLAB. |
-| `src/python/` | Future canonical Python backend location. |
-| `src/matlab/` | Future canonical MATLAB backend location. |
-| `python/` | Legacy Python backend, kept during migration. |
-| `matlab/` | Legacy MATLAB backend, kept during migration. |
+| `python/` | Current Python backend and build scripts. |
+| `matlab/` | Current MATLAB backend and compatibility scripts. |
 | `data/` | Local input data workspace. Large data are not tracked. |
 | `outputs/` | Canonical runtime outputs. Generated outputs are not tracked. |
-| `packaging/` | Windows, Linux, installer, release, and HPC packaging helpers. |
+| `packaging/` | Windows, Linux, installer, release, and HPC helpers. |
 | `docs/` | User, developer, runtime, data, release, and algorithm notes. |
 | `examples/` | Small reproducible examples. |
 | `archive/` | Historical or deprecated materials. |
@@ -25,6 +23,8 @@ This repository is currently in a staged layout migration. The legacy `python/`,
 ## Configuration
 
 Use `configs/` as the shared configuration root.
+
+Windows:
 
 ```powershell
 Copy-Item configs\user.example.json configs\user.json
@@ -51,8 +51,6 @@ Common files:
 
 Large input datasets are not included. Put local data under `data/`.
 
-Typical layout:
-
 ```text
 data/
 ├─ GRACE/GSM/
@@ -68,70 +66,74 @@ See `data/INPUT_FILES.md` and `docs/data/` for data notes.
 
 ## Windows desktop installer
 
-The Windows desktop edition is distributed through GitHub Releases when installer assets are available.
+Download the latest `grace-l2-pipeline-vX.Y.Z-win-x64-setup.exe` from GitHub Releases and run the setup wizard.
 
-Recommended install path:
+Installed layout:
 
-1. Open the repository Releases page.
-2. Download the latest `grace-l2-pipeline-vX.Y.Z-win-x64-setup.exe` installer, or the portable `grace-l2-pipeline-vX.Y.Z-win-x64-portable.zip` package.
-3. Run the installer and follow the setup wizard.
-4. Keep large input data outside the installation directory, preferably under a dedicated workspace such as `Documents\GRACE-L2-Workspace`.
-5. Copy `configs\user.example.json` to `configs\user.json` and adjust local data paths before running scientific workflows.
-
-Example after installation:
-
-```powershell
-# Installed desktop executable; exact path depends on installer settings.
-"C:\Program Files\GRACE Level-2 Pipeline\grace-pipeline-gui.exe"
+```text
+<install-root>/
+├─ dist/grace-pipeline-gui.exe
+├─ dist/grace-pipeline.exe
+├─ configs/
+├─ data/
+└─ outputs/
 ```
 
-Portable package:
+Example launch path:
 
 ```powershell
-Expand-Archive .\grace-l2-pipeline-vX.Y.Z-win-x64-portable.zip -DestinationPath D:\Tools\GRACE-L2
-D:\Tools\GRACE-L2\grace-pipeline-gui.exe
+"C:\Program Files\GRACE_L2\dist\grace-pipeline-gui.exe"
 ```
 
-### WinGet status
+The exact root depends on the installer path selected by the user.
 
-The project is not installable by `winget install` until a Windows Package Manager manifest is submitted and accepted. A GitHub Release installer alone is not enough.
+### WinGet
 
-After an official manifest is published, the expected command format will be:
+After the package is accepted by the official Windows Package Manager community repository:
 
 ```powershell
-winget search grace
-winget install --id <Publisher.PackageId> -e
+winget install --id MXGG.GRACELevel2Pipeline -e
 ```
 
-For local testing before publication, a manifest can be validated or installed from a local manifest directory:
+Before acceptance, install the Windows desktop edition from GitHub Releases.
 
-```powershell
-winget validate .\packaging\windows\winget\manifests\<Publisher.PackageId>
-winget install --manifest .\packaging\windows\winget\manifests\<Publisher.PackageId>
-```
+## Python source install and run
 
-The installer should support silent installation before public WinGet submission.
+Core CLI install. This does not install GUI-only dependencies such as PySide6.
 
-## Python: install and run
-
-Legacy path, currently safest:
+Windows PowerShell:
 
 ```powershell
 cd python
+python -m pip install --upgrade pip
 python -m pip install -e .
-grace-pipeline info -c ..\configs\user.json -d ..\configs\default.json
-grace-pipeline run  -c ..\configs\user.json -d ..\configs\default.json
+grace-pipeline doctor -c ..\configs\user.json -d ..\configs\default.json
+grace-pipeline info   -c ..\configs\user.json -d ..\configs\default.json
+grace-pipeline run    -c ..\configs\user.json -d ..\configs\default.json
 ```
 
-Future staged path after copying the source layout locally:
+Linux/macOS:
+
+```bash
+cd python
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -e .
+grace-pipeline doctor -c ../configs/user.json -d ../configs/default.json
+grace-pipeline info   -c ../configs/user.json -d ../configs/default.json
+grace-pipeline run    -c ../configs/user.json -d ../configs/default.json
+```
+
+GUI source debugging requires the optional GUI extra:
 
 ```powershell
-.\scripts\dev\stage_repository_layout.ps1
-cd src\python
-python -m pip install -e .
-grace-pipeline info -c ..\..\configs\user.json -d ..\..\configs\default.json
-grace-pipeline run  -c ..\..\configs\user.json -d ..\..\configs\default.json
+cd python
+python -m pip install -e ".[gui]"
+python -m grace_pipeline.gui_entry
 ```
+
+Linux GUI users should ensure a graphical session or suitable Qt backend is available. Headless Linux/HPC users should keep to the core CLI install.
 
 Common CLI options:
 
@@ -146,95 +148,55 @@ Common CLI options:
 -v, --verbose
 ```
 
-## Python GUI debugging
-
-Legacy path:
-
-```powershell
-cd python
-python -m grace_pipeline.gui_entry
-```
-
-Future staged path:
-
-```powershell
-cd src\python
-python -m grace_pipeline.gui_entry
-```
-
 ## MATLAB local run
 
-Legacy path, currently safest:
+Standard local entry:
 
 ```matlab
 run('matlab/src/main/run_oneclick.m')
 ```
 
-Explicit configuration entry, if available in your local checkout:
+Explicit shared configuration:
 
 ```matlab
 addpath(genpath('matlab/src'));
 OUT = run_oneclick_cfg('configs/user.json');
 ```
 
-Future staged path after copying:
+The MATLAB entries now prefer `configs/user.json` and `configs/default.json`, with `matlab/cfg/` retained only as a fallback.
 
-```matlab
-addpath(genpath('src/matlab/src'));
-OUT = run_oneclick_cfg('configs/user.json');
-```
-
-## Linux installation and batch usage
-
-Python CLI from source:
-
-```bash
-git clone https://github.com/MXGG/GRACE_Level2_pipeline_exc.git
-cd GRACE_Level2_pipeline_exc
-cp configs/user.example.json configs/user.json
-cd python
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install --upgrade pip
-python -m pip install -e .
-grace-pipeline info -c ../configs/user.json -d ../configs/default.json
-grace-pipeline run  -c ../configs/user.json -d ../configs/default.json
-```
-
-Future staged source layout:
-
-```bash
-bash scripts/dev/stage_repository_layout.sh
-cd src/python
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install --upgrade pip
-python -m pip install -e .
-grace-pipeline run -c ../../configs/user.json -d ../../configs/default.json
-```
-
-MATLAB batch:
+Linux MATLAB batch:
 
 ```bash
 matlab -batch "run('matlab/src/main/run_oneclick.m')"
 ```
 
-If a Linux CLI release archive is provided:
-
-```bash
-tar -xzf grace-l2-pipeline-vX.Y.Z-linux-x86_64-cli.tar.gz
-cd grace-l2-pipeline-vX.Y.Z-linux-x86_64-cli
-./grace-pipeline --help
-./grace-pipeline run -c configs/user.json -d configs/default.json
-```
-
 ## HPC submission
 
-Canonical wrapper:
+The canonical wrapper is `packaging/hpc/hpc.ps1`. It submits either the Python or MATLAB backend and passes remote paths through environment variables rather than hard-coded user paths.
+
+Python backend:
 
 ```powershell
-.\packaging\hpc\hpc.ps1 -Runtime python -ConfigPath configs\user.json -DefaultConfigPath configs\default.json
-.\packaging\hpc\hpc.ps1 -Runtime matlab -ConfigPath configs\user.json -DefaultConfigPath configs\default.json
+.\packaging\hpc\hpc.ps1 `
+  -Runtime python `
+  -Remote user@host `
+  -RemoteRoot /remote/path/GRACE_Level2_pipeline `
+  -ConfigPath configs/user.json `
+  -DefaultConfigPath configs/default.json `
+  -PythonBin python3
+```
+
+MATLAB backend:
+
+```powershell
+.\packaging\hpc\hpc.ps1 `
+  -Runtime matlab `
+  -Remote user@host `
+  -RemoteRoot /remote/path/GRACE_Level2_pipeline `
+  -ConfigPath configs/user.json `
+  -DefaultConfigPath configs/default.json `
+  -MatlabBin matlab
 ```
 
 Useful options:
@@ -248,50 +210,37 @@ Useful options:
 -DefaultConfigPath configs/default.json
 -SyncMode auto|git|scp
 -PythonBin python3
+-MatlabBin matlab
+-NoWait
+-NoPull
 ```
+
+The portable SLURM entries are:
+
+```text
+packaging/hpc/slurm/run_python.slurm
+packaging/hpc/slurm/run_matlab.slurm
+```
+
+Edit partition, QoS, wall time, CPU count, and optional module loading for the target cluster before production use.
 
 ## Build and packaging
 
-Current legacy Python build scripts remain under `python/`.
+Windows executable build:
 
 ```powershell
 cd python
 .\build.ps1
 ```
 
-Linux:
+Linux executable build:
 
 ```bash
 cd python
 bash build.sh
 ```
 
-The canonical packaging area is `packaging/`. Build scripts will be migrated there in a later cleanup pass.
-
-## Layout staging
-
-To copy legacy source trees into the staged layout without deleting the original files:
-
-Windows:
-
-```powershell
-.\scripts\dev\stage_repository_layout.ps1
-```
-
-Linux/macOS:
-
-```bash
-bash scripts/dev/stage_repository_layout.sh
-```
-
-This copies:
-
-```text
-python/      -> src/python/
-matlab/      -> src/matlab/
-installer/   -> packaging/windows/installer/legacy-installer/
-output/      -> outputs/legacy-output/
-```
+The build extra installs GUI and PyInstaller dependencies; normal Linux CLI users do not need these packages.
 
 ## Outputs
 
@@ -325,6 +274,7 @@ outputs/local/<run_id>/
 | `configs/README.md` | Configuration layout and usage. |
 | `src/README.md` | Source layout guide. |
 | `packaging/README.md` | Packaging and deployment layout. |
+| `packaging/hpc/README.md` | Portable HPC submission workflow. |
 | `outputs/README.md` | Output workspace convention. |
 | `docs/runtime/` | Runtime notes. |
 | `docs/data/` | Data and metadata notes. |
@@ -335,4 +285,4 @@ outputs/local/<run_id>/
 
 - Do not commit large GRACE, GLDAS, Mascon, Hydroweb, boundary, intermediate, or generated output files.
 - Keep Python and MATLAB aligned in inversion, low-degree replacement, filtering, basin statistics, leakage correction, and output metadata.
-- Prefer `configs/` for all new commands. Legacy `matlab/cfg/` is retained only for compatibility during migration.
+- Prefer `configs/` and `outputs/` for new workflows. Legacy `matlab/cfg/` and `output/` are compatibility paths only.
