@@ -2,7 +2,7 @@
 #SBATCH --job-name=grace_matlab
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=4
+#SBATCH --cpus-per-task=52
 #SBATCH --time=04:00:00
 #SBATCH --output=outputs/logs/grace_%j.out
 #SBATCH --error=outputs/logs/grace_%j.err
@@ -21,7 +21,7 @@ echo "Job ID: ${SLURM_JOB_ID:-manual}"
 echo "Node: ${SLURM_NODELIST:-local}"
 echo "Start time: $(date)"
 echo "Workdir: $(pwd)"
-echo "CPUs: ${SLURM_CPUS_PER_TASK:-4}"
+echo "CPUs: ${SLURM_CPUS_PER_TASK:-52}"
 echo "=========================================="
 
 if [ -f /etc/profile.d/modules.sh ]; then
@@ -37,7 +37,7 @@ export MATLAB_NUM_THREADS=1
 export OMP_NUM_THREADS=1
 export MKL_NUM_THREADS=1
 
-USER_CONFIG="${GRACE_USER_CONFIG:-configs/user.json}"
+USER_CONFIG="${GRACE_USER_CONFIG:-configs/hpc.example.json}"
 DEFAULT_CONFIG="${GRACE_DEFAULT_CONFIG:-configs/default.json}"
 MATLAB_EXEC="${GRACE_MATLAB_BIN:-matlab}"
 
