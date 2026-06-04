@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+import argparse
 import importlib.util
-import os
 import platform
 import sys
 from dataclasses import dataclass
@@ -68,11 +68,19 @@ def run_doctor(cfg=None, default_config: Optional[str] = None, check_gui: bool =
     results.append(CheckResult("runtime.frozen", True, str(bool(getattr(sys, "frozen", False))), required=False))
 
     for module_name in CORE_MODULES:
-        results.append(CheckResult(f"module.{module_name}", _module_available(module_name), "importable" if _module_available(module_name) else "missing"))
+        ok = _module_available(module_name)
+        results.append(CheckResult(f"module.{module_name}", ok, "importable" if ok else "missing"))
 
     for module_name in GUI_MODULES:
-        required = check_gui
-        results.append(CheckResult(f"module.{module_name}", _module_available(module_name) or not required, "importable" if _module_available(module_name) else "missing; install with .[gui]", required=required))
+        ok = _module_available(module_name)
+        results.append(
+            CheckResult(
+                f"module.{module_name}",
+                ok or not check_gui,
+                "importable" if ok else "missing; install with .[gui]",
+                required=check_gui,
+            )
+        )
 
     default_path = Path(default_config).expanduser() if default_config else find_default_config(root)
     results.append(CheckResult("config.default", bool(default_path and Path(default_path).exists()), str(default_path) if default_path else "not found"))
@@ -95,3 +103,22 @@ def print_doctor(results: Iterable[CheckResult]) -> int:
         if result.required and not result.ok:
             failures += 1
     return 1 if failures else 0
+
+
+def main(argv: Optional[list[str]] = None) -> int:
+    parser = argparse.ArgumentParser(description="Check GRACE Pipeline runtime dependencies and paths.")
+    parser.add_argument("-c", "--config", help="Path to user configuration JSON file.")
+    parser.add_argument("-d", "--default-config", help="Path to default configuration JSON file.")
+    parser.add_argument("--gui", action="store_true", help="Require GUI dependencies such as PySide6.")
+    args = parser.parse_args(argv)
+
+    cfg = None
+    if args.config or args.default_config:
+        from grace_pipeline.infra.config import load_config
+        cfg = load_config(args.config, args.default_config)
+
+    return print_doctor(run_doctor(cfg=cfg, default_config=args.default_config, check_gui=args.gui))
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
