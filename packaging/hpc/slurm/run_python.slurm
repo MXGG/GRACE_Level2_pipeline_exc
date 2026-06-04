@@ -56,7 +56,7 @@ echo "Default config: $DEFAULT_CONFIG"
 echo "Output root: $OUTPUT_ROOT"
 
 "$PYTHON_EXEC" -m grace_pipeline.infra.doctor -c "$USER_CONFIG" -d "$DEFAULT_CONFIG"
-"$PYTHON_EXEC" -m grace_pipeline.cli run \
+"$PYTHON_EXEC" -m grace_pipeline.entrypoints run \
   -c "$USER_CONFIG" \
   -d "$DEFAULT_CONFIG" \
   -o "$OUTPUT_ROOT" \
