@@ -57,6 +57,7 @@ build = [
 
 [project.scripts]
 grace-pipeline = "grace_pipeline.cli:main"
+grace-pipeline-doctor = "grace_pipeline.infra.doctor:main"
 
 [project.urls]
 Homepage = "https://github.com/MXGG/GRACE_Level2_pipeline_exc"
