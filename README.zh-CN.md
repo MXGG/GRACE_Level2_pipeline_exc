@@ -68,6 +68,52 @@ data/
 
 详细数据说明见 `data/INPUT_FILES.md` 和 `docs/data/`。
 
+## Windows 桌面版安装程序
+
+Windows 桌面版通过 GitHub Releases 发布安装包时使用。
+
+推荐安装方式：
+
+1. 打开仓库 Releases 页面。
+2. 下载最新的 `grace-l2-pipeline-vX.Y.Z-win-x64-setup.exe` 安装程序，或者下载便携版 `grace-l2-pipeline-vX.Y.Z-win-x64-portable.zip`。
+3. 运行安装程序并按提示安装。
+4. 大型输入数据不要放在安装目录中，建议放在独立工作区，例如 `Documents\GRACE-L2-Workspace`。
+5. 将 `configs\user.example.json` 复制为 `configs\user.json`，并在运行科学流程前修改本机数据路径。
+
+安装版启动示例：
+
+```powershell
+# 具体路径取决于安装程序设置。
+"C:\Program Files\GRACE Level-2 Pipeline\grace-pipeline-gui.exe"
+```
+
+便携版启动示例：
+
+```powershell
+Expand-Archive .\grace-l2-pipeline-vX.Y.Z-win-x64-portable.zip -DestinationPath D:\Tools\GRACE-L2
+D:\Tools\GRACE-L2\grace-pipeline-gui.exe
+```
+
+### WinGet 状态
+
+当前项目不能直接假定支持 `winget install`。只有在 Windows Package Manager manifest 提交并被接收后，才可以通过 winget 公开安装。单独有 GitHub Release 安装包并不等于已经支持 winget。
+
+正式发布 manifest 后，预期命令形式为：
+
+```powershell
+winget search grace
+winget install --id <Publisher.PackageId> -e
+```
+
+正式发布前，可以用本地 manifest 进行测试：
+
+```powershell
+winget validate .\packaging\windows\winget\manifests\<Publisher.PackageId>
+winget install --manifest .\packaging\windows\winget\manifests\<Publisher.PackageId>
+```
+
+在提交公开 winget 之前，安装程序应先支持静默安装。
+
 ## Python 安装与运行
 
 当前最稳妥的旧路径：
@@ -140,22 +186,48 @@ addpath(genpath('src/matlab/src'));
 OUT = run_oneclick_cfg('configs/user.json');
 ```
 
-## Linux 批处理
+## Linux 安装与批处理
 
-Python CLI：
+从源码安装 Python CLI：
 
 ```bash
+git clone https://github.com/MXGG/GRACE_Level2_pipeline_exc.git
+cd GRACE_Level2_pipeline_exc
+cp configs/user.example.json configs/user.json
 cd python
 python3 -m venv .venv
 source .venv/bin/activate
+python -m pip install --upgrade pip
 python -m pip install -e .
-grace-pipeline run -c ../configs/user.json -d ../configs/default.json
+grace-pipeline info -c ../configs/user.json -d ../configs/default.json
+grace-pipeline run  -c ../configs/user.json -d ../configs/default.json
+```
+
+执行目录迁移脚本后的新路径：
+
+```bash
+bash scripts/dev/stage_repository_layout.sh
+cd src/python
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -e .
+grace-pipeline run -c ../../configs/user.json -d ../../configs/default.json
 ```
 
 MATLAB batch：
 
 ```bash
 matlab -batch "run('matlab/src/main/run_oneclick.m')"
+```
+
+如果后续提供 Linux CLI 发行包：
+
+```bash
+tar -xzf grace-l2-pipeline-vX.Y.Z-linux-x86_64-cli.tar.gz
+cd grace-l2-pipeline-vX.Y.Z-linux-x86_64-cli
+./grace-pipeline --help
+./grace-pipeline run -c configs/user.json -d configs/default.json
 ```
 
 ## HPC 提交
