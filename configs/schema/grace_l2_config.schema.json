@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/MXGG/GRACE_Level2_pipeline_exc/configs/schema/grace_l2_config.schema.json",
+  "title": "GRACE Level-2 Pipeline Configuration",
+  "type": "object",
+  "additionalProperties": true,
+  "properties": {
+    "path": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "ROOT": {"type": "string"},
+        "GFC": {"type": "string"},
+        "OUTPUT": {"type": "string"},
+        "AUX": {"type": "string"},
+        "DDK": {"type": "string"},
+        "BOUNDARY": {"type": "string"}
+      }
+    },
+    "time": {"type": "object"},
+    "grid": {"type": "object"},
+    "inversion": {"type": "object"},
+    "filter": {"type": "object"},
+    "basin": {"type": "object"},
+    "leakage": {"type": "object"},
+    "metrics": {"type": "object"},
+    "io": {"type": "object"},
+    "plot": {"type": "object"},
+    "parallel": {"type": "object"},
+    "perf": {"type": "object"}
+  }
+}
