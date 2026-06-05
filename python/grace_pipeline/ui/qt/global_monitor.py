@@ -7,11 +7,15 @@ inputs into the Processing page so the Dashboard can remain an overview page.
 
 from __future__ import annotations
 
+import threading
 import time
+from pathlib import Path
 from types import MethodType
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QLabel, QPushButton, QFrame, QGridLayout, QHBoxLayout, QWidget
+from PySide6.QtWidgets import QLabel, QLineEdit, QPushButton, QHBoxLayout, QWidget
+
+from grace_pipeline.ui.qt.path_defaults import DEFAULT_DATA_PATHS
 
 
 _CONFIGURED_ATTR = "_global_run_monitor_configured"
@@ -45,10 +49,51 @@ def _remove_widget_from_layout(widget) -> None:
         parent.layout().removeWidget(widget)
 
 
+def _clear_layout(layout) -> None:
+    while layout is not None and layout.count():
+        item = layout.takeAt(0)
+        widget = item.widget()
+        child_layout = item.layout()
+        if child_layout is not None:
+            _clear_layout(child_layout)
+        if widget is not None:
+            widget.setParent(None)
+
+
 def _set_card_title(card, title: str) -> None:
     label = card.findChild(QLabel, "CardTitle")
     if label is not None:
         label.setText(title)
+
+
+def _hide_field_row_for_widget(widget) -> None:
+    row = widget.parentWidget() if widget is not None else None
+    while row is not None and row.objectName() != "FieldRow":
+        row = row.parentWidget()
+    if row is not None:
+        row.hide()
+
+
+def _retitle_processing_page(window) -> None:
+    try:
+        from grace_pipeline.ui.qt.i18n import TRANSLATIONS
+
+        zh = TRANSLATIONS.setdefault("zh", {})
+        zh["Filter Processing"] = "滤波处理"
+        zh["Processing Setup"] = "滤波处理"
+        zh["Configure input/output paths, time coverage, grid geometry, inversion setup, and filters."] = "配置输入输出路径、时间范围、网格、反演和滤波方法。"
+        zh["Filter Input Paths"] = "滤波输入路径"
+        zh["Filter Output Paths"] = "滤波输出路径"
+        zh["Auxiliary Filter Files"] = "辅助滤波文件"
+        zh["Maximum Degree / Order"] = "最大阶次"
+    except Exception:
+        pass
+
+    for label in window.page_processing.findChildren(QLabel):
+        if label.text() in {"Processing Setup", "处理设置"}:
+            label.setText("Filter Processing")
+        elif label.text() == "Configure time coverage, grid geometry, inversion setup, and filters.":
+            label.setText("Configure input/output paths, time coverage, grid geometry, inversion setup, and filters.")
 
 
 def _compact_top_monitor(window) -> None:
@@ -57,23 +102,25 @@ def _compact_top_monitor(window) -> None:
         progress_layout = QHBoxLayout(window.top_progress_wrap)
     progress_layout.setContentsMargins(8, 5, 8, 5)
     progress_layout.setSpacing(6)
-    window.top_progress_wrap.setMinimumWidth(540)
+    window.top_progress_wrap.setMinimumWidth(690)
+    window.top_progress_wrap.setMaximumWidth(820)
     window.top_progress_wrap.setMaximumHeight(48)
+    window.top_progress_wrap.setToolTip("Click to expand or collapse run progress details.")
 
-    window.top_progress_label.setMinimumWidth(70)
-    window.top_progress_label.setMaximumWidth(140)
+    window.top_progress_label.setMinimumWidth(80)
+    window.top_progress_label.setMaximumWidth(160)
     window.top_progress_label.setText("Idle")
-    window.top_progress_detail.setMinimumWidth(54)
-    window.top_progress_detail.setMaximumWidth(70)
-    window.top_progress_percent.setMinimumWidth(34)
-    window.top_progress_percent.setMaximumWidth(42)
-    window.top_progress_bar.setMinimumWidth(120)
-    window.top_progress_bar.setMaximumWidth(190)
+    window.top_progress_detail.setMinimumWidth(76)
+    window.top_progress_detail.setMaximumWidth(100)
+    window.top_progress_percent.setMinimumWidth(44)
+    window.top_progress_percent.setMaximumWidth(52)
+    window.top_progress_bar.setMinimumWidth(190)
+    window.top_progress_bar.setMaximumWidth(340)
 
     window.top_progress_task = QLabel("Task idle | Subtask idle | ETA --")
     window.top_progress_task.setObjectName("TopProgressDetail")
-    window.top_progress_task.setMinimumWidth(190)
-    window.top_progress_task.setMaximumWidth(320)
+    window.top_progress_task.setMinimumWidth(260)
+    window.top_progress_task.setMaximumWidth(520)
     window.top_progress_task.setWordWrap(False)
     progress_layout.addWidget(window.top_progress_task, 1)
 
@@ -93,6 +140,15 @@ def _compact_top_monitor(window) -> None:
     window.btn_top_stop.setMaximumWidth(58)
     window.btn_top_stop.setEnabled(False)
     progress_layout.addWidget(window.btn_top_stop, 0)
+
+    def toggle_progress_width(_event):
+        expanded = not bool(getattr(window, "_top_progress_expanded", False))
+        window._top_progress_expanded = expanded
+        window.top_progress_wrap.setMaximumWidth(1040 if expanded else 820)
+        window.top_progress_bar.setMaximumWidth(450 if expanded else 340)
+        window.top_progress_task.setMaximumWidth(760 if expanded else 520)
+
+    window.top_progress_wrap.mousePressEvent = toggle_progress_width
 
 
 def _compose_dashboard(window) -> None:
@@ -114,54 +170,94 @@ def _compose_dashboard(window) -> None:
         pass
 
 
+def _install_degree_input(window) -> None:
+    page = window.page_processing
+    if hasattr(page, "edit_degree_order"):
+        return
+    _hide_field_row_for_widget(getattr(page, "slider_degree_order", None))
+    page.edit_degree_order = QLineEdit(str(getattr(page.slider_degree_order, "value", lambda: 60)()))
+    page.edit_degree_order.setPlaceholderText("60")
+    page.edit_degree_order.setMaximumWidth(160)
+
+    def sync_degree_from_edit() -> None:
+        try:
+            value = int(float(page.edit_degree_order.text().strip() or "60"))
+        except Exception:
+            value = 60
+        value = max(0, min(240, value))
+        page.edit_degree_order.setText(str(value))
+        page.slider_degree_order.setValue(value)
+
+    page.edit_degree_order.editingFinished.connect(sync_degree_from_edit)
+    try:
+        from grace_pipeline.ui.qt.pages import _make_field_row
+
+        page.card_inversion.body.insertWidget(0, _make_field_row("Maximum Degree / Order", page.edit_degree_order))
+    except Exception:
+        page.card_inversion.body.insertWidget(0, page.edit_degree_order)
+
+
 def _move_filter_paths_to_processing(window) -> None:
     data_page = window.page_data_paths
     proc = window.page_processing
-
-    proc.add_header = getattr(proc, "add_header", None)
     _set_card_title(data_page.card_input_dirs, "Filter Input Paths")
     _set_card_title(data_page.card_output_dirs, "Filter Output Paths")
     _set_card_title(data_page.card_reference_paths, "Auxiliary Filter Files")
 
-    # Keep only filter-pipeline paths visible. Boundary shapefiles and Mascon
-    # reference products belong to later leakage/basin workflows, not to the
-    # basic filtering entrypoint.
+    try:
+        from grace_pipeline.ui.qt.pages import _make_edit_browse_widget, _make_field_row
+
+        _clear_layout(data_page.card_reference_paths.body)
+        _hide_field_row_for_widget(data_page.edit_ddk_data_dir)
+        data_page.card_reference_paths.body.addWidget(
+            _make_field_row(
+                "DDK Data Directory",
+                _make_edit_browse_widget(data_page.edit_ddk_data_dir, data_page.btn_ddk_browse),
+                data_page.badge_ddk_data,
+                label_width=220,
+            )
+        )
+        data_page.card_reference_paths.body.addWidget(
+            _make_field_row(
+                "C20 Replacement File",
+                _make_edit_browse_widget(data_page.edit_low_degree_path, data_page.btn_low_degree_browse),
+                data_page.badge_low_degree,
+                label_width=220,
+            )
+        )
+        data_page.card_reference_paths.body.addWidget(
+            _make_field_row(
+                "Degree-1 File",
+                _make_edit_browse_widget(data_page.edit_degree1_path, data_page.btn_degree1_browse),
+                data_page.badge_degree1,
+                label_width=220,
+            )
+        )
+        data_page.card_reference_paths.body.addWidget(
+            _make_field_row(
+                "GIA Model Path",
+                _make_edit_browse_widget(data_page.edit_gia_path, data_page.btn_gia_browse),
+                data_page.badge_gia,
+                label_width=220,
+            )
+        )
+    except Exception:
+        pass
+
+    # Mascon and boundary inputs are still present as hidden compatibility
+    # widgets for leakage/basin config loading, but not shown in basic filtering.
     for widget in (
         getattr(data_page, "edit_boundary_path", None), getattr(data_page, "btn_boundary_browse", None), getattr(data_page, "badge_boundary_path", None),
+        getattr(data_page, "edit_boundary_root", None), getattr(data_page, "btn_boundary_root_browse", None), getattr(data_page, "badge_boundary_root", None),
         getattr(data_page, "edit_mascon_root", None), getattr(data_page, "btn_mascon_root_browse", None), getattr(data_page, "badge_mascon_root", None),
         getattr(data_page, "edit_mascon_reference", None), getattr(data_page, "btn_mascon_reference_browse", None), getattr(data_page, "badge_mascon_reference", None),
         getattr(data_page, "edit_mascon_gad", None), getattr(data_page, "btn_mascon_gad_browse", None), getattr(data_page, "badge_mascon_gad", None),
         getattr(data_page, "edit_mascon_gia", None), getattr(data_page, "btn_mascon_gia_browse", None), getattr(data_page, "badge_mascon_gia", None),
+        getattr(data_page, "btn_toggle_reference_roots", None), getattr(data_page, "reference_roots_panel", None),
     ):
         if widget is not None:
             widget.hide()
 
-    # Hide whole reference rows by traversing the row widgets that contain the
-    # hidden inputs. The underlying widgets remain alive for config compatibility.
-    for edit in (
-        getattr(data_page, "edit_boundary_path", None),
-        getattr(data_page, "edit_mascon_root", None),
-        getattr(data_page, "edit_mascon_reference", None),
-        getattr(data_page, "edit_mascon_gad", None),
-        getattr(data_page, "edit_mascon_gia", None),
-    ):
-        if edit is not None:
-            row = edit.parentWidget()
-            while row is not None and row.parentWidget() is not data_page.card_reference_paths:
-                if row.parentWidget() is data_page.card_reference_paths:
-                    break
-                row = row.parentWidget()
-            if row is not None:
-                row.hide()
-
-    # Remove the legacy toggle button from the merged page; low-degree/DDK/GIA
-    # paths should be visible directly and vertically.
-    if hasattr(data_page, "btn_toggle_reference_roots"):
-        data_page.btn_toggle_reference_roots.hide()
-    if hasattr(data_page, "reference_roots_panel"):
-        data_page.reference_roots_panel.show()
-
-    # Put filter path cards above the scientific parameter cards.
     try:
         _remove_widget_from_layout(data_page.card_input_dirs)
         _remove_widget_from_layout(data_page.card_output_dirs)
@@ -171,6 +267,8 @@ def _move_filter_paths_to_processing(window) -> None:
         proc.body.insertWidget(3, data_page.card_reference_paths)
     except Exception:
         pass
+
+    _install_degree_input(window)
 
     if not hasattr(proc, "btn_run_filters"):
         run_row = QWidget()
@@ -185,18 +283,95 @@ def _move_filter_paths_to_processing(window) -> None:
         proc.card_filters.body.addWidget(run_row)
 
 
+def _patch_download_controls(window, controller) -> None:
+    if controller is None:
+        return
+    controller.host._scope_events.setdefault("download", {"pause": threading.Event(), "stop": threading.Event()})
+
+    def on_download_gfc_range(self) -> None:
+        page = self.window.page_data_paths
+        download_dir = self._native_path(page.edit_download_dir.text(), base_dir=Path(__file__).resolve().parents[4])
+        if not download_dir:
+            self._show_warning("下载数据", "请先设置下载文件夹。")
+            return
+        start_ym, end_ym = self._gfc_download_range()
+        center = self._configured_gfc_center()
+        product_type = self._download_product_type()
+        if product_type == "MASCON_NC" and center not in {"CSR", "JPL", "GSFC"}:
+            self._show_warning("下载 Mascon", "Mascon NC 下载目前支持 CSR、JPL 和 GSFC。")
+            return
+        if not self._ensure_earthdata_auth_for_download(product_type, center):
+            return
+        low_degree_dir = self._low_degree_dir()
+        page.lbl_gfc_download_status.setText(f"正在下载 {center} {product_type}：{start_ym} 到 {end_ym}...")
+        pause_event, stop_event = self.host._get_scope_events("download")
+
+        def check_pause_stop() -> None:
+            while pause_event.is_set():
+                if stop_event.is_set():
+                    raise RuntimeError("Download stopped by user.")
+                time.sleep(0.2)
+            if stop_event.is_set():
+                raise RuntimeError("Download stopped by user.")
+
+        def progress(text: str) -> None:
+            check_pause_stop()
+            self.signals.log.emit(f"[GFC] {text}", "stdout")
+
+        def progress_pct(pct: float, text: str) -> None:
+            check_pause_stop()
+            self.signals.progress.emit("download", pct, text)
+
+        def task() -> None:
+            from grace_pipeline.services.gfc_download import download_gfc_range, download_mascon_nc
+
+            check_pause_stop()
+            if product_type == "MASCON_NC":
+                result = download_mascon_nc(
+                    out_dir=download_dir,
+                    source=center,
+                    start_ym=start_ym,
+                    end_ym=end_ym,
+                    resolution=self._configured_mascon_resolution(),
+                    progress=progress,
+                    progress_pct=progress_pct,
+                )
+            else:
+                result = download_gfc_range(
+                    gfc_dir=download_dir,
+                    start_ym=start_ym,
+                    end_ym=end_ym,
+                    center=center,
+                    low_degree_dir=low_degree_dir,
+                    progress=progress,
+                    progress_pct=progress_pct,
+                )
+            check_pause_stop()
+            self.signals.gfc_download_done.emit(result)
+
+        self._run_in_thread("download", task, "DOWNLOADING DATA")
+
+    controller.on_download_gfc_range = MethodType(on_download_gfc_range, controller)
+    with_context = getattr(window.page_data_paths.btn_download_gfc_range.clicked, "disconnect", None)
+    try:
+        if with_context is not None:
+            window.page_data_paths.btn_download_gfc_range.clicked.disconnect()
+    except Exception:
+        pass
+    window.page_data_paths.btn_download_gfc_range.clicked.connect(controller.on_download_gfc_range)
+
+
 def configure_global_run_monitor(window) -> None:
     """Move run control/monitoring to the global top bar and compose pages."""
     if bool(getattr(window, _CONFIGURED_ATTR, False)):
         return
     setattr(window, _CONFIGURED_ATTR, True)
 
+    _retitle_processing_page(window)
     _compact_top_monitor(window)
     _compose_dashboard(window)
     _move_filter_paths_to_processing(window)
 
-    # Keep Dashboard as an overview page. Its start/pause/stop controls are no
-    # longer user-facing; run entry now lives beside the filter settings.
     for name in ("btn_run_full", "btn_pause_run", "btn_stop_run"):
         button = getattr(window.page_dashboard, name, None)
         if button is not None:
@@ -208,6 +383,7 @@ def configure_global_run_monitor(window) -> None:
     window.btn_stop = window.btn_top_stop
     controller = getattr(window, "controller", None)
     if controller is not None:
+        _patch_download_controls(window, controller)
         for signal, slot in (
             (window.page_processing.btn_run_filters.clicked, controller.on_run_pipeline),
             (window.btn_top_pause.clicked, controller.on_pause_active),
@@ -285,3 +461,4 @@ def configure_global_run_monitor(window) -> None:
     window.set_run_progress = MethodType(set_run_progress, window)
     window._set_run_button_state(False)
     window.refresh_translations()
+    _retitle_processing_page(window)
