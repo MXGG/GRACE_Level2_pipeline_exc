@@ -22,15 +22,14 @@ def _load_windows_fonts() -> None:
             QFontDatabase.addApplicationFont(str(font_path))
 
 
-def _enable_monitor_page(window) -> None:
-    """Route the Run Monitor nav item to the real monitor page.
+def _set_label_text(obj, name: str, text: str) -> None:
+    label = getattr(obj, name, None)
+    if label is not None and hasattr(label, "setText"):
+        label.setText(text)
 
-    The historical shell instantiated ``RunMonitorPage`` but redirected the
-    monitor key back to Dashboard. Keeping this patch in bootstrap avoids a
-    large UI-file rewrite while making the monitor page reachable from the nav
-    rail. It can be folded into ``MainWindow.set_active_page`` in the later full
-    Qt cleanup.
-    """
+
+def _enable_monitor_page(window) -> None:
+    """Route the Run Monitor nav item to the real monitor page and neutralize mock text."""
     from grace_pipeline.ui.qt.mock_data import PAGE_TITLES
 
     def set_active_page(self, key: str):
@@ -44,6 +43,35 @@ def _enable_monitor_page(window) -> None:
         self.refresh_translations()
 
     window.set_active_page = MethodType(set_active_page, window)
+
+    dashboard = getattr(window, "page_dashboard", None)
+    if dashboard is not None:
+        _set_label_text(dashboard, "lbl_project_name", "Unsaved configuration")
+        _set_label_text(dashboard, "lbl_last_edited", "Not saved")
+        _set_label_text(dashboard, "lbl_uid", "pending")
+        _set_label_text(dashboard, "lbl_output_root", "Output root: not resolved")
+        _set_label_text(dashboard, "lbl_data_count", "0")
+        _set_label_text(dashboard, "lbl_time_span", "GFC data files | not scanned")
+        _set_label_text(dashboard, "lbl_dashboard_status", "Idle")
+        _set_label_text(dashboard, "lbl_dashboard_stage", "Ready to run with the current configuration.")
+        _set_label_text(dashboard, "lbl_preview_artifact", "Latest Artifact: waiting for pipeline outputs.")
+
+    monitor = getattr(window, "page_monitor", None)
+    if monitor is not None:
+        _set_label_text(monitor, "lbl_pipeline_status", "Idle")
+        _set_label_text(monitor, "lbl_overall_progress", "0 / 0")
+        _set_label_text(monitor, "lbl_current_task", "Waiting for a pipeline run.")
+        _set_label_text(monitor, "lbl_run_config", "Config: not loaded")
+        _set_label_text(monitor, "lbl_run_filters", "Filters: not evaluated")
+        _set_label_text(monitor, "lbl_run_output", "Output Root: not resolved")
+        _set_label_text(monitor, "lbl_run_timespan", "Time Span: not scanned")
+        _set_label_text(monitor, "lbl_output_root", "Output Root: not resolved")
+        _set_label_text(monitor, "lbl_output_local", "Local Output: not resolved")
+        _set_label_text(monitor, "lbl_output_plots", "Plots: not resolved")
+        _set_label_text(monitor, "lbl_last_artifact", "Latest Artifact: not generated yet.")
+        log_widget = getattr(monitor, "text_live_logs", None)
+        if log_widget is not None and hasattr(log_widget, "setPlainText"):
+            log_widget.setPlainText("Run monitor initialized. Start a run to stream live logs.")
 
 
 def start_gui(argv: list[str] | None = None):
