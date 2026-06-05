@@ -19,7 +19,7 @@ function meanSH = compute_mean_fixed_range(cfg, T)
     cnt  = 0;
 
     [mStart, mEnd] = inv_get_mean_range(cfg);
-    Tmean = subset_time_range(T, mStart, mEnd);
+    Tmean = build_baseline_time_index(cfg, T, mStart, mEnd);
     if isempty(Tmean)
         error('No months found in mean-baseline range %s to %s.', mStart, mEnd);
     end
@@ -46,6 +46,89 @@ function meanSH = compute_mean_fixed_range(cfg, T)
     meanSH.C = sumC / cnt;
     meanSH.S = sumS / cnt;
     meanSH.meta = struct('cnt', cnt, 'start', mStart, 'end', mEnd);
+end
+
+function Tmean = build_baseline_time_index(cfg, T, mStart, mEnd)
+%BUILD_BASELINE_TIME_INDEX Build mean-baseline months independently.
+% Output months may be cropped by cfg.time.start_ym/end_ym, but the mean
+% baseline should follow cfg.inversion.mean_start_ym/mean_end_ym when set.
+    if nargin < 3; mStart = ''; end
+    if nargin < 4; mEnd = ''; end
+
+    allT = T;
+    if isfield(cfg,'time') && isfield(cfg.time,'auto_detect_gfc') && cfg.time.auto_detect_gfc
+        try
+            cfgAll = cfg;
+            if isfield(cfgAll.time,'start_ym'); cfgAll.time = rmfield(cfgAll.time,'start_ym'); end
+            if isfield(cfgAll.time,'end_ym'); cfgAll.time = rmfield(cfgAll.time,'end_ym'); end
+            allT = build_time_index(cfgAll);
+        catch
+            allT = T;
+        end
+    end
+    if isempty(allT)
+        Tmean = [];
+        return;
+    end
+
+    availableStart = allT(1).ym;
+    availableEnd = allT(end).ym;
+    mode = resolve_baseline_mode(cfg, mStart, mEnd);
+
+    switch mode
+        case 'standard_2004_2009'
+            bStart = '2004-01';
+            bEnd = '2009-12';
+        case 'input_full'
+            bStart = availableStart;
+            bEnd = availableEnd;
+        case 'custom'
+            bStart = mStart;
+            bEnd = mEnd;
+            if isempty(bStart); bStart = availableStart; end
+            if isempty(bEnd); bEnd = availableEnd; end
+        otherwise
+            error('Unsupported inversion.mean_baseline_mode "%s". Expected standard_2004_2009, input_full, or custom.', mode);
+    end
+
+    bStartDt = datetime(bStart,'InputFormat','yyyy-MM');
+    bEndDt = datetime(bEnd,'InputFormat','yyyy-MM');
+    availableStartDt = datetime(availableStart,'InputFormat','yyyy-MM');
+    availableEndDt = datetime(availableEnd,'InputFormat','yyyy-MM');
+
+    if bEndDt < bStartDt
+        error('Mean baseline end_ym %s must be >= start_ym %s.', bEnd, bStart);
+    end
+    if bStartDt < availableStartDt || bEndDt > availableEndDt
+        error('Mean baseline range %s..%s is outside available input GFC range %s..%s.', ...
+            bStart, bEnd, availableStart, availableEnd);
+    end
+
+    Tmean = subset_time_range(allT, bStart, bEnd);
+end
+
+function mode = resolve_baseline_mode(cfg, mStart, mEnd)
+    mode = '';
+    if isfield(cfg,'inversion') && isfield(cfg.inversion,'mean_baseline_mode')
+        mode = char(string(cfg.inversion.mean_baseline_mode));
+    end
+    mode = lower(strrep(strrep(strtrim(mode), '-', '_'), ' ', '_'));
+    if isempty(mode)
+        if ~isempty(mStart) || ~isempty(mEnd)
+            mode = 'custom';
+        else
+            mode = 'input_full';
+        end
+        return;
+    end
+    switch mode
+        case {'standard','default','default_2004_2009','2004_2009','grace_standard'}
+            mode = 'standard_2004_2009';
+        case {'input','input_data','input_full_period','full','full_period','all'}
+            mode = 'input_full';
+        case {'user','user_custom','range','fixed_range'}
+            mode = 'custom';
+    end
 end
 
 function meanSH = compute_mean_by_mission(cfg, T)

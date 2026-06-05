@@ -25,6 +25,10 @@ function T = build_time_index(cfg)
         if isempty(entries)
             error('No GSM/GFC files found under %s.', cfg.path.GFC);
         end
+        entries = filter_entries_by_cfg_range(entries, cfg.time);
+        if isempty(entries)
+            error('No GSM/GFC files found in configured range %s to %s.', cfg.time.start_ym, cfg.time.end_ym);
+        end
         months = [entries.dt].';
         for i = 1:numel(entries)
             gfcFiles(i).yyyymm = entries(i).key;
@@ -94,6 +98,23 @@ function T = build_time_index(cfg)
             end
         end
     end
+end
+
+function entries = filter_entries_by_cfg_range(entries, timeCfg)
+    if ~isfield(timeCfg,'start_ym') && ~isfield(timeCfg,'end_ym')
+        return;
+    end
+
+    keep = true(size(entries));
+    if isfield(timeCfg,'start_ym') && ~isempty(timeCfg.start_ym)
+        s = datetime(timeCfg.start_ym,'InputFormat','yyyy-MM');
+        keep = keep & ([entries.dt] >= s);
+    end
+    if isfield(timeCfg,'end_ym') && ~isempty(timeCfg.end_ym)
+        e = datetime(timeCfg.end_ym,'InputFormat','yyyy-MM');
+        keep = keep & ([entries.dt] <= e);
+    end
+    entries = entries(keep);
 end
 
 function entries = detect_gfc_months(gfcDir, productType, fileExt)

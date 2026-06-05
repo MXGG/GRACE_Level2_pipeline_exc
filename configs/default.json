@@ -63,6 +63,7 @@
     "_comment": "Spherical harmonic inversion parameters",
     "Lmax": 60,
     "remove_mean": true,
+    "mean_baseline_mode": "standard_2004_2009",
     "mean_start_ym": "2004-01",
     "mean_end_ym": "2009-12",
     "lowdeg": {

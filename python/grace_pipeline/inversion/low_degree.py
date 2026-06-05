@@ -476,6 +476,75 @@ def _compute_mean_over_entries(cfg, entries, Lmax: int):
     )
 
 
+def _normalize_baseline_mode(raw_mode: str, mean_start: str, mean_end: str) -> str:
+    mode = str(raw_mode or "").strip().lower().replace("-", "_")
+    aliases = {
+        "standard": "standard_2004_2009",
+        "default": "standard_2004_2009",
+        "default_2004_2009": "standard_2004_2009",
+        "2004_2009": "standard_2004_2009",
+        "grace_standard": "standard_2004_2009",
+        "input": "input_full",
+        "input_data": "input_full",
+        "input_full_period": "input_full",
+        "full": "input_full",
+        "full_period": "input_full",
+        "all": "input_full",
+        "user": "custom",
+        "user_custom": "custom",
+        "range": "custom",
+        "fixed_range": "custom",
+    }
+    if mode:
+        return aliases.get(mode, mode)
+    if mean_start or mean_end:
+        return "custom"
+    return "input_full"
+
+
+def _resolve_mean_baseline_entries(cfg, time_entries, inv_cfg: dict):
+    from grace_pipeline.core.time_index import build_time_index_for_range
+
+    all_entries = build_time_index_for_range(cfg, "", "")
+    if not all_entries:
+        all_entries = list(time_entries or [])
+    if not all_entries:
+        return []
+
+    available_start = all_entries[0].ym
+    available_end = all_entries[-1].ym
+    raw_start = str(inv_cfg.get("mean_start_ym", inv_cfg.get("mean_start", "")) or "").strip()
+    raw_end = str(inv_cfg.get("mean_end_ym", inv_cfg.get("mean_end", "")) or "").strip()
+    mode = _normalize_baseline_mode(inv_cfg.get("mean_baseline_mode", ""), raw_start, raw_end)
+
+    if mode == "standard_2004_2009":
+        start_ym, end_ym = "2004-01", "2009-12"
+    elif mode == "input_full":
+        start_ym, end_ym = available_start, available_end
+    elif mode == "custom":
+        start_ym = raw_start or available_start
+        end_ym = raw_end or available_end
+    else:
+        raise ValueError(
+            "Unsupported inversion.mean_baseline_mode "
+            f"{mode!r}; expected standard_2004_2009, input_full, or custom."
+        )
+
+    if end_ym < start_ym:
+        raise ValueError(f"Mean baseline end_ym {end_ym} must be >= start_ym {start_ym}.")
+    if start_ym < available_start or end_ym > available_end:
+        raise ValueError(
+            "Mean baseline range "
+            f"{start_ym}..{end_ym} is outside available input GFC range "
+            f"{available_start}..{available_end}."
+        )
+
+    selected = [te for te in all_entries if start_ym <= te.ym <= end_ym]
+    if not selected:
+        raise ValueError(f"No GFC months found in mean baseline range {start_ym}..{end_ym}.")
+    return selected, mode, start_ym, end_ym, available_start, available_end
+
+
 def compute_mean_sh(cfg, time_entries):
     """
     Compute mean spherical harmonic coefficients over the configured time period.
@@ -486,22 +555,25 @@ def compute_mean_sh(cfg, time_entries):
     inv_cfg = _inv_cfg(cfg)
     Lmax = int(inv_cfg.get("Lmax", 60))
     mean_mode = get_mean_mode(cfg)
-    mean_start = str(inv_cfg.get("mean_start_ym", inv_cfg.get("mean_start", "")) or "")
-    mean_end = str(inv_cfg.get("mean_end_ym", inv_cfg.get("mean_end", "")) or "")
-
-    selected_entries = []
-    for te in time_entries:
-        if mean_start and te.ym < mean_start:
-            continue
-        if mean_end and te.ym > mean_end:
-            continue
-        selected_entries.append(te)
+    resolved = _resolve_mean_baseline_entries(cfg, time_entries, inv_cfg)
+    selected_entries, baseline_mode, baseline_start, baseline_end, available_start, available_end = resolved
 
     if not selected_entries:
         return None
 
     if mean_mode != "mission_full_period":
-        return _compute_mean_over_entries(cfg, selected_entries, Lmax=Lmax)
+        mean = _compute_mean_over_entries(cfg, selected_entries, Lmax=Lmax)
+        if mean is not None:
+            mean.meta.update(
+                {
+                    "baseline_mode": baseline_mode,
+                    "baseline_start_ym": baseline_start,
+                    "baseline_end_ym": baseline_end,
+                    "available_start_ym": available_start,
+                    "available_end_ym": available_end,
+                }
+            )
+        return mean
 
     buckets = {"GRACE": [], "GRACE-FO": []}
     for te in selected_entries:

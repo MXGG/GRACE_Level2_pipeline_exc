@@ -235,12 +235,16 @@ def _auto_detect(time_cfg) -> bool:
     return True
 
 
-def _filter_entries_by_config_range(entries: List[TimeEntry], time_cfg) -> List[TimeEntry]:
-    start_ym = _time_value(time_cfg, "start_ym", "")
-    end_ym = _time_value(time_cfg, "end_ym", "")
+def _filter_entries_by_range(entries: List[TimeEntry], start_ym: str = "", end_ym: str = "") -> List[TimeEntry]:
+    start_ym = str(start_ym or "").strip()
+    end_ym = str(end_ym or "").strip()
     if not start_ym and not end_ym:
         return entries
     return [entry for entry in entries if (not start_ym or entry.ym >= start_ym) and (not end_ym or entry.ym <= end_ym)]
+
+
+def _filter_entries_by_config_range(entries: List[TimeEntry], time_cfg) -> List[TimeEntry]:
+    return _filter_entries_by_range(entries, _time_value(time_cfg, "start_ym", ""), _time_value(time_cfg, "end_ym", ""))
 
 
 def summarize_time_coverage(time_entries: List[TimeEntry], grace_fo_start_ym: str = "2018-06") -> Dict:
@@ -291,8 +295,8 @@ def summarize_time_coverage(time_entries: List[TimeEntry], grace_fo_start_ym: st
     }
 
 
-def build_time_index(cfg, gfc_dir: Optional[str] = None) -> List[TimeEntry]:
-    """Build time index from configuration and crop detected files to start/end."""
+def build_time_index_for_range(cfg, start_ym: str, end_ym: str, gfc_dir: Optional[str] = None) -> List[TimeEntry]:
+    """Build a time index for an explicit range without changing cfg.time."""
     time_cfg = cfg.time if hasattr(cfg, "time") else cfg.get("time", {})
     path_cfg = cfg.path if hasattr(cfg, "path") else cfg.get("path", {})
     if gfc_dir is None:
@@ -320,8 +324,16 @@ def build_time_index(cfg, gfc_dir: Optional[str] = None) -> List[TimeEntry]:
                 seen_months.add(key)
             entries.append(TimeEntry.from_ym(ym, gfc_file))
         entries.sort(key=lambda item: item.dt)
-        return _filter_entries_by_config_range(entries, time_cfg)
+        return _filter_entries_by_range(entries, start_ym, end_ym)
 
+    start_ym = str(start_ym or "").strip() or _time_value(time_cfg, "start_ym", "2002-04") or "2002-04"
+    end_ym = str(end_ym or "").strip() or _time_value(time_cfg, "end_ym", "2017-06") or "2017-06"
+    return [TimeEntry.from_ym(f"{y:04d}-{m:02d}") for y, m in parse_ym_range(start_ym, end_ym)]
+
+
+def build_time_index(cfg, gfc_dir: Optional[str] = None) -> List[TimeEntry]:
+    """Build time index from configuration and crop detected files to start/end."""
+    time_cfg = cfg.time if hasattr(cfg, "time") else cfg.get("time", {})
     start_ym = _time_value(time_cfg, "start_ym", "2002-04") or "2002-04"
     end_ym = _time_value(time_cfg, "end_ym", "2017-06") or "2017-06"
-    return [TimeEntry.from_ym(f"{y:04d}-{m:02d}") for y, m in parse_ym_range(start_ym, end_ym)]
+    return build_time_index_for_range(cfg, start_ym, end_ym, gfc_dir=gfc_dir)

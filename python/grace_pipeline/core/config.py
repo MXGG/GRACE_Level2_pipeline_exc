@@ -187,6 +187,7 @@ class GridConfig:
 class InversionConfig:
     Lmax: int = 60
     remove_mean: bool = True
+    mean_baseline_mode: str = "standard_2004_2009"
     mean_start_ym: str = ""
     mean_end_ym: str = ""
     lowdeg: Dict = field(default_factory=dict)
@@ -268,6 +269,7 @@ DEFAULT_CONFIG: Dict[str, Any] = {
     "inversion": {
         "Lmax": 60,
         "remove_mean": True,
+        "mean_baseline_mode": "standard_2004_2009",
         "mean_start_ym": "2004-01",
         "mean_end_ym": "2009-12",
         "lowdeg": {
@@ -338,6 +340,7 @@ class Config:
         self.inversion = InversionConfig(
             Lmax=inv_cfg.get("Lmax", 60),
             remove_mean=inv_cfg.get("remove_mean", True),
+            mean_baseline_mode=inv_cfg.get("mean_baseline_mode", inv_cfg.get("mean_mode_range", "standard_2004_2009")),
             mean_start_ym=inv_cfg.get("mean_start_ym", inv_cfg.get("mean_start", "")),
             mean_end_ym=inv_cfg.get("mean_end_ym", inv_cfg.get("mean_end", "")),
             lowdeg=inv_cfg.get("lowdeg", {}),

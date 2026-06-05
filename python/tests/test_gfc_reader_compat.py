@@ -53,7 +53,13 @@ class GfcReaderCompatTest(unittest.TestCase):
 
             cfg = SimpleNamespace(
                 path=SimpleNamespace(GFC=str(d)),
-                time=SimpleNamespace(auto_detect_gfc=True, product_type="GSM", file_ext=".gfc"),
+                time=SimpleNamespace(
+                    auto_detect_gfc=True,
+                    start_ym="1984-01",
+                    end_ym="1984-02",
+                    product_type="GSM",
+                    file_ext=".gfc",
+                ),
             )
 
             gfc_files = detect_gfc_files(str(d), product_type="GSM", file_ext=".gfc")
@@ -100,4 +106,3 @@ class GfcReaderCompatTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-
