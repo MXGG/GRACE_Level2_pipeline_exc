@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import sys
 from pathlib import Path
+from types import MethodType
 
 
 def _load_windows_fonts() -> None:
@@ -19,6 +20,30 @@ def _load_windows_fonts() -> None:
     for font_path in font_candidates:
         if font_path.exists():
             QFontDatabase.addApplicationFont(str(font_path))
+
+
+def _enable_monitor_page(window) -> None:
+    """Route the Run Monitor nav item to the real monitor page.
+
+    The historical shell instantiated ``RunMonitorPage`` but redirected the
+    monitor key back to Dashboard. Keeping this patch in bootstrap avoids a
+    large UI-file rewrite while making the monitor page reachable from the nav
+    rail. It can be folded into ``MainWindow.set_active_page`` in the later full
+    Qt cleanup.
+    """
+    from grace_pipeline.ui.qt.mock_data import PAGE_TITLES
+
+    def set_active_page(self, key: str):
+        if key not in self._pages:
+            return
+        self.stack.setCurrentWidget(self._pages[key])
+        self.breadcrumb.setText(PAGE_TITLES.get(key, key))
+        for btn_key, btn in self._nav_buttons.items():
+            btn.setChecked(btn_key == key)
+        self._apply_responsive_layout(force=(key == "preview"))
+        self.refresh_translations()
+
+    window.set_active_page = MethodType(set_active_page, window)
 
 
 def start_gui(argv: list[str] | None = None):
@@ -56,6 +81,7 @@ def start_gui(argv: list[str] | None = None):
     app.setFont(font)
 
     window = MainWindow(load_persisted=True)
+    _enable_monitor_page(window)
     window.show()
 
     if owns_app:
