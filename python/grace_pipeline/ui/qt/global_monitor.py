@@ -7,11 +7,16 @@ inputs into the Processing page so the Dashboard can remain an overview page.
 
 from __future__ import annotations
 
+import contextlib
+import os
+import re
 import threading
 import time
 from pathlib import Path
 from types import MethodType
 
+from PySide6.QtCore import QUrl
+from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import QLabel, QLineEdit, QPushButton, QHBoxLayout, QWidget
 
 
@@ -77,9 +82,15 @@ def _safe_hide(widget) -> None:
     try:
         widget.hide()
     except RuntimeError:
-        # The wrapper can outlive its C++ object if a previous layout rewrite
-        # removed the parent widget. Ignore stale wrappers rather than failing
-        # GUI startup/tests.
+        return
+
+
+def _safe_show(widget) -> None:
+    if widget is None:
+        return
+    try:
+        widget.show()
+    except RuntimeError:
         return
 
 
@@ -97,6 +108,25 @@ def _move_field_row_to_layout(widget, target_layout, insert_index: int | None = 
         target_layout.insertWidget(insert_index, row)
 
 
+def _ym_from_any(text: str) -> str:
+    raw = str(text or "").strip()
+    if not raw:
+        return ""
+    match = re.search(r"(\d{4})\D?(\d{1,2})", raw)
+    if not match:
+        return ""
+    year = int(match.group(1))
+    month = int(match.group(2))
+    if 1 <= month <= 12:
+        return f"{year:04d}-{month:02d}"
+    return ""
+
+
+def _date_from_ym(ym: str) -> str:
+    ym = _ym_from_any(ym)
+    return f"{ym}-01" if ym else ""
+
+
 def _retitle_processing_page(window) -> None:
     try:
         from grace_pipeline.ui.qt.i18n import TRANSLATIONS
@@ -109,6 +139,11 @@ def _retitle_processing_page(window) -> None:
         zh["Filter Output Paths"] = "滤波输出路径"
         zh["Auxiliary Filter Files"] = "辅助滤波文件"
         zh["Maximum Degree / Order"] = "最大阶次"
+        zh["Open Logs"] = "打开日志"
+        zh["Run Filters"] = "运行滤波"
+        zh["Load Config"] = "加载配置"
+        zh["Save Config"] = "保存配置"
+        zh["Validate Paths"] = "校验路径"
     except Exception:
         pass
 
@@ -125,32 +160,32 @@ def _compact_top_monitor(window) -> None:
         progress_layout = QHBoxLayout(window.top_progress_wrap)
     progress_layout.setContentsMargins(8, 5, 8, 5)
     progress_layout.setSpacing(6)
-    window.top_progress_wrap.setMinimumWidth(690)
-    window.top_progress_wrap.setMaximumWidth(820)
+    window.top_progress_wrap.setMinimumWidth(760)
+    window.top_progress_wrap.setMaximumWidth(940)
     window.top_progress_wrap.setMaximumHeight(48)
     window.top_progress_wrap.setToolTip("Click to expand or collapse run progress details.")
 
-    window.top_progress_label.setMinimumWidth(80)
-    window.top_progress_label.setMaximumWidth(160)
+    window.top_progress_label.setMinimumWidth(88)
+    window.top_progress_label.setMaximumWidth(170)
     window.top_progress_label.setText("Idle")
-    window.top_progress_detail.setMinimumWidth(76)
-    window.top_progress_detail.setMaximumWidth(100)
-    window.top_progress_percent.setMinimumWidth(44)
-    window.top_progress_percent.setMaximumWidth(52)
-    window.top_progress_bar.setMinimumWidth(190)
-    window.top_progress_bar.setMaximumWidth(340)
+    window.top_progress_detail.setMinimumWidth(84)
+    window.top_progress_detail.setMaximumWidth(118)
+    window.top_progress_percent.setMinimumWidth(46)
+    window.top_progress_percent.setMaximumWidth(56)
+    window.top_progress_bar.setMinimumWidth(230)
+    window.top_progress_bar.setMaximumWidth(430)
 
     window.top_progress_task = QLabel("Task idle | Subtask idle | ETA --")
     window.top_progress_task.setObjectName("TopProgressDetail")
-    window.top_progress_task.setMinimumWidth(260)
-    window.top_progress_task.setMaximumWidth(520)
+    window.top_progress_task.setMinimumWidth(300)
+    window.top_progress_task.setMaximumWidth(640)
     window.top_progress_task.setWordWrap(False)
     progress_layout.addWidget(window.top_progress_task, 1)
 
     window.top_progress_subtask = window.top_progress_task
     window.top_progress_eta = window.top_progress_task
 
-    window.btn_top_pause = QPushButton("Resume")
+    window.btn_top_pause = QPushButton("Pause")
     window.btn_top_pause.setObjectName("GhostButton")
     window.btn_top_pause.setMinimumHeight(28)
     window.btn_top_pause.setMaximumWidth(68)
@@ -167,9 +202,9 @@ def _compact_top_monitor(window) -> None:
     def toggle_progress_width(_event):
         expanded = not bool(getattr(window, "_top_progress_expanded", False))
         window._top_progress_expanded = expanded
-        window.top_progress_wrap.setMaximumWidth(1040 if expanded else 820)
-        window.top_progress_bar.setMaximumWidth(450 if expanded else 340)
-        window.top_progress_task.setMaximumWidth(760 if expanded else 520)
+        window.top_progress_wrap.setMaximumWidth(1180 if expanded else 940)
+        window.top_progress_bar.setMaximumWidth(560 if expanded else 430)
+        window.top_progress_task.setMaximumWidth(860 if expanded else 640)
 
     window.top_progress_wrap.mousePressEvent = toggle_progress_width
 
@@ -220,6 +255,25 @@ def _install_degree_input(window) -> None:
         page.card_inversion.body.insertWidget(0, page.edit_degree_order)
 
 
+def _install_processing_action_bar(window) -> None:
+    proc = window.page_processing
+    data_page = window.page_data_paths
+    if hasattr(proc, "filter_action_bar"):
+        return
+    proc.filter_action_bar = QWidget()
+    layout = QHBoxLayout(proc.filter_action_bar)
+    layout.setContentsMargins(0, 0, 0, 0)
+    layout.setSpacing(8)
+    layout.addStretch(1)
+    data_page.btn_load_config.setText("Load Config")
+    data_page.btn_save_config.setText("Save Config")
+    data_page.btn_validate_paths.setText("Validate Paths")
+    proc.btn_run_filters.setMinimumWidth(148)
+    for button in (data_page.btn_load_config, data_page.btn_save_config, data_page.btn_validate_paths, proc.btn_run_filters):
+        layout.addWidget(button, 0)
+    proc.body.insertWidget(1, proc.filter_action_bar)
+
+
 def _move_filter_paths_to_processing(window) -> None:
     data_page = window.page_data_paths
     proc = window.page_processing
@@ -227,16 +281,33 @@ def _move_filter_paths_to_processing(window) -> None:
     _set_card_title(data_page.card_output_dirs, "Filter Output Paths")
     _set_card_title(data_page.card_reference_paths, "Auxiliary Filter Files")
 
-    # Do not clear or recreate rows here. Qt deletes child C++ widgets when an
-    # entire row is removed from a layout; reusing the old Python wrappers then
-    # causes "Internal C++ object already deleted" during startup/tests. Move the
-    # existing DDK row and hide/show existing rows instead.
+    if not hasattr(proc, "btn_run_filters"):
+        proc.btn_run_filters = QPushButton("Run Filters")
+        proc.btn_run_filters.setObjectName("PrimaryButton")
+        proc.btn_run_filters.setMinimumHeight(38)
+
+    # Input card: keep the user-selected GFC directory first, then detected
+    # coverage, then optional download controls.
+    data_page.btn_download_dir_browse.setText("选择下载文件夹...")
+    data_page.btn_download_gfc_range.setText("下载")
+    _move_field_row_to_layout(data_page.edit_gfc_input_dir, data_page.card_input_dirs.body, insert_index=0)
+    _move_field_row_to_layout(data_page.lbl_gfc_detected_range, data_page.card_input_dirs.body, insert_index=1)
+    _move_field_row_to_layout(data_page.edit_download_dir, data_page.card_input_dirs.body, insert_index=2)
+
+    # Output card: hide the raw logs path and expose an action button instead.
+    _hide_field_row_for_widget(data_page.edit_logs_dir)
+    if not hasattr(data_page, "btn_open_logs"):
+        data_page.btn_open_logs = QPushButton("Open Logs")
+        data_page.btn_open_logs.setObjectName("GhostButton")
+        data_page.card_output_dirs.body.addWidget(data_page.btn_open_logs)
+    _safe_show(data_page.btn_open_logs)
+
+    # Auxiliary filter files. Reuse existing rows instead of recreating rows to
+    # avoid deleting Qt C++ children that are still referenced by Python wrappers.
     _move_field_row_to_layout(data_page.edit_ddk_data_dir, data_page.card_reference_paths.body, insert_index=0)
     for widget in (data_page.edit_ddk_data_dir, data_page.edit_low_degree_path, data_page.edit_degree1_path, data_page.edit_gia_path):
         _show_field_row_for_widget(widget)
 
-    # Mascon and boundary inputs are still present as hidden compatibility
-    # widgets for leakage/basin config loading, but not shown in basic filtering.
     for widget in (
         getattr(data_page, "edit_boundary_path", None), getattr(data_page, "edit_boundary_root", None),
         getattr(data_page, "edit_mascon_root", None), getattr(data_page, "edit_mascon_reference", None),
@@ -250,35 +321,117 @@ def _move_filter_paths_to_processing(window) -> None:
         _remove_widget_from_layout(data_page.card_input_dirs)
         _remove_widget_from_layout(data_page.card_output_dirs)
         _remove_widget_from_layout(data_page.card_reference_paths)
-        proc.body.insertWidget(1, data_page.card_input_dirs)
-        proc.body.insertWidget(2, data_page.card_output_dirs)
-        proc.body.insertWidget(3, data_page.card_reference_paths)
+        proc.body.insertWidget(2, data_page.card_input_dirs)
+        proc.body.insertWidget(3, data_page.card_output_dirs)
+        proc.body.insertWidget(4, data_page.card_reference_paths)
     except Exception:
         pass
 
     _install_degree_input(window)
+    _install_processing_action_bar(window)
 
-    if not hasattr(proc, "btn_run_filters"):
-        run_row = QWidget()
-        run_layout = QHBoxLayout(run_row)
-        run_layout.setContentsMargins(0, 10, 0, 0)
-        run_layout.setSpacing(8)
-        proc.btn_run_filters = QPushButton("Run Filters")
-        proc.btn_run_filters.setObjectName("PrimaryButton")
-        proc.btn_run_filters.setMinimumHeight(38)
-        run_layout.addStretch(1)
-        run_layout.addWidget(proc.btn_run_filters, 0)
-        proc.card_filters.body.addWidget(run_row)
+
+def _patch_filter_path_scanning(controller) -> None:
+    from grace_pipeline.core.time_index import TimeEntry, detect_gfc_files, extract_ym_from_gfc, summarize_time_coverage
+    from grace_pipeline.ui.qt.controller import ROOT_DIR
+
+    def detect_time_entries_for_ui(self) -> list:
+        gfc_dir = self._native_path(self.window.page_data_paths.edit_gfc_input_dir.text(), base_dir=ROOT_DIR)
+        if not gfc_dir or not Path(gfc_dir).exists():
+            return []
+        entries = []
+        for file_path in detect_gfc_files(gfc_dir, getattr(self.host.cfg.time, "product_type", "GSM"), getattr(self.host.cfg.time, "file_ext", ".gfc")):
+            ym = extract_ym_from_gfc(file_path)
+            if ym:
+                entries.append(TimeEntry.from_ym(ym, file_path))
+        entries.sort(key=lambda item: item.dt)
+        return entries
+
+    def refresh_detected_time_range(self) -> None:
+        page = self.window.page_processing
+        entries = self._detect_time_entries_for_ui()
+        if entries:
+            coverage = summarize_time_coverage(entries)
+            detected_text = (
+                f"{coverage['available_month_count']} GFC files | "
+                f"{coverage['start_ym']} -> {coverage['end_ym']} | "
+                f"missing={coverage['missing_month_count']}"
+            )
+            detected_start = _date_from_ym(entries[0].ym)
+            detected_end = _date_from_ym(entries[-1].ym)
+        else:
+            detected_text = "Detected from GFC files: no valid files found."
+            detected_start = ""
+            detected_end = ""
+        page.lbl_detected_time_range.setText(detected_text)
+        self.window.page_data_paths.lbl_gfc_detected_range.setText(detected_text)
+        if not page.chk_manual_time_override.isChecked():
+            self._set_edit_text(page.edit_start_date, detected_start, block_signals=True)
+            self._set_edit_text(page.edit_end_date, detected_end, block_signals=True)
+        self.refresh_dashboard()
+
+    controller._detect_time_entries_for_ui = MethodType(detect_time_entries_for_ui, controller)
+    controller._refresh_detected_time_range = MethodType(refresh_detected_time_range, controller)
 
 
 def _patch_download_controls(window, controller) -> None:
     if controller is None:
         return
+    from grace_pipeline.ui.qt.controller import ROOT_DIR
+
     controller.host._scope_events.setdefault("download", {"pause": threading.Event(), "stop": threading.Event()})
+
+    def sync_download_source_controls(self, update_options: bool = True) -> None:
+        page = self.window.page_data_paths
+        product_type = self._download_product_type()
+        if update_options:
+            current = self._combo_value(page.cmb_gfc_center)
+            values = ["CSR", "JPL", "GSFC"] if product_type == "MASCON_NC" else ["自动", "CSR", "JPL", "GFZ", "HUST", "ITSG"]
+            from PySide6.QtCore import QSignalBlocker
+
+            with QSignalBlocker(page.cmb_gfc_center):
+                page.cmb_gfc_center.clear()
+                for value in values:
+                    page.cmb_gfc_center.addItem(value, value)
+                page.cmb_gfc_center.setCurrentText(current if current in values else values[0])
+        if hasattr(page, "cmb_mascon_resolution"):
+            page.cmb_mascon_resolution.setVisible(product_type == "MASCON_NC")
+        page.btn_download_gfc_range.setText("下载")
+        page.btn_download_dir_browse.setText("选择下载文件夹...")
+        center = self._configured_gfc_center()
+        if product_type == "GSM" and center in {"CSR", "JPL", "GFZ"}:
+            self._apply_low_degree_files_for_center(center)
+            page.lbl_gfc_download_status.setText(f"{center} GSM 使用 PO.DAAC；下载前可能需要 Earthdata 登录。")
+        elif product_type == "GSM" and center in {"HUST", "ITSG"}:
+            page.lbl_gfc_download_status.setText(f"{center} GSM 使用 ICGEM 下载，无需 Earthdata 登录。")
+        elif product_type == "MASCON_NC":
+            page.lbl_gfc_download_status.setText("Mascon NC 支持 CSR、JPL、GSFC；分辨率需与机构发布产品匹配。")
+        page.btn_download_gfc_range.setToolTip(page.lbl_gfc_download_status.text())
+
+    def gfc_download_range(self) -> tuple[str, str]:
+        download_page = self.window.page_data_paths
+        processing_page = self.window.page_processing
+        start = _ym_from_any(download_page.edit_download_start_ym.text()) or _ym_from_any(processing_page.edit_start_date.text())
+        end = _ym_from_any(download_page.edit_download_end_ym.text()) or _ym_from_any(processing_page.edit_end_date.text())
+        if not start or not end:
+            entries = self._detect_time_entries_for_ui()
+            if entries:
+                start, end = entries[0].ym, entries[-1].ym
+        if not start or not end:
+            raise ValueError("Set a valid start/end month before downloading files.")
+        processing_start = _ym_from_any(processing_page.edit_start_date.text())
+        processing_end = _ym_from_any(processing_page.edit_end_date.text())
+        if processing_start and start < processing_start:
+            start = processing_start
+        if processing_end and end > processing_end:
+            end = processing_end
+        if start > end:
+            raise ValueError("Download date range is outside the configured processing range.")
+        return start, end
 
     def on_download_gfc_range(self) -> None:
         page = self.window.page_data_paths
-        download_dir = self._native_path(page.edit_download_dir.text(), base_dir=Path(__file__).resolve().parents[4])
+        download_dir = self._native_path(page.edit_download_dir.text(), base_dir=ROOT_DIR)
         if not download_dir:
             self._show_warning("下载数据", "请先设置下载文件夹。")
             return
@@ -286,7 +439,7 @@ def _patch_download_controls(window, controller) -> None:
         center = self._configured_gfc_center()
         product_type = self._download_product_type()
         if product_type == "MASCON_NC" and center not in {"CSR", "JPL", "GSFC"}:
-            self._show_warning("下载 Mascon", "Mascon NC 下载目前支持 CSR、JPL 和 GSFC。")
+            self._show_warning("下载数据", "Mascon NC 下载目前支持 CSR、JPL 和 GSFC。")
             return
         if not self._ensure_earthdata_auth_for_download(product_type, center):
             return
@@ -339,6 +492,8 @@ def _patch_download_controls(window, controller) -> None:
 
         self._run_in_thread("download", task, "DOWNLOADING DATA")
 
+    controller._sync_download_source_controls = MethodType(sync_download_source_controls, controller)
+    controller._gfc_download_range = MethodType(gfc_download_range, controller)
     controller.on_download_gfc_range = MethodType(on_download_gfc_range, controller)
     disconnect = getattr(window.page_data_paths.btn_download_gfc_range.clicked, "disconnect", None)
     try:
@@ -347,6 +502,71 @@ def _patch_download_controls(window, controller) -> None:
     except Exception:
         pass
     window.page_data_paths.btn_download_gfc_range.clicked.connect(controller.on_download_gfc_range)
+
+
+def _patch_filter_run_validation(window, controller) -> None:
+    if controller is None or bool(getattr(controller, "_filter_run_validation_patched", False)):
+        return
+    controller._filter_run_validation_patched = True
+    original_run_pipeline = controller.on_run_pipeline
+
+    def validate_required_filter_files(self) -> list[str]:
+        page = self.window.page_processing
+        paths = self.window.page_data_paths
+        issues: list[str] = []
+
+        def exists(label: str, value: str) -> None:
+            text = str(value or "").strip()
+            if not text:
+                issues.append(f"{label}: not configured")
+                return
+            path = Path(self._native_path(text, base_dir=Path.cwd()))
+            if not path.exists():
+                issues.append(f"{label}: missing ({path})")
+
+        if page.btn_filter_ddk.isChecked():
+            exists("DDK data directory", paths.edit_ddk_data_dir.text())
+        if page.chk_lowdeg_enable.isChecked():
+            if page.chk_replace_c20.isChecked() or page.chk_replace_c30.isChecked():
+                exists("C20/C30 replacement file", paths.edit_low_degree_path.text())
+            if page.chk_replace_degree1.isChecked():
+                exists("Degree-1 replacement file", paths.edit_degree1_path.text())
+        if page.chk_apply_gia.isChecked():
+            exists("GIA model file", paths.edit_gia_path.text())
+        return issues
+
+    def on_run_pipeline(self):
+        issues = self._validate_required_filter_files()
+        if issues:
+            self._sync_data_path_badges()
+            self._show_warning("滤波处理", "以下必要文件不存在或未配置：\n" + "\n".join(f"- {item}" for item in issues))
+            self.on_log("[VALIDATION] Filter run blocked by missing files: " + "; ".join(issues), "stderr")
+            return
+        return original_run_pipeline()
+
+    controller._validate_required_filter_files = MethodType(validate_required_filter_files, controller)
+    controller.on_run_pipeline = MethodType(on_run_pipeline, controller)
+
+
+def _patch_open_logs(window, controller) -> None:
+    data_page = window.page_data_paths
+    if not hasattr(data_page, "btn_open_logs"):
+        return
+
+    def open_logs() -> None:
+        output_root = data_page.edit_main_output_root.text().strip()
+        log_dir = data_page.edit_logs_dir.text().strip()
+        if not log_dir and output_root:
+            log_dir = str(Path(output_root) / "logs")
+        if not log_dir:
+            log_dir = str(Path.cwd() / "outputs" / "logs")
+        path = Path(log_dir)
+        path.mkdir(parents=True, exist_ok=True)
+        QDesktopServices.openUrl(QUrl.fromLocalFile(str(path)))
+
+    with contextlib.suppress(Exception):
+        data_page.btn_open_logs.clicked.disconnect()
+    data_page.btn_open_logs.clicked.connect(open_logs)
 
 
 def configure_global_run_monitor(window) -> None:
@@ -371,7 +591,10 @@ def configure_global_run_monitor(window) -> None:
     window.btn_stop = window.btn_top_stop
     controller = getattr(window, "controller", None)
     if controller is not None:
+        _patch_filter_path_scanning(controller)
         _patch_download_controls(window, controller)
+        _patch_filter_run_validation(window, controller)
+        _patch_open_logs(window, controller)
         for signal, slot in (
             (window.page_processing.btn_run_filters.clicked, controller.on_run_pipeline),
             (window.btn_top_pause.clicked, controller.on_pause_active),
@@ -399,8 +622,7 @@ def configure_global_run_monitor(window) -> None:
         stop_button = getattr(self, "btn_top_stop", None)
         if pause_button is not None:
             pause_button.setEnabled(active)
-            if not active:
-                pause_button.setText("Resume")
+            pause_button.setText("Pause" if active else "Pause")
         if stop_button is not None:
             stop_button.setEnabled(active)
 
@@ -431,6 +653,7 @@ def configure_global_run_monitor(window) -> None:
         self._set_run_button_state(active)
         if active:
             self.top_progress_wrap.setVisible(True)
+            self.set_pause_action_paused(False)
             self._set_monitor_text(text or "Preparing", "preparing", -1.0)
         elif text == "Idle":
             self._set_monitor_text("Idle", "", None, "ETA --")
@@ -448,5 +671,10 @@ def configure_global_run_monitor(window) -> None:
     window.set_run_active = MethodType(set_run_active, window)
     window.set_run_progress = MethodType(set_run_progress, window)
     window._set_run_button_state(False)
+    if controller is not None:
+        with contextlib.suppress(Exception):
+            controller._refresh_detected_time_range()
+        with contextlib.suppress(Exception):
+            controller._sync_download_source_controls()
     window.refresh_translations()
     _retitle_processing_page(window)
