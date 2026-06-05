@@ -17,6 +17,7 @@ PYTHON_ROOT = ROOT / "python"
 if str(PYTHON_ROOT) not in sys.path:
     sys.path.insert(0, str(PYTHON_ROOT))
 
+from grace_pipeline.ui.qt.global_monitor import configure_global_run_monitor
 from grace_pipeline.ui.qt.main_window import MainWindow
 from grace_pipeline.ui.qt.i18n import translate_text
 from grace_pipeline.ui.qt.preferences import UIPreferences
@@ -29,6 +30,7 @@ class GuiWorkflowNavigationTest(unittest.TestCase):
 
     def setUp(self):
         self.window = MainWindow(load_persisted=False)
+        configure_global_run_monitor(self.window)
         self.window._current_screen_metrics = lambda: (1920, 1040, 1.0)
         self.window._layout_bucket = None
         self.window.resize(1600, 980)
@@ -39,14 +41,34 @@ class GuiWorkflowNavigationTest(unittest.TestCase):
         self.window.close()
         self.app.processEvents()
 
-    def test_run_monitor_page_is_available_from_navigation(self):
-        self.assertIn("monitor", self.window._nav_buttons)
+    def test_run_monitor_page_is_not_user_reachable(self):
+        self.assertNotIn("monitor", self.window._nav_buttons)
 
+        self.window.set_active_page("dashboard")
+        self.app.processEvents()
         self.window.set_active_page("monitor")
         self.app.processEvents()
-        self.assertIs(self.window.stack.currentWidget(), self.window.page_monitor)
-        self.assertEqual(self.window.breadcrumb.text(), "Run Monitor")
-        self.assertTrue(self.window._nav_buttons["monitor"].isChecked())
+        self.assertIs(self.window.stack.currentWidget(), self.window.page_dashboard)
+        self.assertEqual(self.window.breadcrumb.text(), "Dashboard")
+        self.assertTrue(self.window._nav_buttons["dashboard"].isChecked())
+
+    def test_global_top_bar_is_run_monitor_and_processing_page_owns_run_entry(self):
+        self.assertFalse(self.window.page_dashboard.btn_run_full.isVisible())
+        self.assertFalse(self.window.page_dashboard.btn_pause_run.isVisible())
+        self.assertFalse(self.window.page_dashboard.btn_stop_run.isVisible())
+        self.assertIs(self.window.btn_run, self.window.page_processing.btn_run_filters)
+        self.assertIs(self.window.btn_pause, self.window.btn_top_pause)
+        self.assertIs(self.window.btn_stop, self.window.btn_top_stop)
+
+        self.window.set_run_active(True, text="RUNNING PIPELINE", indeterminate=False)
+        self.window.set_run_progress(25.0, detail="3/12", stage="Monthly filter", subtask="Gaussian")
+        self.app.processEvents()
+        self.assertTrue(self.window.top_progress_wrap.isVisible())
+        self.assertEqual(self.window.top_progress_percent.text(), "25%")
+        self.assertIn("Monthly filter", self.window.top_progress_task.text())
+        self.assertIn("Gaussian", self.window.top_progress_subtask.text())
+        self.assertTrue(self.window.btn_top_pause.isEnabled())
+        self.assertTrue(self.window.btn_top_stop.isEnabled())
 
     def test_dashboard_action_buttons_route_to_operational_pages(self):
         for button, page_key, widget in (
@@ -119,19 +141,19 @@ class GuiWorkflowNavigationTest(unittest.TestCase):
         self.window.apply_ui_preferences(UIPreferences(theme="light", language="zh"), persist=False)
         self.app.processEvents()
 
-        self.assertEqual(self.window.page_dashboard.btn_run_full.text(), "\u8fd0\u884c\u6ee4\u6ce2")
-        self.assertEqual(self.window.page_dashboard.btn_validate_paths.text(), "\u6821\u9a8c\u8def\u5f84")
-        self.assertEqual(self.window.page_leakage.btn_run_leakage.text(), "\u8fd0\u884c\u6821\u6b63")
-        self.assertEqual(self.window.page_basin.table_basins.horizontalHeaderItem(1).text(), "\u6d41\u57df\u540d\u79f0")
-        self.assertEqual(self.window.page_basin.btn_preview_selected_basin.text(), "\u9884\u89c8\u5f53\u524d\u6d41\u57df")
-        self.assertEqual(self.window.page_basin.chk_basin_save_series.text(), "\u7a7a\u95f4\u63d0\u53d6\uff1a\u9762\u79ef\u52a0\u6743\u6d41\u57df\u65f6\u5e8f")
+        self.assertEqual(self.window.page_processing.btn_run_filters.text(), "运行滤波")
+        self.assertEqual(self.window.page_dashboard.btn_validate_paths.text(), "校验路径")
+        self.assertEqual(self.window.page_leakage.btn_run_leakage.text(), "运行校正")
+        self.assertEqual(self.window.page_basin.table_basins.horizontalHeaderItem(1).text(), "流域名称")
+        self.assertEqual(self.window.page_basin.btn_preview_selected_basin.text(), "预览当前流域")
+        self.assertEqual(self.window.page_basin.chk_basin_save_series.text(), "空间提取：面积加权流域时序")
         self.assertEqual(self.window.page_basin.table_basins.rowCount(), 0)
-        self.assertEqual(self.window.page_preview.chk_layer_boundaries.text(), "\u8fb9\u754c\u53e0\u52a0\u5c42")
-        self.assertEqual(self.window.page_preview.chk_layer_rivers.text(), "\u9644\u52a0\u81ea\u5b9a\u4e49 SHP")
-        self.assertEqual(translate_text("2006-03 -> 2014-10 (95 months)", "zh"), "2006-03 -> 2014-10\uff0895 \u4e2a\u6708\uff09")
+        self.assertEqual(self.window.page_preview.chk_layer_boundaries.text(), "边界叠加层")
+        self.assertEqual(self.window.page_preview.chk_layer_rivers.text(), "附加自定义 SHP")
+        self.assertEqual(translate_text("2006-03 -> 2014-10 (95 months)", "zh"), "2006-03 -> 2014-10（95 个月）")
         self.assertEqual(
             translate_text("95 GFC files | 2006-03 // 2014-10 | missing=9 (GRACE=9)", "zh"),
-            "95 \u4e2a GFC \u6587\u4ef6 | 2006-03 // 2014-10 | \u7f3a\u6d4b=9\uff08GRACE=9\uff09",
+            "95 个 GFC 文件 | 2006-03 // 2014-10 | 缺测=9（GRACE=9）",
         )
 
     def test_operational_controls_update_frontend_state(self):
@@ -174,7 +196,7 @@ class GuiWorkflowNavigationTest(unittest.TestCase):
         self.window.controller._show_warning = lambda title, text: warnings.append((title, text))
         self.window.controller._run_in_thread = lambda scope, target, status_text: starts.append((scope, status_text))
 
-        QTest.mouseClick(self.window.page_dashboard.btn_run_full, Qt.LeftButton)
+        QTest.mouseClick(self.window.page_processing.btn_run_filters, Qt.LeftButton)
         self.app.processEvents()
         self.assertEqual(starts[-1][0], "all")
 
@@ -191,7 +213,7 @@ class GuiWorkflowNavigationTest(unittest.TestCase):
 
         QTest.mouseClick(self.window.page_leakage.btn_run_leakage, Qt.LeftButton)
         self.app.processEvents()
-        self.assertTrue(any(title == "\u6cc4\u6f0f\u6821\u6b63" for title, _ in warnings))
+        self.assertTrue(any(title == "泄漏校正" for title, _ in warnings))
 
     def test_basin_boundary_reader_populates_selectable_features(self):
         with tempfile.TemporaryDirectory() as td:
