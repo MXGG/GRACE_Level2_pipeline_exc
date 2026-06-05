@@ -13,6 +13,16 @@ from pathlib import Path
 from typing import Any, Dict, Optional, Union
 
 
+def _path_value(value: Optional[str]) -> Optional[Path]:
+    """Return an expanded path value without requiring the path to exist."""
+    if not value:
+        return None
+    try:
+        return Path(value).expanduser().resolve()
+    except Exception:
+        return None
+
+
 def _existing_path(value: Optional[str]) -> Optional[Path]:
     if not value:
         return None
@@ -122,12 +132,16 @@ def get_data_dir(root_dir: Optional[Union[str, Path]] = None) -> Path:
 
 
 def get_output_dir(root_dir: Optional[Union[str, Path]] = None) -> Path:
-    """Return the active output directory for source or installed runs."""
+    """Return the active output directory for source or installed runs.
+
+    Unlike input/data directories, output paths are allowed to be absent at
+    startup. The pipeline or doctor command can create them later.
+    """
     root = Path(root_dir).resolve() if root_dir is not None else get_root_dir()
-    env_output = _existing_path(os.environ.get("GRACE_L2_OUTPUT"))
+    env_output = _path_value(os.environ.get("GRACE_L2_OUTPUT"))
     if env_output:
         return env_output
-    ini_output = _existing_path(_read_install_ini(root).get("outputdir"))
+    ini_output = _path_value(_read_install_ini(root).get("outputdir"))
     if ini_output:
         return ini_output
     return root / "outputs"
@@ -461,12 +475,25 @@ class Config:
         return value
 
 
+def _load_json_file(path: Union[str, Path], label: str) -> Dict[str, Any]:
+    path_obj = Path(path).expanduser()
+    if not path_obj.exists():
+        raise FileNotFoundError(f"Explicit {label} config file not found: {path_obj}")
+    with open(path_obj, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
 def load_config(
     user_config: Optional[Union[str, Path]] = None,
     default_config: Optional[Union[str, Path]] = None,
     root_dir: Optional[Union[str, Path]] = None,
 ) -> Config:
-    """Load configuration from JSON files."""
+    """Load configuration from JSON files.
+
+    A missing explicitly supplied user/default config is an error. This prevents
+    silent fallback to defaults when a CLI, GUI, or HPC caller intended to use a
+    specific run configuration.
+    """
     if root_dir is None:
         root_dir = get_root_dir()
     root_path = Path(root_dir).resolve()
@@ -478,14 +505,12 @@ def load_config(
         default_config = find_default_config(root_path)
 
     base_cfg: Dict[str, Any] = {}
-    if default_config and Path(default_config).exists():
-        with open(default_config, "r", encoding="utf-8") as f:
-            base_cfg = json.load(f)
+    if default_config:
+        base_cfg = _load_json_file(default_config, "default")
 
     user_cfg: Dict[str, Any] = {}
-    if user_config and Path(user_config).exists():
-        with open(user_config, "r", encoding="utf-8") as f:
-            user_cfg = json.load(f)
+    if user_config:
+        user_cfg = _load_json_file(user_config, "user")
 
     merged = merge_configs(base_cfg, user_cfg)
     resolved = resolve_placeholders(merged, root_dir_str)

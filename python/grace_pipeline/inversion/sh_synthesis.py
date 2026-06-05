@@ -14,7 +14,25 @@ from functools import lru_cache
 from typing import Optional, Tuple
 
 import numpy as np
-from scipy.special import sph_harm_y
+
+try:
+    from scipy.special import sph_harm_y as _scipy_sph_harm_y
+except ImportError:  # SciPy < 1.15 compatibility
+    from scipy.special import sph_harm as _scipy_sph_harm
+
+    def _spherical_harmonic_y(l: int, m: int, theta: np.ndarray, phi: float) -> np.ndarray:
+        """Compatibility wrapper for deprecated scipy.special.sph_harm.
+
+        ``sph_harm_y(n, m, theta, phi)`` uses theta as polar angle and phi as
+        azimuth. Older ``sph_harm(m, n, theta, phi)`` uses theta as azimuth and
+        phi as polar angle. The wrapper keeps the new call convention used in
+        this module so SciPy 1.7+ environments remain usable.
+        """
+        return _scipy_sph_harm(int(m), int(l), phi, theta)
+else:
+
+    def _spherical_harmonic_y(l: int, m: int, theta: np.ndarray, phi: float) -> np.ndarray:
+        return _scipy_sph_harm_y(int(l), int(m), theta, phi)
 
 
 _EARTH_RADIUS_M = 6.378136460e6
@@ -63,7 +81,7 @@ def compute_legendre(l: int, m: int, cos_theta: np.ndarray) -> np.ndarray:
     """
     x = np.asarray(cos_theta, dtype=np.float64)
     theta = np.arccos(np.clip(x, -1.0, 1.0))
-    y_lm = np.real(sph_harm_y(int(l), int(m), theta, 0.0))
+    y_lm = np.real(_spherical_harmonic_y(l, m, theta, 0.0))
     if m == 0:
         return math.sqrt(2.0 * math.pi) * y_lm
     return ((-1.0) ** m) * math.sqrt(4.0 * math.pi) * y_lm
