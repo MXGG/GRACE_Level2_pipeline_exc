@@ -41,18 +41,21 @@ class GuiWorkflowNavigationTest(unittest.TestCase):
         self.window.close()
         self.app.processEvents()
 
-    def test_run_monitor_page_is_not_user_reachable(self):
+    def test_run_monitor_and_data_paths_are_not_user_reachable(self):
         self.assertNotIn("monitor", self.window._nav_buttons)
+        self.assertNotIn("data_paths", self.window._nav_buttons)
 
-        self.window.set_active_page("dashboard")
-        self.app.processEvents()
-        self.window.set_active_page("monitor")
-        self.app.processEvents()
-        self.assertIs(self.window.stack.currentWidget(), self.window.page_dashboard)
-        self.assertEqual(self.window.breadcrumb.text(), "Dashboard")
-        self.assertTrue(self.window._nav_buttons["dashboard"].isChecked())
+        for key in ("monitor", "data_paths"):
+            self.window.set_active_page("dashboard")
+            self.app.processEvents()
+            self.window.set_active_page(key)
+            self.app.processEvents()
+            self.assertIs(self.window.stack.currentWidget(), self.window.page_processing)
+            self.assertEqual(self.window.breadcrumb.text(), "Filter Processing")
+            self.assertTrue(self.window._nav_buttons["processing"].isChecked())
 
     def test_global_top_bar_is_run_monitor_and_processing_page_owns_run_entry(self):
+        self.assertTrue(self.window.page_dashboard.card_commands.isHidden())
         self.assertFalse(self.window.page_dashboard.btn_run_full.isVisible())
         self.assertFalse(self.window.page_dashboard.btn_pause_run.isVisible())
         self.assertFalse(self.window.page_dashboard.btn_stop_run.isVisible())
@@ -66,13 +69,13 @@ class GuiWorkflowNavigationTest(unittest.TestCase):
         self.assertTrue(self.window.top_progress_wrap.isVisible())
         self.assertEqual(self.window.top_progress_percent.text(), "25%")
         self.assertIn("Monthly filter", self.window.top_progress_task.text())
-        self.assertIn("Gaussian", self.window.top_progress_subtask.text())
+        self.assertIn("Gaussian", self.window.top_progress_task.text())
         self.assertTrue(self.window.btn_top_pause.isEnabled())
         self.assertTrue(self.window.btn_top_stop.isEnabled())
 
     def test_dashboard_action_buttons_route_to_operational_pages(self):
         for button, page_key, widget in (
-            (self.window.page_dashboard.btn_open_data_paths, "data_paths", self.window.page_data_paths),
+            (self.window.page_dashboard.btn_open_data_paths, "processing", self.window.page_processing),
             (self.window.page_dashboard.btn_open_processing, "processing", self.window.page_processing),
             (self.window.page_dashboard.btn_open_preview, "preview", self.window.page_preview),
         ):
