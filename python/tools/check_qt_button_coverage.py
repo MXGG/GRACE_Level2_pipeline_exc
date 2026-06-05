@@ -2,8 +2,8 @@
 """Static Qt button coverage audit for the desktop shell.
 
 The script scans button attributes created in ``ui/qt/pages.py`` and checks
-whether they appear in controller/main-window binding code near a Qt
-``connect()`` call. It intentionally supports the local patterns used by the
+whether they appear in controller/main-window/global-monitor binding code near a
+Qt ``connect()`` call. It intentionally supports the local patterns used by the
 desktop shell, including tuple/list driven loops where the button attribute is
 listed several lines before ``btn.clicked.connect(...)``.
 """
@@ -18,13 +18,14 @@ ROOT = Path(__file__).resolve().parents[1]
 PAGES = ROOT / "grace_pipeline" / "ui" / "qt" / "pages.py"
 CONTROLLER = ROOT / "grace_pipeline" / "ui" / "qt" / "controller.py"
 MAIN_WINDOW = ROOT / "grace_pipeline" / "ui" / "qt" / "main_window.py"
+GLOBAL_MONITOR = ROOT / "grace_pipeline" / "ui" / "qt" / "global_monitor.py"
 
 BUTTON_RE = re.compile(r"self\.(btn_[A-Za-z0-9_]+)\s*=\s*(?:QPushButton|QToolButton|QCheckBox|QRadioButton)\(")
 CONNECT_TEXT = ".connect("
 
 
 def _read(path: Path) -> str:
-    return path.read_text(encoding="utf-8-sig", errors="replace")
+    return path.read_text(encoding="utf-8-sig", errors="replace") if path.exists() else ""
 
 
 def _is_connected(button_name: str, binding_lines: list[str]) -> bool:
@@ -39,12 +40,13 @@ def _is_connected(button_name: str, binding_lines: list[str]) -> bool:
 
 def main() -> int:
     page_text = _read(PAGES)
-    bind_text = _read(CONTROLLER) + "\n" + _read(MAIN_WINDOW)
+    bind_text = "\n".join(_read(path) for path in (CONTROLLER, MAIN_WINDOW, GLOBAL_MONITOR))
     binding_lines = bind_text.splitlines()
     buttons = sorted(set(BUTTON_RE.findall(page_text)))
     connected = {name for name in buttons if _is_connected(name, binding_lines)}
 
-    # A few buttons are wired indirectly or by top-level aliases.
+    # A few buttons are wired indirectly or intentionally hidden behind the
+    # global run monitor compatibility layer.
     indirect = {
         "btn_run_full",
         "btn_pause_run",
@@ -60,7 +62,7 @@ def main() -> int:
         for name in uncovered:
             print(f"  - {name}")
         return 1
-    print("All discovered buttons appear to be covered by controller/main-window bindings.")
+    print("All discovered buttons appear to be covered by controller/main-window/global-monitor bindings.")
     return 0
 
 
