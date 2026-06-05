@@ -39,13 +39,14 @@ class GuiWorkflowNavigationTest(unittest.TestCase):
         self.window.close()
         self.app.processEvents()
 
-    def test_run_output_state_is_merged_into_dashboard_navigation(self):
-        self.assertNotIn("monitor", self.window._nav_buttons)
+    def test_run_monitor_page_is_available_from_navigation(self):
+        self.assertIn("monitor", self.window._nav_buttons)
 
         self.window.set_active_page("monitor")
         self.app.processEvents()
-        self.assertIs(self.window.stack.currentWidget(), self.window.page_dashboard)
-        self.assertEqual(self.window.breadcrumb.text(), "Dashboard")
+        self.assertIs(self.window.stack.currentWidget(), self.window.page_monitor)
+        self.assertEqual(self.window.breadcrumb.text(), "Run Monitor")
+        self.assertTrue(self.window._nav_buttons["monitor"].isChecked())
 
     def test_dashboard_action_buttons_route_to_operational_pages(self):
         for button, page_key, widget in (
@@ -124,7 +125,7 @@ class GuiWorkflowNavigationTest(unittest.TestCase):
         self.assertEqual(self.window.page_basin.table_basins.horizontalHeaderItem(1).text(), "\u6d41\u57df\u540d\u79f0")
         self.assertEqual(self.window.page_basin.btn_preview_selected_basin.text(), "\u9884\u89c8\u5f53\u524d\u6d41\u57df")
         self.assertEqual(self.window.page_basin.chk_basin_save_series.text(), "\u7a7a\u95f4\u63d0\u53d6\uff1a\u9762\u79ef\u52a0\u6743\u6d41\u57df\u65f6\u5e8f")
-        self.assertEqual(self.window.page_basin.table_basins.item(0, 1).text(), "\u4e9a\u9a6c\u900a\u6d41\u57df")
+        self.assertEqual(self.window.page_basin.table_basins.rowCount(), 0)
         self.assertEqual(self.window.page_preview.chk_layer_boundaries.text(), "\u8fb9\u754c\u53e0\u52a0\u5c42")
         self.assertEqual(self.window.page_preview.chk_layer_rivers.text(), "\u9644\u52a0\u81ea\u5b9a\u4e49 SHP")
         self.assertEqual(translate_text("2006-03 -> 2014-10 (95 months)", "zh"), "2006-03 -> 2014-10\uff0895 \u4e2a\u6708\uff09")

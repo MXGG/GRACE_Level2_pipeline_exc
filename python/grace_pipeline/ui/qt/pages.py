@@ -188,10 +188,10 @@ class DashboardPage(ScrollPage):
 
         self.card_summary = CardFrame("Project Configuration Summary")
         summary_row = QHBoxLayout()
-        self.lbl_project_name = QLabel("JPL_RL06_MASCON_V02")
-        self.lbl_last_edited = QLabel("2023-10-24 14:22:09")
-        self.lbl_uid = QLabel("4f8d-992a-331c")
-        self.badge_summary_state = build_badge("Ready to Process", "success")
+        self.lbl_project_name = QLabel("Unsaved configuration")
+        self.lbl_last_edited = QLabel("Not saved")
+        self.lbl_uid = QLabel("pending")
+        self.badge_summary_state = build_badge("Idle", "muted")
         summary_row.addWidget(self._value_box("Project Name", self.lbl_project_name))
         summary_row.addWidget(self._value_box("Last Edited", self.lbl_last_edited))
         summary_row.addWidget(self._value_box("UID", self.lbl_uid))
@@ -256,7 +256,7 @@ class DashboardPage(ScrollPage):
         self.card_commands.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
 
         self.card_output_root = CardFrame("Output Root")
-        self.lbl_output_root = QLabel("/volumes/science/L2_output/v02/")
+        self.lbl_output_root = QLabel("Output root: not resolved")
         self.lbl_output_root.setObjectName("MetricValue")
         self.lbl_output_root.setWordWrap(True)
         self.lbl_output_root.setStyleSheet("font-size: 22px; font-weight: 700;")
@@ -266,9 +266,9 @@ class DashboardPage(ScrollPage):
         self.card_output_root.body.addWidget(self.lbl_output_hint)
 
         self.card_data_availability = CardFrame("Data Availability")
-        self.lbl_data_count = QLabel("1,248")
+        self.lbl_data_count = QLabel("0")
         self.lbl_data_count.setObjectName("MetricValue")
-        self.lbl_time_span = QLabel("GFC data files | 2002-04 // 2023-09")
+        self.lbl_time_span = QLabel("GFC data files | not scanned")
         self.card_data_availability.body.addWidget(self.lbl_data_count)
         self.card_data_availability.body.addWidget(self.lbl_time_span)
 
@@ -1693,6 +1693,8 @@ class RunMonitorPage(ScrollPage):
         self.lbl_pipeline_status = QLabel("Idle")
         self.lbl_overall_progress = QLabel("0 / 0")
         self.lbl_current_task = QLabel("Waiting for a pipeline run.")
+        self.lbl_current_subtask = QLabel("Subtask: not started")
+        self.lbl_eta = QLabel("ETA: not available")
         self.bar_overall_progress = QProgressBar()
         self.bar_overall_progress.setRange(0, 100)
         self.bar_overall_progress.setValue(0)
@@ -1704,21 +1706,23 @@ class RunMonitorPage(ScrollPage):
         self.card_status.body.addWidget(_make_field_row("Pipeline", self.lbl_pipeline_status))
         self.card_status.body.addWidget(self.bar_overall_progress)
         self.card_status.body.addWidget(_make_field_row("Current Task", self.lbl_current_task))
+        self.card_status.body.addWidget(_make_field_row("Subtask", self.lbl_current_subtask))
+        self.card_status.body.addWidget(_make_field_row("ETA", self.lbl_eta))
         self.card_status.body.addWidget(self.bar_current_task)
 
         self.card_context = CardFrame("Resolved Context")
-        self.lbl_run_config = QLabel("Config: user.json")
-        self.lbl_run_filters = QLabel("Filters: Gaussian, P4M6, DDK")
-        self.lbl_run_output = QLabel("Output Root: output/local")
-        self.lbl_run_timespan = QLabel("Time Span: 2002-04 to 2017-06")
+        self.lbl_run_config = QLabel("Config: not loaded")
+        self.lbl_run_filters = QLabel("Filters: not evaluated")
+        self.lbl_run_output = QLabel("Output Root: not resolved")
+        self.lbl_run_timespan = QLabel("Time Span: not scanned")
         for label in (self.lbl_run_config, self.lbl_run_filters, self.lbl_run_output, self.lbl_run_timespan):
             label.setWordWrap(True)
             self.card_context.body.addWidget(label)
 
         self.card_outputs = CardFrame("Resolved Outputs")
-        self.lbl_output_root = QLabel("output/local")
-        self.lbl_output_local = QLabel("Stacks: output/local/stacks")
-        self.lbl_output_plots = QLabel("Plots: output/local/plots")
+        self.lbl_output_root = QLabel("Output Root: not resolved")
+        self.lbl_output_local = QLabel("Local Output: not resolved")
+        self.lbl_output_plots = QLabel("Plots: not resolved")
         self.lbl_last_artifact = QLabel("Latest Artifact: not generated yet.")
         for label in (self.lbl_output_root, self.lbl_output_local, self.lbl_output_plots, self.lbl_last_artifact):
             label.setWordWrap(True)
@@ -1738,18 +1742,7 @@ class RunMonitorPage(ScrollPage):
         self.card_logs = CardFrame("Live Process Logs")
         self.text_live_logs = QTextEdit()
         self.text_live_logs.setReadOnly(True)
-        self.text_live_logs.setPlainText(
-            "\n".join(
-                [
-                    "[2023-10-27 14:25:01] INFO: Initializing SH conversion module...",
-                    "[2023-10-27 14:25:04] INFO: Loading spherical harmonics coefficients up to degree 60.",
-                    "[2023-10-27 14:25:08] SUCCESS: Coefficients validated. Chi-square = 1.042.",
-                    "[2023-10-27 14:25:12] INFO: Commencing spatial grid interpolation (0.25deg resolution).",
-                    "[2023-10-27 14:25:15] INFO: Applying Gaussian smoothing filter (r=300km)...",
-                    "[2023-10-27 14:25:30] INFO: Processing tile 42 of 180...",
-                ]
-            )
-        )
+        self.text_live_logs.setPlainText("Run monitor initialized. Start a run to stream live logs.")
         self.card_logs.body.addWidget(self.text_live_logs)
 
         left_col = QVBoxLayout()

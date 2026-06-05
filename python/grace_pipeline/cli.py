@@ -28,6 +28,62 @@ def gui():
     start_gui()
 
 
+HSAF_EXPERIMENT_ENGINE_CHOICES = [
+    "adaptive_parity_hsaf_v1",
+    "sampling_pseudomoire_v1",
+    "modal_adaptive_v1",
+    "modal_adaptive_latband_v1",
+    "multichannel_v1",
+    "modal_adaptive_v2",
+    "modal_adaptive_latband_v2",
+    "multichannel_v2",
+    "modal_adaptive_v3",
+    "modal_adaptive_latband_v3",
+    "multichannel_v3",
+    "demod_profile_v1",
+    "demod_multichannel_v1",
+    "bundle_template_v1",
+    "bundle_template_multichannel_v1",
+    "sh_orderwise_v1",
+    "sh_multichannel_v1",
+    "sh_demod_v1",
+    "sh_demod_multichannel_v1",
+    "sh_orbit_orderwise_v1",
+    "sh_orbit_multichannel_v1",
+    "sh_orbit_demod_v1",
+    "sh_orbit_demod_multichannel_v1",
+    "sh_orbit_carrier_demod_v1",
+    "sh_orbit_carrier_demod_multichannel_v1",
+    "carrier_removed_hsaf_v1",
+    "carrier_removed_multichannel_v1",
+    "orbit_bundle_v1",
+    "orbit_bundle_multichannel_v1",
+    "bundle_phase_demod_v1",
+    "bundle_phase_demod_multichannel_v1",
+    "pseudo_moire_operator_v1",
+    "pseudo_moire_operator_multichannel_v1",
+    "sampling_operator_v1",
+    "sampling_operator_multichannel_v1",
+    "sampling_inversion_v1",
+    "sampling_inversion_multichannel_v1",
+]
+
+
+def _parse_jobs_option(_ctx, _param, value):
+    if value is None:
+        return None
+    text = str(value).strip()
+    if text.lower() == "auto":
+        return "auto"
+    try:
+        parsed = int(text)
+    except ValueError as exc:
+        raise click.BadParameter("must be an integer worker count or 'auto'") from exc
+    if parsed < 1:
+        raise click.BadParameter("must be >= 1")
+    return parsed
+
+
 def _apply_runtime_overrides(cfg, output: Optional[str], start: Optional[str], end: Optional[str], jobs, no_parallel: bool, *, gui: bool = False):
     if output:
         cfg._raw.setdefault("path", {})["OUTPUT"] = output
@@ -43,6 +99,9 @@ def _apply_runtime_overrides(cfg, output: Optional[str], start: Optional[str], e
         cfg._raw.setdefault("parallel", {})["enable"] = False
         cfg.parallel.enable = False
         cfg.parallel.n_workers = 1
+        return cfg
+
+    if jobs is None:
         return cfg
 
     frozen_cap = 0
@@ -69,7 +128,7 @@ def _apply_runtime_overrides(cfg, output: Optional[str], start: Optional[str], e
 @click.option("-o", "--output", type=click.Path(), help="Override output directory.")
 @click.option("--start", type=str, help="Start month, YYYY-MM.")
 @click.option("--end", type=str, help="End month, YYYY-MM.")
-@click.option("-j", "--jobs", default="auto", show_default=True, help="Parallel workers: integer or auto.")
+@click.option("-j", "--jobs", callback=_parse_jobs_option, help="Override parallel workers: integer or auto. Omit to use config.")
 @click.option("--no-parallel", is_flag=True, help="Disable parallel processing.")
 @click.option("--show-runtime", is_flag=True, help="Print detected runtime resources before running.")
 @click.option("-v", "--verbose", is_flag=True, help="Verbose traceback on error.")
@@ -204,7 +263,7 @@ def filter_gfc_ddk(input_dir: str, output_dir: str, ddk_data_dir: str, ddk_types
 @click.option("-d", "--default-config", type=click.Path(exists=True), help="Path to default configuration JSON file.")
 @click.option("--stack-dir", type=click.Path(exists=True, file_okay=False), help="Directory containing stacks.")
 @click.option("--month", "months", multiple=True, help="Representative month to test, YYYY-MM.")
-@click.option("--engine", "engines", multiple=True, help="Experimental HSAF engine to run. Can be supplied multiple times.")
+@click.option("--engine", "engines", multiple=True, type=click.Choice(HSAF_EXPERIMENT_ENGINE_CHOICES), help="Experimental HSAF engine to run. Can be supplied multiple times.")
 @click.option("--input-tag", type=click.Choice(["RAW", "P4M6"], case_sensitive=False), default="P4M6", show_default=True)
 @click.option("--outdir", type=click.Path(), help="Optional output directory.")
 def hsaf_experiments(config: Optional[str], default_config: Optional[str], stack_dir: Optional[str], months: tuple[str, ...], engines: tuple[str, ...], input_tag: str, outdir: Optional[str]):

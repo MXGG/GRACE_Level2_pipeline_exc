@@ -196,11 +196,13 @@ class DataPathsUiTest(unittest.TestCase):
         x_positions = [widget.mapTo(self.window, QPoint(0, 0)).x() for widget in widgets]
         self.assertEqual(len(set(x_positions)), 1)
 
-    def test_run_output_page_is_merged_into_dashboard_navigation(self):
-        self.assertNotIn("monitor", self.window._nav_buttons)
+    def test_run_monitor_page_is_available_from_navigation(self):
+        self.assertIn("monitor", self.window._nav_buttons)
         self.window.set_active_page("monitor")
         self.app.processEvents()
-        self.assertIs(self.window.stack.currentWidget(), self.window.page_dashboard)
+        self.assertIs(self.window.stack.currentWidget(), self.window.page_monitor)
+        self.assertEqual(self.window.breadcrumb.text(), "Run Monitor")
+        self.assertNotIn("Processing tile 42 of 180", self.window.page_monitor.text_live_logs.toPlainText())
 
     def test_dashboard_preview_only_shows_output_structure(self):
         self.window.controller.on_log("[HSAF][stack] 32/163 slices processed...", "stdout")

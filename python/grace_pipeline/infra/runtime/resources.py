@@ -97,8 +97,8 @@ def recommend_workers(
     else:
         try:
             configured = max(1, int(configured_workers))
-        except Exception:
-            configured = available
+        except Exception as exc:
+            raise ValueError("configured_workers must be an integer or 'auto'") from exc
 
     cap = available
     if ctx.is_slurm:

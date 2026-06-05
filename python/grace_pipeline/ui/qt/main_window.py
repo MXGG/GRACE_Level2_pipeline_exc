@@ -299,8 +299,6 @@ class MainWindow(QMainWindow):
         return widget
 
     def set_active_page(self, key: str):
-        if key == "monitor":
-            key = "dashboard"
         if key not in self._pages:
             return
         self.stack.setCurrentWidget(self._pages[key])
