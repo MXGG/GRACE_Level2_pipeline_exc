@@ -1,6 +1,6 @@
 """
 GFC file reader for GRACE/GRACE-FO data.
-Reads ICGEM format spherical harmonic coefficient files.
+Reads ICGEM/GRACE Level-2 spherical harmonic coefficient files.
 """
 
 import re
@@ -68,9 +68,28 @@ def find_gfc_file(cfg, time_entry) -> Optional[str]:
     return None
 
 
+def _is_coeff_record(token: str) -> bool:
+    """Return True for supported SH coefficient record identifiers."""
+    key = str(token or "").strip().lower()
+    return key.startswith("gfc") or key in {"grcof", "grcof2"}
+
+
+def _parse_header_value(stripped: str) -> Optional[Tuple[str, str]]:
+    """Parse simple key/value header lines from ICGEM and GRACE YAML-like files."""
+    if not stripped or stripped.startswith("#"):
+        return None
+    if ":" in stripped:
+        key, value = stripped.split(":", 1)
+        return key.strip().lower(), value.strip()
+    parts = stripped.split(None, 1)
+    if len(parts) == 2:
+        return parts[0].strip().lower(), parts[1].strip()
+    return None
+
+
 def read_gfc(gfc_file: str, Lmax: int) -> SHCoefficients:
     """
-    Read ICGEM .gfc file and return spherical harmonic coefficients.
+    Read ICGEM/GRACE Level-2 .gfc file and return spherical harmonic coefficients.
     
     Args:
         gfc_file: Path to GFC file
@@ -80,9 +99,9 @@ def read_gfc(gfc_file: str, Lmax: int) -> SHCoefficients:
         SHCoefficients object with C, S matrices
     
     Notes:
-        - Supports lines beginning with 'gfc' or 'gfct'
-        - Skips header until 'end_of_head'
-        - C and S are stored as [Lmax+1, Lmax+1] with C[l,m] indexing
+        - Supports ICGEM-style records beginning with ``gfc``/``gfct``.
+        - Supports GRACE Level-2 SHM records beginning with ``GRCOF``/``GRCOF2``.
+        - C and S are stored as [Lmax+1, Lmax+1] with C[l,m] indexing.
     """
     if not Path(gfc_file).exists():
         raise FileNotFoundError(f"GFC file not found: {gfc_file}")
@@ -93,6 +112,7 @@ def read_gfc(gfc_file: str, Lmax: int) -> SHCoefficients:
     C = np.zeros((Lmax + 1, Lmax + 1))
     S = np.zeros((Lmax + 1, Lmax + 1))
     coeff_count = 0
+    max_degree_seen = -1
     
     with open(gfc_file, 'r', encoding='utf-8', errors='ignore') as f:
         for line in f:
@@ -103,8 +123,12 @@ def read_gfc(gfc_file: str, Lmax: int) -> SHCoefficients:
             parts = stripped.split()
             token = parts[0].lower()
 
-            # Parse coefficient lines (gfc/gfct/other gfc-prefixed variants).
-            if token.startswith('gfc') and len(parts) >= 5:
+            # Parse coefficient lines. CSR/JPL/GFZ RL06 SHM files commonly use
+            # GRCOF2 records; ICGEM products use gfc/gfct. Treat both as first
+            # class coefficient records. Without GRCOF2 support the reader would
+            # silently return all-zero GSM coefficients for standard PO.DAAC
+            # GRACE Level-2 files.
+            if _is_coeff_record(token) and len(parts) >= 5:
                 parsed = _parse_coeff_record(parts)
                 if parsed is None:
                     continue
@@ -115,26 +139,35 @@ def read_gfc(gfc_file: str, Lmax: int) -> SHCoefficients:
                     C[l, m] = clm
                     S[l, m] = slm
                     coeff_count += 1
+                    max_degree_seen = max(max_degree_seen, l)
                 continue
 
             # Parse header key-values when available.
-            if len(parts) >= 2 and not token.startswith("#"):
-                key = parts[0].lower()
+            parsed_header = _parse_header_value(stripped)
+            if parsed_header is not None:
+                key, value = parsed_header
                 if key in {
                     "modelname",
                     "product_type",
                     "earth_gravity_constant",
+                    "earth_gravity_param",
                     "radius",
+                    "mean_equator_radius",
                     "max_degree",
+                    "degree",
+                    "order",
                     "norm",
+                    "normalization",
                     "tide_system",
+                    "permanent_tide_flag",
                     "errors",
                     "time_coverage_start",
                     "time_coverage_end",
                 }:
-                    meta[key] = stripped.split(None, 1)[1].strip()
+                    meta[key] = value
 
     meta["coeff_count"] = coeff_count
+    meta["max_degree_seen"] = max_degree_seen
 
     ym = extract_ym_from_gfc(gfc_file)
     if ym:
