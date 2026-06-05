@@ -10,8 +10,11 @@ from __future__ import annotations
 import contextlib
 import os
 import re
+import sys
 import threading
 import time
+from dataclasses import replace
+from datetime import datetime
 from pathlib import Path
 from types import MethodType
 
@@ -21,6 +24,20 @@ from PySide6.QtWidgets import QLabel, QLineEdit, QPushButton, QHBoxLayout, QWidg
 
 
 _CONFIGURED_ATTR = "_global_run_monitor_configured"
+
+
+def _format_duration(seconds: float | int | None) -> str:
+    try:
+        value = int(max(0, float(seconds or 0)))
+    except Exception:
+        return "--"
+    if value < 60:
+        return f"{value}s"
+    minutes, sec = divmod(value, 60)
+    if minutes < 60:
+        return f"{minutes}m{sec:02d}s"
+    hours, minutes = divmod(minutes, 60)
+    return f"{hours}h{minutes:02d}m"
 
 
 def _format_eta(start_ts: float, pct: float) -> str:
@@ -34,15 +51,13 @@ def _format_eta(start_ts: float, pct: float) -> str:
         return "ETA ..."
     elapsed = max(0.0, time.time() - float(start_ts))
     remaining = elapsed * max(0.0, 100.0 - pct) / max(pct, 1.0e-6)
-    if remaining < 60.0:
-        return f"ETA {int(round(remaining))}s"
-    minutes = int(remaining // 60)
-    seconds = int(round(remaining % 60))
-    if minutes < 60:
-        return f"ETA {minutes}m{seconds:02d}s"
-    hours = minutes // 60
-    minutes = minutes % 60
-    return f"ETA {hours}h{minutes:02d}m"
+    return f"ETA {_format_duration(remaining)}"
+
+
+def _format_elapsed_eta(start_ts: float, pct: float | None = None) -> str:
+    elapsed = _format_duration(time.time() - float(start_ts or time.time()))
+    eta = _format_eta(start_ts, pct) if pct is not None else "ETA --"
+    return f"ETC {elapsed} | {eta}"
 
 
 def _remove_widget_from_layout(widget) -> None:
@@ -127,6 +142,29 @@ def _date_from_ym(ym: str) -> str:
     return f"{ym}-01" if ym else ""
 
 
+def _parse_ym_dt(ym: str) -> datetime:
+    ym = _ym_from_any(ym)
+    if not ym:
+        raise ValueError(f"Invalid YYYY-MM value: {ym!r}")
+    return datetime(int(ym[:4]), int(ym[5:7]), 1)
+
+
+def _shift_month(ym: str, delta: int) -> str:
+    dt = _parse_ym_dt(ym)
+    month0 = dt.year * 12 + dt.month - 1 + int(delta)
+    year, month0 = divmod(month0, 12)
+    return f"{year:04d}-{month0 + 1:02d}"
+
+
+def _iter_ym_chunks(start_ym: str, end_ym: str, months_per_chunk: int = 12):
+    current = _ym_from_any(start_ym)
+    end = _ym_from_any(end_ym)
+    while current and current <= end:
+        chunk_end = min(_shift_month(current, months_per_chunk - 1), end)
+        yield current, chunk_end
+        current = _shift_month(chunk_end, 1)
+
+
 def _retitle_processing_page(window) -> None:
     try:
         from grace_pipeline.ui.qt.i18n import TRANSLATIONS
@@ -160,27 +198,27 @@ def _compact_top_monitor(window) -> None:
         progress_layout = QHBoxLayout(window.top_progress_wrap)
     progress_layout.setContentsMargins(8, 5, 8, 5)
     progress_layout.setSpacing(6)
-    window.top_progress_wrap.setMinimumWidth(760)
-    window.top_progress_wrap.setMaximumWidth(940)
+    window.top_progress_wrap.setMinimumWidth(560)
+    window.top_progress_wrap.setMaximumWidth(700)
     window.top_progress_wrap.setMaximumHeight(48)
     window.top_progress_wrap.setToolTip("Click to expand or collapse run progress details.")
 
-    window.top_progress_label.setMinimumWidth(88)
-    window.top_progress_label.setMaximumWidth(170)
+    window.top_progress_label.setMinimumWidth(82)
+    window.top_progress_label.setMaximumWidth(145)
     window.top_progress_label.setText("Idle")
-    window.top_progress_detail.setMinimumWidth(84)
-    window.top_progress_detail.setMaximumWidth(118)
-    window.top_progress_percent.setMinimumWidth(46)
-    window.top_progress_percent.setMaximumWidth(56)
-    window.top_progress_bar.setMinimumWidth(230)
-    window.top_progress_bar.setMaximumWidth(430)
+    window.top_progress_detail.setMinimumWidth(74)
+    window.top_progress_detail.setMaximumWidth(96)
+    window.top_progress_percent.setMinimumWidth(42)
+    window.top_progress_percent.setMaximumWidth(50)
+    window.top_progress_bar.setMinimumWidth(220)
+    window.top_progress_bar.setMaximumWidth(320)
 
-    window.top_progress_task = QLabel("Task idle | Subtask idle | ETA --")
+    window.top_progress_task = QLabel("ETC -- | ETA --")
     window.top_progress_task.setObjectName("TopProgressDetail")
-    window.top_progress_task.setMinimumWidth(300)
-    window.top_progress_task.setMaximumWidth(640)
+    window.top_progress_task.setMinimumWidth(110)
+    window.top_progress_task.setMaximumWidth(150)
     window.top_progress_task.setWordWrap(False)
-    progress_layout.addWidget(window.top_progress_task, 1)
+    progress_layout.addWidget(window.top_progress_task, 0)
 
     window.top_progress_subtask = window.top_progress_task
     window.top_progress_eta = window.top_progress_task
@@ -188,7 +226,7 @@ def _compact_top_monitor(window) -> None:
     window.btn_top_pause = QPushButton("Pause")
     window.btn_top_pause.setObjectName("GhostButton")
     window.btn_top_pause.setMinimumHeight(28)
-    window.btn_top_pause.setMaximumWidth(68)
+    window.btn_top_pause.setMaximumWidth(64)
     window.btn_top_pause.setEnabled(False)
     progress_layout.addWidget(window.btn_top_pause, 0)
 
@@ -202,9 +240,9 @@ def _compact_top_monitor(window) -> None:
     def toggle_progress_width(_event):
         expanded = not bool(getattr(window, "_top_progress_expanded", False))
         window._top_progress_expanded = expanded
-        window.top_progress_wrap.setMaximumWidth(1180 if expanded else 940)
-        window.top_progress_bar.setMaximumWidth(560 if expanded else 430)
-        window.top_progress_task.setMaximumWidth(860 if expanded else 640)
+        window.top_progress_wrap.setMaximumWidth(880 if expanded else 700)
+        window.top_progress_bar.setMaximumWidth(480 if expanded else 320)
+        window.top_progress_task.setMaximumWidth(190 if expanded else 150)
 
     window.top_progress_wrap.mousePressEvent = toggle_progress_width
 
@@ -286,15 +324,14 @@ def _move_filter_paths_to_processing(window) -> None:
         proc.btn_run_filters.setObjectName("PrimaryButton")
         proc.btn_run_filters.setMinimumHeight(38)
 
-    # Input card: keep the user-selected GFC directory first, then detected
-    # coverage, then optional download controls.
+    _install_processing_action_bar(window)
+
     data_page.btn_download_dir_browse.setText("选择下载文件夹...")
     data_page.btn_download_gfc_range.setText("下载")
     _move_field_row_to_layout(data_page.edit_gfc_input_dir, data_page.card_input_dirs.body, insert_index=0)
     _move_field_row_to_layout(data_page.lbl_gfc_detected_range, data_page.card_input_dirs.body, insert_index=1)
     _move_field_row_to_layout(data_page.edit_download_dir, data_page.card_input_dirs.body, insert_index=2)
 
-    # Output card: hide the raw logs path and expose an action button instead.
     _hide_field_row_for_widget(data_page.edit_logs_dir)
     if not hasattr(data_page, "btn_open_logs"):
         data_page.btn_open_logs = QPushButton("Open Logs")
@@ -302,8 +339,6 @@ def _move_filter_paths_to_processing(window) -> None:
         data_page.card_output_dirs.body.addWidget(data_page.btn_open_logs)
     _safe_show(data_page.btn_open_logs)
 
-    # Auxiliary filter files. Reuse existing rows instead of recreating rows to
-    # avoid deleting Qt C++ children that are still referenced by Python wrappers.
     _move_field_row_to_layout(data_page.edit_ddk_data_dir, data_page.card_reference_paths.body, insert_index=0)
     for widget in (data_page.edit_ddk_data_dir, data_page.edit_low_degree_path, data_page.edit_degree1_path, data_page.edit_gia_path):
         _show_field_row_for_widget(widget)
@@ -321,14 +356,15 @@ def _move_filter_paths_to_processing(window) -> None:
         _remove_widget_from_layout(data_page.card_input_dirs)
         _remove_widget_from_layout(data_page.card_output_dirs)
         _remove_widget_from_layout(data_page.card_reference_paths)
+        # Page order: header, action bar, GFC paths, auxiliary files, output paths,
+        # then processing parameters. This keeps the mandatory file inputs near the top.
         proc.body.insertWidget(2, data_page.card_input_dirs)
-        proc.body.insertWidget(3, data_page.card_output_dirs)
-        proc.body.insertWidget(4, data_page.card_reference_paths)
+        proc.body.insertWidget(3, data_page.card_reference_paths)
+        proc.body.insertWidget(4, data_page.card_output_dirs)
     except Exception:
         pass
 
     _install_degree_input(window)
-    _install_processing_action_bar(window)
 
 
 def _patch_filter_path_scanning(controller) -> None:
@@ -339,13 +375,12 @@ def _patch_filter_path_scanning(controller) -> None:
         gfc_dir = self._native_path(self.window.page_data_paths.edit_gfc_input_dir.text(), base_dir=ROOT_DIR)
         if not gfc_dir or not Path(gfc_dir).exists():
             return []
-        entries = []
+        entries_by_ym = {}
         for file_path in detect_gfc_files(gfc_dir, getattr(self.host.cfg.time, "product_type", "GSM"), getattr(self.host.cfg.time, "file_ext", ".gfc")):
             ym = extract_ym_from_gfc(file_path)
-            if ym:
-                entries.append(TimeEntry.from_ym(ym, file_path))
-        entries.sort(key=lambda item: item.dt)
-        return entries
+            if ym and ym not in entries_by_ym:
+                entries_by_ym[ym] = TimeEntry.from_ym(ym, file_path)
+        return sorted(entries_by_ym.values(), key=lambda item: item.dt)
 
     def refresh_detected_time_range(self) -> None:
         page = self.window.page_processing
@@ -372,6 +407,83 @@ def _patch_filter_path_scanning(controller) -> None:
 
     controller._detect_time_entries_for_ui = MethodType(detect_time_entries_for_ui, controller)
     controller._refresh_detected_time_range = MethodType(refresh_detected_time_range, controller)
+
+
+def _gfc_granule_ym(granule) -> str:
+    from grace_pipeline.core.time_index import extract_ym_from_gfc
+
+    ym = extract_ym_from_gfc(str(getattr(granule, "name", "") or ""))
+    if ym:
+        return ym
+    begin = str(getattr(granule, "begin", "") or "")
+    return _ym_from_any(begin)
+
+
+def _query_gsm_granules_chunked(center: str, start_ym: str, end_ym: str):
+    from grace_pipeline.services.gfc_download import query_gsm_granules
+
+    by_month = {}
+    for chunk_start, chunk_end in _iter_ym_chunks(start_ym, end_ym, months_per_chunk=12):
+        for granule in query_gsm_granules(center, chunk_start, chunk_end):
+            ym = _gfc_granule_ym(granule)
+            if not ym or ym < start_ym or ym > end_ym:
+                continue
+            # Keep one GSM solution per calendar month. CMR may return multiple
+            # granule records for the same month/reprocessing variant; downloading
+            # all of them inflates counts and can stop at the CMR page-size limit.
+            by_month.setdefault(ym, replace(granule))
+    return [by_month[key] for key in sorted(by_month)]
+
+
+def _download_gsm_range_deduped(gfc_dir, start_ym, end_ym, center, low_degree_dir, progress, progress_pct, check_pause_stop):
+    from grace_pipeline.services.gfc_download import (
+        DownloadResult,
+        _destination_name,
+        _download_url_with_progress,
+        download_low_degree_files,
+        normalize_center,
+    )
+    from grace_pipeline.core.time_index import extract_ym_from_gfc
+
+    out_dir = Path(gfc_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    resolved_center = normalize_center(center)
+    granules = _query_gsm_granules_chunked(resolved_center, start_ym, end_ym)
+    if not granules:
+        raise RuntimeError(f"No GSM GFC granules found for {resolved_center} {start_ym} to {end_ym}.")
+
+    files = []
+    skipped = []
+    total = len(granules)
+    completed = 0
+    for idx, granule in enumerate(granules, start=1):
+        check_pause_stop()
+        target = out_dir / _destination_name(granule.name)
+        existing_ym = extract_ym_from_gfc(str(target)) if target.exists() else None
+        if target.exists() and existing_ym:
+            skipped.append(target)
+            completed += 1
+            if progress_pct:
+                progress_pct(100.0 * completed / max(1, total), f"{completed}/{total}::{target.name} skipped")
+            continue
+        if progress:
+            progress(f"Downloading {granule.name}")
+
+        def on_bytes(done: int, byte_total: int, file_idx: int = idx, file_name: str = target.name) -> None:
+            check_pause_stop()
+            fraction = max(0.0, min(1.0, done / byte_total)) if byte_total > 0 else 0.0
+            overall = 100.0 * ((file_idx - 1) + fraction) / max(1, total)
+            if progress_pct:
+                progress_pct(overall, f"{file_idx}/{total}::{file_name}")
+
+        _download_url_with_progress(granule.url, target, progress_bytes=on_bytes)
+        files.append(target)
+        completed += 1
+        if progress_pct:
+            progress_pct(100.0 * completed / max(1, total), f"{completed}/{total}::{target.name} complete")
+
+    low_degree_files = download_low_degree_files(low_degree_dir, progress=progress) if low_degree_dir else {}
+    return DownloadResult(tuple(files), tuple(skipped), resolved_center, low_degree_files, product_type="GSM")
 
 
 def _patch_download_controls(window, controller) -> None:
@@ -427,6 +539,9 @@ def _patch_download_controls(window, controller) -> None:
             end = processing_end
         if start > end:
             raise ValueError("Download date range is outside the configured processing range.")
+        # Normalize the input widgets so the user sees the actual range used.
+        self._set_edit_text(download_page.edit_download_start_ym, start, block_signals=True)
+        self._set_edit_text(download_page.edit_download_end_ym, end, block_signals=True)
         return start, end
 
     def on_download_gfc_range(self) -> None:
@@ -464,7 +579,7 @@ def _patch_download_controls(window, controller) -> None:
             self.signals.progress.emit("download", pct, text)
 
         def task() -> None:
-            from grace_pipeline.services.gfc_download import download_gfc_range, download_mascon_nc
+            from grace_pipeline.services.gfc_download import download_mascon_nc
 
             check_pause_stop()
             if product_type == "MASCON_NC":
@@ -478,15 +593,7 @@ def _patch_download_controls(window, controller) -> None:
                     progress_pct=progress_pct,
                 )
             else:
-                result = download_gfc_range(
-                    gfc_dir=download_dir,
-                    start_ym=start_ym,
-                    end_ym=end_ym,
-                    center=center,
-                    low_degree_dir=low_degree_dir,
-                    progress=progress,
-                    progress_pct=progress_pct,
-                )
+                result = _download_gsm_range_deduped(download_dir, start_ym, end_ym, center, low_degree_dir, progress, progress_pct, check_pause_stop)
             check_pause_stop()
             self.signals.gfc_download_done.emit(result)
 
@@ -548,25 +655,122 @@ def _patch_filter_run_validation(window, controller) -> None:
     controller.on_run_pipeline = MethodType(on_run_pipeline, controller)
 
 
+def _log_dir(window) -> Path:
+    data_page = window.page_data_paths
+    log_dir = data_page.edit_logs_dir.text().strip()
+    if not log_dir:
+        output_root = data_page.edit_main_output_root.text().strip()
+        log_dir = str(Path(output_root) / "logs") if output_root else str(Path.cwd() / "outputs" / "logs")
+    path = Path(log_dir)
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def _patch_persistent_logs(window, controller) -> None:
+    if controller is None or bool(getattr(controller, "_persistent_logs_patched", False)):
+        return
+    controller._persistent_logs_patched = True
+    original_on_log = controller.on_log
+
+    def append_file(text: str, tag: str = "stdout") -> None:
+        try:
+            log_file = _log_dir(window) / "current_run.log"
+            ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            with log_file.open("a", encoding="utf-8") as handle:
+                handle.write(f"[{ts}] [{tag}] {text}\n")
+        except Exception:
+            return
+
+    def on_log(self, text: str, tag: str = "stdout"):
+        append_file(str(text), str(tag or "stdout"))
+        return original_on_log(text, tag)
+
+    controller.on_log = MethodType(on_log, controller)
+    with contextlib.suppress(Exception):
+        controller.signals.log.connect(lambda text, tag="stdout": append_file(str(text), str(tag or "stdout")))
+
+
 def _patch_open_logs(window, controller) -> None:
     data_page = window.page_data_paths
     if not hasattr(data_page, "btn_open_logs"):
         return
 
     def open_logs() -> None:
-        output_root = data_page.edit_main_output_root.text().strip()
-        log_dir = data_page.edit_logs_dir.text().strip()
-        if not log_dir and output_root:
-            log_dir = str(Path(output_root) / "logs")
-        if not log_dir:
-            log_dir = str(Path.cwd() / "outputs" / "logs")
-        path = Path(log_dir)
-        path.mkdir(parents=True, exist_ok=True)
+        path = _log_dir(window)
+        readme = path / "README.txt"
+        if not readme.exists() and not any(path.iterdir()):
+            readme.write_text("Runtime logs are written to current_run.log after a task starts.\n", encoding="utf-8")
         QDesktopServices.openUrl(QUrl.fromLocalFile(str(path)))
 
     with contextlib.suppress(Exception):
         data_page.btn_open_logs.clicked.disconnect()
     data_page.btn_open_logs.clicked.connect(open_logs)
+
+
+def _patch_run_thread_behavior(window, controller) -> None:
+    if controller is None or bool(getattr(controller, "_run_thread_behavior_patched", False)):
+        return
+    controller._run_thread_behavior_patched = True
+
+    def run_in_thread(self, scope: str, target, status_text: str):
+        from grace_pipeline.ui.qt.controller import SignalLogWriter
+
+        if self.host._active_scope:
+            self._show_warning("Run", f"Another task is already running: {self.host._active_scope}")
+            return
+        pause_event, stop_event = self.host._get_scope_events(scope)
+        pause_event.clear()
+        stop_event.clear()
+        self.host._active_scope = scope
+        self._top_status_text = status_text
+        self._pending_terminal_status = None
+        self._pending_terminal_scope = scope
+        self.window.set_top_status(status_text, "warning")
+        self.window.set_run_active(True, text="Preparing...", indeterminate=True)
+        self.window.page_monitor.lbl_pipeline_status.setText(status_text)
+        self.window.page_dashboard.lbl_dashboard_status.setText(status_text)
+        self.window.page_dashboard.lbl_dashboard_stage.setText("Preparing execution environment and validating configuration.")
+        self.window.page_dashboard.lbl_active_run_name.setText(status_text)
+        self.window.page_dashboard.lbl_active_task.setText("Preparing execution environment and validating configuration.")
+        self.window.page_dashboard.lbl_active_counts.setText("0 / 0")
+        self._sync_monitor_context()
+        self.window.refresh_translations()
+        with contextlib.suppress(Exception):
+            _log_dir(self.window).mkdir(parents=True, exist_ok=True)
+
+        def worker():
+            err = None
+            old_stdout, old_stderr = sys.stdout, sys.stderr
+            sys.stdout = SignalLogWriter(self.signals, "stdout")
+            sys.stderr = SignalLogWriter(self.signals, "stderr")
+            try:
+                target()
+            except Exception as exc:
+                err = exc
+            finally:
+                with contextlib.suppress(Exception):
+                    sys.stdout.flush()
+                with contextlib.suppress(Exception):
+                    sys.stderr.flush()
+                sys.stdout, sys.stderr = old_stdout, old_stderr
+                self.host._active_scope = ""
+                self._last_completed_scope = scope
+                for events in self.host._scope_events.values():
+                    events["pause"].clear()
+                    events["stop"].clear()
+                if err is not None:
+                    self._pending_terminal_status = ("ERROR", "danger")
+                    self.signals.status.emit("ERROR", "danger")
+                    self.signals.message.emit("error", scope.title(), str(err))
+                else:
+                    self._pending_terminal_status = ("READY", "success")
+                    self.signals.status.emit("READY", "success")
+
+        t = threading.Thread(target=worker, daemon=True)
+        self._threads[scope] = t
+        t.start()
+
+    controller._run_in_thread = MethodType(run_in_thread, controller)
 
 
 def configure_global_run_monitor(window) -> None:
@@ -594,7 +798,9 @@ def configure_global_run_monitor(window) -> None:
         _patch_filter_path_scanning(controller)
         _patch_download_controls(window, controller)
         _patch_filter_run_validation(window, controller)
+        _patch_persistent_logs(window, controller)
         _patch_open_logs(window, controller)
+        _patch_run_thread_behavior(window, controller)
         for signal, slot in (
             (window.page_processing.btn_run_filters.clicked, controller.on_run_pipeline),
             (window.btn_top_pause.clicked, controller.on_pause_active),
@@ -622,7 +828,7 @@ def configure_global_run_monitor(window) -> None:
         stop_button = getattr(self, "btn_top_stop", None)
         if pause_button is not None:
             pause_button.setEnabled(active)
-            pause_button.setText("Pause" if active else "Pause")
+            pause_button.setText("Pause")
         if stop_button is not None:
             stop_button.setEnabled(active)
 
@@ -638,13 +844,19 @@ def configure_global_run_monitor(window) -> None:
     def _set_monitor_text(self, task: str, subtask: str = "", pct: float | None = None, eta: str = ""):
         task = str(task or "Idle").replace("Task:", "").strip()
         subtask = str(subtask or "").replace("Subtask:", "").strip()
-        eta_text = eta or (_format_eta(getattr(self, "_global_run_started_at", 0.0), pct) if pct is not None else "ETA --")
+        timing_text = eta or (_format_elapsed_eta(getattr(self, "_global_run_started_at", 0.0), pct) if pct is not None else "ETC -- | ETA --")
         compact = f"Task: {task}"
         if subtask:
             compact += f" | Subtask: {subtask}"
-        compact += f" | {eta_text}"
-        self.top_progress_task.setText(compact)
+        compact += f" | {timing_text}"
+        self.top_progress_task.setText(timing_text)
         self.top_progress_task.setToolTip(compact)
+        if hasattr(self.page_dashboard, "lbl_dashboard_stage"):
+            self.page_dashboard.lbl_dashboard_stage.setText(compact)
+        if hasattr(self.page_dashboard, "lbl_active_task"):
+            self.page_dashboard.lbl_active_task.setText(compact)
+        if hasattr(self.page_monitor, "lbl_current_task"):
+            self.page_monitor.lbl_current_task.setText(compact)
 
     def set_run_active(self, active: bool, text: str = "", indeterminate: bool = False):
         if active:
@@ -656,7 +868,7 @@ def configure_global_run_monitor(window) -> None:
             self.set_pause_action_paused(False)
             self._set_monitor_text(text or "Preparing", "preparing", -1.0)
         elif text == "Idle":
-            self._set_monitor_text("Idle", "", None, "ETA --")
+            self._set_monitor_text("Idle", "", None, "ETC -- | ETA --")
 
     def set_run_progress(self, pct: float, detail: str = "", stage: str = "", subtask: str = "", eta: str = ""):
         original_set_run_progress(pct, detail=detail, stage=stage)
