@@ -25,6 +25,7 @@ def start_gui(argv: list[str] | None = None):
     from PySide6.QtGui import QFont, QFontDatabase
     from PySide6.QtWidgets import QApplication
 
+    from grace_pipeline.ui.qt.global_monitor import configure_global_run_monitor
     from grace_pipeline.ui.qt.main_window import MainWindow
     from grace_pipeline.ui.qt.theme import app_stylesheet
 
@@ -56,6 +57,7 @@ def start_gui(argv: list[str] | None = None):
     app.setFont(font)
 
     window = MainWindow(load_persisted=True)
+    configure_global_run_monitor(window)
     window.show()
 
     if owns_app:
