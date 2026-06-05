@@ -8,6 +8,11 @@ from grace_pipeline.infra.runtime.cache import (
     scope_cache_dir,
     scope_cache_file,
 )
+from grace_pipeline.infra.runtime.resources import (
+    RuntimeContext,
+    detect_runtime_context,
+    recommend_workers,
+)
 from grace_pipeline.infra.runtime.runtime import limit_blas_threads
 from grace_pipeline.infra.runtime.time_ops import (
     build_scope_signature,
@@ -22,6 +27,9 @@ from grace_pipeline.infra.runtime.time_ops import (
 from grace_pipeline.infra.runtime.utils import ProgressBar, cfg_hash, deep_merge, ensure_dir, merge_struct, progress_bar, safe_save
 
 __all__ = [
+    "RuntimeContext",
+    "detect_runtime_context",
+    "recommend_workers",
     "limit_blas_threads",
     "ensure_dir",
     "merge_struct",
