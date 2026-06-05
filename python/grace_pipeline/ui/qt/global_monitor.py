@@ -12,10 +12,7 @@ import time
 from pathlib import Path
 from types import MethodType
 
-from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QLabel, QLineEdit, QPushButton, QHBoxLayout, QWidget
-
-from grace_pipeline.ui.qt.path_defaults import DEFAULT_DATA_PATHS
 
 
 _CONFIGURED_ATTR = "_global_run_monitor_configured"
@@ -49,29 +46,55 @@ def _remove_widget_from_layout(widget) -> None:
         parent.layout().removeWidget(widget)
 
 
-def _clear_layout(layout) -> None:
-    while layout is not None and layout.count():
-        item = layout.takeAt(0)
-        widget = item.widget()
-        child_layout = item.layout()
-        if child_layout is not None:
-            _clear_layout(child_layout)
-        if widget is not None:
-            widget.setParent(None)
-
-
 def _set_card_title(card, title: str) -> None:
     label = card.findChild(QLabel, "CardTitle")
     if label is not None:
         label.setText(title)
 
 
-def _hide_field_row_for_widget(widget) -> None:
+def _field_row_for_widget(widget):
     row = widget.parentWidget() if widget is not None else None
     while row is not None and row.objectName() != "FieldRow":
         row = row.parentWidget()
+    return row
+
+
+def _hide_field_row_for_widget(widget) -> None:
+    row = _field_row_for_widget(widget)
     if row is not None:
         row.hide()
+
+
+def _show_field_row_for_widget(widget) -> None:
+    row = _field_row_for_widget(widget)
+    if row is not None:
+        row.show()
+
+
+def _safe_hide(widget) -> None:
+    if widget is None:
+        return
+    try:
+        widget.hide()
+    except RuntimeError:
+        # The wrapper can outlive its C++ object if a previous layout rewrite
+        # removed the parent widget. Ignore stale wrappers rather than failing
+        # GUI startup/tests.
+        return
+
+
+def _move_field_row_to_layout(widget, target_layout, insert_index: int | None = None) -> None:
+    row = _field_row_for_widget(widget)
+    if row is None:
+        return
+    parent = row.parentWidget()
+    if parent is not None and parent.layout() is not None:
+        parent.layout().removeWidget(row)
+    row.show()
+    if insert_index is None:
+        target_layout.addWidget(row)
+    else:
+        target_layout.insertWidget(insert_index, row)
 
 
 def _retitle_processing_page(window) -> None:
@@ -204,59 +227,24 @@ def _move_filter_paths_to_processing(window) -> None:
     _set_card_title(data_page.card_output_dirs, "Filter Output Paths")
     _set_card_title(data_page.card_reference_paths, "Auxiliary Filter Files")
 
-    try:
-        from grace_pipeline.ui.qt.pages import _make_edit_browse_widget, _make_field_row
-
-        _clear_layout(data_page.card_reference_paths.body)
-        _hide_field_row_for_widget(data_page.edit_ddk_data_dir)
-        data_page.card_reference_paths.body.addWidget(
-            _make_field_row(
-                "DDK Data Directory",
-                _make_edit_browse_widget(data_page.edit_ddk_data_dir, data_page.btn_ddk_browse),
-                data_page.badge_ddk_data,
-                label_width=220,
-            )
-        )
-        data_page.card_reference_paths.body.addWidget(
-            _make_field_row(
-                "C20 Replacement File",
-                _make_edit_browse_widget(data_page.edit_low_degree_path, data_page.btn_low_degree_browse),
-                data_page.badge_low_degree,
-                label_width=220,
-            )
-        )
-        data_page.card_reference_paths.body.addWidget(
-            _make_field_row(
-                "Degree-1 File",
-                _make_edit_browse_widget(data_page.edit_degree1_path, data_page.btn_degree1_browse),
-                data_page.badge_degree1,
-                label_width=220,
-            )
-        )
-        data_page.card_reference_paths.body.addWidget(
-            _make_field_row(
-                "GIA Model Path",
-                _make_edit_browse_widget(data_page.edit_gia_path, data_page.btn_gia_browse),
-                data_page.badge_gia,
-                label_width=220,
-            )
-        )
-    except Exception:
-        pass
+    # Do not clear or recreate rows here. Qt deletes child C++ widgets when an
+    # entire row is removed from a layout; reusing the old Python wrappers then
+    # causes "Internal C++ object already deleted" during startup/tests. Move the
+    # existing DDK row and hide/show existing rows instead.
+    _move_field_row_to_layout(data_page.edit_ddk_data_dir, data_page.card_reference_paths.body, insert_index=0)
+    for widget in (data_page.edit_ddk_data_dir, data_page.edit_low_degree_path, data_page.edit_degree1_path, data_page.edit_gia_path):
+        _show_field_row_for_widget(widget)
 
     # Mascon and boundary inputs are still present as hidden compatibility
     # widgets for leakage/basin config loading, but not shown in basic filtering.
     for widget in (
-        getattr(data_page, "edit_boundary_path", None), getattr(data_page, "btn_boundary_browse", None), getattr(data_page, "badge_boundary_path", None),
-        getattr(data_page, "edit_boundary_root", None), getattr(data_page, "btn_boundary_root_browse", None), getattr(data_page, "badge_boundary_root", None),
-        getattr(data_page, "edit_mascon_root", None), getattr(data_page, "btn_mascon_root_browse", None), getattr(data_page, "badge_mascon_root", None),
-        getattr(data_page, "edit_mascon_reference", None), getattr(data_page, "btn_mascon_reference_browse", None), getattr(data_page, "badge_mascon_reference", None),
-        getattr(data_page, "edit_mascon_gad", None), getattr(data_page, "btn_mascon_gad_browse", None), getattr(data_page, "badge_mascon_gad", None),
-        getattr(data_page, "edit_mascon_gia", None), getattr(data_page, "btn_mascon_gia_browse", None), getattr(data_page, "badge_mascon_gia", None),
-        getattr(data_page, "btn_toggle_reference_roots", None), getattr(data_page, "reference_roots_panel", None),
+        getattr(data_page, "edit_boundary_path", None), getattr(data_page, "edit_boundary_root", None),
+        getattr(data_page, "edit_mascon_root", None), getattr(data_page, "edit_mascon_reference", None),
+        getattr(data_page, "edit_mascon_gad", None), getattr(data_page, "edit_mascon_gia", None),
     ):
-        if widget is not None:
-            widget.hide()
+        _hide_field_row_for_widget(widget)
+    for widget in (getattr(data_page, "btn_toggle_reference_roots", None), getattr(data_page, "reference_roots_panel", None)):
+        _safe_hide(widget)
 
     try:
         _remove_widget_from_layout(data_page.card_input_dirs)
@@ -352,9 +340,9 @@ def _patch_download_controls(window, controller) -> None:
         self._run_in_thread("download", task, "DOWNLOADING DATA")
 
     controller.on_download_gfc_range = MethodType(on_download_gfc_range, controller)
-    with_context = getattr(window.page_data_paths.btn_download_gfc_range.clicked, "disconnect", None)
+    disconnect = getattr(window.page_data_paths.btn_download_gfc_range.clicked, "disconnect", None)
     try:
-        if with_context is not None:
+        if disconnect is not None:
             window.page_data_paths.btn_download_gfc_range.clicked.disconnect()
     except Exception:
         pass
