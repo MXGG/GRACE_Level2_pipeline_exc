@@ -7,8 +7,7 @@ look like real processing results.
 
 NAV_ITEMS = [
     ("dashboard", "Dashboard"),
-    ("data_paths", "Data Paths"),
-    ("processing", "Processing Setup"),
+    ("processing", "Filter Processing"),
     ("leakage", "Leakage Correction"),
     ("basin", "Basin Analysis"),
     ("preview", "Preview"),
@@ -18,7 +17,7 @@ NAV_ITEMS = [
 PAGE_TITLES = {
     "dashboard": "Dashboard",
     "data_paths": "Data Paths",
-    "processing": "Processing Setup",
+    "processing": "Filter Processing",
     "leakage": "Leakage Correction",
     "basin": "Basin Workflow",
     "preview": "Preview & Analysis",
@@ -27,9 +26,9 @@ PAGE_TITLES = {
 
 
 PAGE_SUBTITLES = {
-    "dashboard": "Project overview, pipeline actions, and recent execution state.",
-    "data_paths": "Define directory pointers and reference datasets required by the pipeline.",
-    "processing": "Configure time coverage, grid geometry, inversion setup, and filters.",
+    "dashboard": "Project overview, recent execution state, and resolved outputs.",
+    "data_paths": "Internal configuration page for path widgets used by Filter Processing.",
+    "processing": "Configure input/output paths, time coverage, grid geometry, inversion setup, and filters.",
     "leakage": "Choose a correction workflow, inspect input metadata, and hand results to Preview.",
     "basin": "Read GRACE grids, build basin masks, extract basin series, and estimate trend or seasonal signals.",
     "preview": "Inspect stacked products, switch projections, and manage map overlays.",
