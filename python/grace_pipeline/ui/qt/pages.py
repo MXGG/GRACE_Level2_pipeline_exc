@@ -636,7 +636,16 @@ class ProcessingSetupPage(ScrollPage):
         self.lbl_degree_order.setObjectName("MonoText")
         self.chk_remove_mean = QCheckBox("Enable Mean / Anomaly Removal")
         self.chk_remove_mean.setChecked(True)
-        self.cmb_anomaly_baseline = _make_combo(["2004-01 ~ 2009-12", "Full Span"], "2004-01 ~ 2009-12")
+        self.cmb_anomaly_baseline = _make_choice_combo(
+            [
+                ("2004-01 ~ 2009-12", "standard_2004_2009"),
+                ("Full Span", "input_full"),
+                ("Custom Range", "custom"),
+            ],
+            "standard_2004_2009",
+        )
+        self.edit_mean_start_ym = _make_line_edit("2004-01", "YYYY-MM")
+        self.edit_mean_end_ym = _make_line_edit("2009-12", "YYYY-MM")
         self.chk_lowdeg_enable = QCheckBox("Enable Low-Degree Corrections")
         self.chk_lowdeg_enable.setChecked(True)
         self.chk_replace_degree1 = QCheckBox("Degree-1 geocenter")
@@ -664,6 +673,8 @@ class ProcessingSetupPage(ScrollPage):
         self.card_inversion.body.addWidget(_make_field_row("Mean / Anomaly", self.chk_remove_mean))
         self.row_anomaly_baseline = _make_field_row("Anomaly Baseline", self.cmb_anomaly_baseline)
         self.card_inversion.body.addWidget(self.row_anomaly_baseline)
+        self.row_mean_baseline_range = _make_dual_field("Baseline Start", self.edit_mean_start_ym, "Baseline End", self.edit_mean_end_ym)
+        self.card_inversion.body.addWidget(self.row_mean_baseline_range)
         self.card_inversion.body.addWidget(_make_field_row("Low-Degree", self.chk_lowdeg_enable))
         self.card_inversion.body.addWidget(self.lowdeg_panel)
         self.card_inversion.body.addWidget(_make_field_row("GIA", self.chk_apply_gia))

@@ -21,6 +21,7 @@ if str(PYTHON_ROOT) not in sys.path:
 from grace_pipeline.infra.config import Config
 from grace_pipeline.services.gfc_download import DownloadResult
 from grace_pipeline.ui.qt.main_window import MainWindow
+from grace_pipeline.ui.qt.global_monitor import configure_global_run_monitor
 from grace_pipeline.ui.qt.path_defaults import DEFAULT_DATA_PATHS
 from grace_pipeline.ui.qt.preferences import UIPreferences
 import grace_pipeline.ui.qt.controller as qt_controller
@@ -197,11 +198,15 @@ class DataPathsUiTest(unittest.TestCase):
         self.assertEqual(len(set(x_positions)), 1)
 
     def test_run_monitor_page_is_available_from_navigation(self):
-        self.assertIn("monitor", self.window._nav_buttons)
-        self.window.set_active_page("monitor")
+        configure_global_run_monitor(self.window)
+        self.assertNotIn("monitor", self.window._nav_buttons)
+        self.assertTrue(hasattr(self.window, "btn_top_pause"))
+        self.assertTrue(hasattr(self.window, "btn_top_stop"))
+        self.assertTrue(hasattr(self.window, "top_progress_bar"))
         self.app.processEvents()
-        self.assertIs(self.window.stack.currentWidget(), self.window.page_monitor)
-        self.assertEqual(self.window.breadcrumb.text(), "Run Monitor")
+        self.assertFalse(self.window.btn_top_pause.isEnabled())
+        self.assertFalse(self.window.btn_top_stop.isEnabled())
+        self.assertEqual(self.window.top_progress_label.text(), "Idle")
         self.assertNotIn("Processing tile 42 of 180", self.window.page_monitor.text_live_logs.toPlainText())
 
     def test_dashboard_preview_only_shows_output_structure(self):
@@ -331,7 +336,7 @@ class DataPathsUiTest(unittest.TestCase):
         page.edit_start_date.setText("2005-01-01")
         page.edit_end_date.setText("2010-12-01")
         page.chk_remove_mean.setChecked(True)
-        page.cmb_anomaly_baseline.setCurrentText("Full Span")
+        self.window.controller._set_combo_value(page.cmb_anomaly_baseline, "input_full")
         page.chk_lowdeg_enable.setChecked(True)
         page.chk_replace_degree1.setChecked(False)
         page.chk_replace_c20.setChecked(True)
@@ -342,6 +347,7 @@ class DataPathsUiTest(unittest.TestCase):
         self.assertFalse(cfg_dict["time"]["auto_detect_gfc"])
         self.assertEqual(cfg_dict["time"]["start_ym"], "2005-01")
         self.assertEqual(cfg_dict["time"]["end_ym"], "2010-12")
+        self.assertEqual(cfg_dict["inversion"]["mean_baseline_mode"], "input_full")
         self.assertEqual(cfg_dict["inversion"]["mean_start_ym"], "")
         self.assertEqual(cfg_dict["inversion"]["mean_end_ym"], "")
         self.assertFalse(cfg_dict["inversion"]["lowdeg"]["replace_degree1"])
@@ -350,13 +356,22 @@ class DataPathsUiTest(unittest.TestCase):
         self.assertTrue(cfg_dict["inversion"]["gia"]["enable"])
 
         page.chk_manual_time_override.setChecked(False)
-        page.cmb_anomaly_baseline.setCurrentText("2004-01 ~ 2009-12")
+        self.window.controller._set_combo_value(page.cmb_anomaly_baseline, "standard_2004_2009")
         cfg_dict = self.window.controller.collect_config_dict({})
         self.assertTrue(cfg_dict["time"]["auto_detect_gfc"])
         self.assertEqual(cfg_dict["time"]["start_ym"], page.edit_start_date.text()[:7])
         self.assertEqual(cfg_dict["time"]["end_ym"], page.edit_end_date.text()[:7])
+        self.assertEqual(cfg_dict["inversion"]["mean_baseline_mode"], "standard_2004_2009")
         self.assertEqual(cfg_dict["inversion"]["mean_start_ym"], "2004-01")
         self.assertEqual(cfg_dict["inversion"]["mean_end_ym"], "2009-12")
+
+        self.window.controller._set_combo_value(page.cmb_anomaly_baseline, "custom")
+        page.edit_mean_start_ym.setText("1999-01")
+        page.edit_mean_end_ym.setText("2099-12")
+        cfg_dict = self.window.controller.collect_config_dict({})
+        self.assertEqual(cfg_dict["inversion"]["mean_baseline_mode"], "custom")
+        self.assertEqual(cfg_dict["inversion"]["mean_start_ym"], cfg_dict["time"]["start_ym"])
+        self.assertEqual(cfg_dict["inversion"]["mean_end_ym"], cfg_dict["time"]["end_ym"])
 
     def test_auto_low_degree_selects_tn13_from_detected_gsm_center(self):
         with tempfile.TemporaryDirectory() as tmp:

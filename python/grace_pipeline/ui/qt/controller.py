@@ -823,6 +823,7 @@ class MainWindowController:
         w.page_processing.slider_degree_order.valueChanged.connect(self._update_degree_order_label)
         w.page_processing.chk_manual_time_override.toggled.connect(self._sync_processing_time_override_state)
         w.page_processing.chk_remove_mean.toggled.connect(self._sync_processing_mean_controls)
+        w.page_processing.cmb_anomaly_baseline.currentIndexChanged.connect(self._sync_processing_mean_controls)
         w.page_processing.chk_lowdeg_enable.toggled.connect(self._sync_processing_lowdeg_controls)
         for widget in (
             w.page_processing.chk_remove_mean,
@@ -832,11 +833,15 @@ class MainWindowController:
             w.page_processing.chk_replace_c30,
             w.page_processing.chk_apply_gia,
             w.page_processing.cmb_anomaly_baseline,
+            w.page_processing.edit_mean_start_ym,
+            w.page_processing.edit_mean_end_ym,
         ):
             if hasattr(widget, "toggled"):
                 widget.toggled.connect(self._sync_dashboard_run_summary)
             if hasattr(widget, "currentTextChanged"):
                 widget.currentTextChanged.connect(self._sync_dashboard_run_summary)
+            if hasattr(widget, "textChanged"):
+                widget.textChanged.connect(self._sync_dashboard_run_summary)
 
         w.page_basin.btn_load_basin_info.clicked.connect(self.on_load_basin_info)
         if hasattr(w.page_basin, "btn_load_boundary_info"):
@@ -1506,9 +1511,16 @@ class MainWindowController:
     def _sync_processing_mean_controls(self, *_args) -> None:
         page = self.window.page_processing
         enabled = page.chk_remove_mean.isChecked()
+        baseline_mode = self._combo_value(page.cmb_anomaly_baseline)
+        custom_enabled = enabled and baseline_mode == "custom"
         page.cmb_anomaly_baseline.setEnabled(enabled)
         if hasattr(page, "row_anomaly_baseline"):
             page.row_anomaly_baseline.setVisible(enabled)
+        for widget_name in ("row_mean_baseline_range", "edit_mean_start_ym", "edit_mean_end_ym"):
+            widget = getattr(page, widget_name, None)
+            if widget is not None:
+                widget.setVisible(custom_enabled)
+                widget.setEnabled(custom_enabled)
         self._sync_dashboard_run_summary()
 
     def _sync_processing_lowdeg_controls(self, *_args) -> None:
@@ -2036,9 +2048,31 @@ class MainWindowController:
 
         inv_cfg["Lmax"] = int(w.page_processing.slider_degree_order.value())
         inv_cfg["remove_mean"] = bool(w.page_processing.chk_remove_mean.isChecked())
-        if inv_cfg["remove_mean"] and w.page_processing.cmb_anomaly_baseline.currentText().strip() == "2004-01 ~ 2009-12":
+        baseline_mode = self._combo_value(w.page_processing.cmb_anomaly_baseline)
+        if baseline_mode not in {"standard_2004_2009", "input_full", "custom"}:
+            baseline_mode = "standard_2004_2009" if baseline_mode == "2004-01 ~ 2009-12" else "input_full"
+        inv_cfg["mean_baseline_mode"] = baseline_mode
+        if not inv_cfg["remove_mean"]:
+            inv_cfg["mean_start_ym"] = ""
+            inv_cfg["mean_end_ym"] = ""
+        elif baseline_mode == "standard_2004_2009":
             inv_cfg["mean_start_ym"] = "2004-01"
             inv_cfg["mean_end_ym"] = "2009-12"
+        elif baseline_mode == "custom":
+            custom_start = self._ym_from_date(w.page_processing.edit_mean_start_ym.text().strip())
+            custom_end = self._ym_from_date(w.page_processing.edit_mean_end_ym.text().strip())
+            if detected_start and custom_start and custom_start < detected_start:
+                custom_start = detected_start
+            if detected_end and custom_start and custom_start > detected_end:
+                custom_start = detected_end
+            if detected_start and custom_end and custom_end < detected_start:
+                custom_end = detected_start
+            if detected_end and custom_end and custom_end > detected_end:
+                custom_end = detected_end
+            if custom_start and custom_end and custom_start > custom_end:
+                custom_start = custom_end
+            inv_cfg["mean_start_ym"] = custom_start
+            inv_cfg["mean_end_ym"] = custom_end
         else:
             inv_cfg["mean_start_ym"] = ""
             inv_cfg["mean_end_ym"] = ""
@@ -2266,10 +2300,18 @@ class MainWindowController:
             w.page_processing.chk_remove_mean.setChecked(bool(getattr(cfg.inversion, "remove_mean", True)))
         mean_start = str(getattr(cfg.inversion, "mean_start_ym", "") or "")
         mean_end = str(getattr(cfg.inversion, "mean_end_ym", "") or "")
-        if mean_start == "2004-01" and mean_end == "2009-12":
-            w.page_processing.cmb_anomaly_baseline.setCurrentText("2004-01 ~ 2009-12")
-        else:
-            w.page_processing.cmb_anomaly_baseline.setCurrentText("Full Span")
+        mean_mode = str(getattr(cfg.inversion, "mean_baseline_mode", "") or "").strip()
+        if mean_mode not in {"standard_2004_2009", "input_full", "custom"}:
+            if mean_start == "2004-01" and mean_end == "2009-12":
+                mean_mode = "standard_2004_2009"
+            elif mean_start or mean_end:
+                mean_mode = "custom"
+            else:
+                mean_mode = "input_full"
+        with QSignalBlocker(w.page_processing.cmb_anomaly_baseline):
+            self._set_combo_value(w.page_processing.cmb_anomaly_baseline, mean_mode)
+        self._set_edit_text(w.page_processing.edit_mean_start_ym, mean_start or "2004-01", block_signals=True)
+        self._set_edit_text(w.page_processing.edit_mean_end_ym, mean_end or "2009-12", block_signals=True)
         lowdeg_cfg = getattr(cfg.inversion, "lowdeg", {}) or {}
         replace_degree1 = bool(lowdeg_cfg.get("replace_degree1", lowdeg_cfg.get("replace_C10", True)))
         with QSignalBlocker(w.page_processing.chk_lowdeg_enable):

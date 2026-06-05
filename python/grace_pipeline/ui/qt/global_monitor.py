@@ -702,9 +702,12 @@ def _patch_open_logs(window, controller) -> None:
             readme.write_text("Runtime logs are written to current_run.log after a task starts.\n", encoding="utf-8")
         QDesktopServices.openUrl(QUrl.fromLocalFile(str(path)))
 
-    with contextlib.suppress(Exception):
-        data_page.btn_open_logs.clicked.disconnect()
+    previous_open_logs = getattr(data_page, "_open_logs_slot", None)
+    if previous_open_logs is not None:
+        with contextlib.suppress(Exception):
+            data_page.btn_open_logs.clicked.disconnect(previous_open_logs)
     data_page.btn_open_logs.clicked.connect(open_logs)
+    data_page._open_logs_slot = open_logs
 
 
 def _patch_run_thread_behavior(window, controller) -> None:
