@@ -12,7 +12,6 @@ NAV_ITEMS = [
     ("leakage", "Leakage Correction"),
     ("basin", "Basin Analysis"),
     ("preview", "Preview"),
-    ("monitor", "Run Monitor"),
 ]
 
 
@@ -34,7 +33,7 @@ PAGE_SUBTITLES = {
     "leakage": "Choose a correction workflow, inspect input metadata, and hand results to Preview.",
     "basin": "Read GRACE grids, build basin masks, extract basin series, and estimate trend or seasonal signals.",
     "preview": "Inspect stacked products, switch projections, and manage map overlays.",
-    "monitor": "Track the active run, subtask progress, resolved outputs, and process logs.",
+    "monitor": "Internal run monitor compatibility page.",
 }
 
 
