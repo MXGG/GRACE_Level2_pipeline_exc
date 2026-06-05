@@ -257,9 +257,9 @@ def init(template: str, output: str):
             "grid": {"lon": [-179.5, 179.5], "lat": [-89.5, 89.5], "dlon": 1.0, "dlat": 1.0},
             "inversion": {"Lmax": 60, "remove_mean": True},
             "filter": {"gaussian": {"enable": True, "radius_km": 300}, "p4m6": {"enable": True, "poly_deg": 4, "m_start": 6}, "ddk": {"enable": True, "type": "DDK4"}, "hankel": {"enable": False}},
-            "parallel": {"enable": True, "nWorkers": "auto"},
+            "parallel": {"enable": True, "nWorkers": 4},
         },
-        "minimal": {"path": {"GFC": "./data/GRACE/GSM", "OUTPUT": "./outputs"}, "inversion": {"Lmax": 60}, "parallel": {"nWorkers": "auto"}},
+        "minimal": {"path": {"GFC": "./data/GRACE/GSM", "OUTPUT": "./outputs"}, "inversion": {"Lmax": 60}, "parallel": {"nWorkers": 4}},
         "full": {
             "_comment": "GRACE Level-2 Processing Pipeline Configuration",
             "path": {"ROOT": "${ROOT}", "GFC": "${ROOT}/data/GRACE/GSM", "OUTPUT": "${ROOT}/outputs", "AUX": "${ROOT}/data/Aux", "DDK": "${ROOT}/data/DDK", "BOUNDARY": "${ROOT}/data/Boundary"},
@@ -268,7 +268,7 @@ def init(template: str, output: str):
             "inversion": {"Lmax": 60, "remove_mean": True},
             "filter": {"gaussian": {"enable": True, "radius_km": 300}, "p4m6": {"enable": True, "poly_deg": 4, "m_start": 6}, "fan": {"enable": False, "radius1_km": 300, "radius2_km": 300}, "ddk": {"enable": True, "type": "DDK4"}, "hankel": {"enable": True, "variant": "global", "mode": "profile", "params": {"N": 30, "P": 10, "K": 6, "J": 1}}, "pre_hankel_input": "P4M6"},
             "io": {"save_monthly_mat": True, "save_stack_mat": True, "export_txt": True, "resume": False},
-            "parallel": {"enable": True, "nWorkers": "auto"},
+            "parallel": {"enable": True, "nWorkers": 8},
         },
     }
     with open(output, "w", encoding="utf-8") as f:
