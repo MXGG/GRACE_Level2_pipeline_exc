@@ -290,6 +290,75 @@ def parse_tn13_degree1(filepath: str) -> Dict[str, Tuple[float, float, float]]:
     return deg1_data
 
 
+@lru_cache(maxsize=8)
+def _parse_tn13_degree1_rows(filepath: str) -> Tuple[Dict[str, float], ...]:
+    rows: list[Dict[str, float]] = []
+    path = Path(filepath)
+    if not path.exists():
+        return tuple()
+
+    with path.open("r", encoding="utf-8") as f:
+        for raw_line in f:
+            line = raw_line.strip()
+            if not line or line.startswith("#") or line.startswith("%"):
+                continue
+            parts = line.split()
+            if len(parts) >= 9 and parts[0].upper().startswith("GRCOF2"):
+                try:
+                    degree = int(parts[1])
+                    order = int(parts[2])
+                    c_val = float(parts[3])
+                    s_val = float(parts[4])
+                    start_dt = datetime.strptime(str(parts[-2])[:8], "%Y%m%d")
+                    end_exclusive = datetime.strptime(str(parts[-1])[:8], "%Y%m%d")
+                except (ValueError, IndexError):
+                    continue
+                if degree != 1 or order not in (0, 1):
+                    continue
+                rows.append(
+                    {
+                        "order": order,
+                        "C": c_val,
+                        "S": s_val,
+                        "start_dt": start_dt,
+                        "end_dt": end_exclusive - timedelta(days=1),
+                    }
+                )
+
+    return tuple(rows)
+
+
+def select_tn13_degree1_entry(filepath: str, time_entry) -> Optional[Tuple[float, float, float]]:
+    """Select TN-13 degree-1 terms by maximum overlap with the calendar month."""
+    ym = str(getattr(time_entry, "ym", "") or "")
+    if not ym:
+        return None
+
+    rows = _parse_tn13_degree1_rows(filepath)
+    if not rows:
+        return parse_tn13_degree1(filepath).get(ym)
+
+    month_start, month_end = _month_bounds(ym)
+    best: dict[int, Tuple[int, Dict[str, float]]] = {}
+    for row in rows:
+        start_dt = row["start_dt"]
+        end_dt = row["end_dt"]
+        overlap = (min(month_end, end_dt) - max(month_start, start_dt)).days + 1
+        if overlap < 0:
+            continue
+        order = int(row["order"])
+        current = best.get(order)
+        if current is None or overlap > current[0]:
+            best[order] = (overlap, row)
+
+    if 0 not in best or 1 not in best:
+        return parse_tn13_degree1(filepath).get(ym)
+
+    row0 = best[0][1]
+    row1 = best[1][1]
+    return float(row0["C"]), float(row1["C"]), float(row1["S"])
+
+
 def infer_center_from_time_entry(time_entry) -> str:
     """Infer solution center (CSR/JPL/GFZ) from file metadata."""
     basename = Path(str(getattr(time_entry, "gfc_file", "") or "")).name.upper()
@@ -416,8 +485,18 @@ def replace_low_degree(cfg, sh, time_entry):
             sh.meta["C30_original"] = original_c30
             sh.meta["C30_replaced"] = c30_value
 
-    if replace_degree1 and ym in deg1_data:
-        c10, c11, s11 = deg1_data[ym]
+    deg1_file = ""
+    if replace_degree1:
+        files = _lowdeg_files(cfg)
+        center = infer_center_from_time_entry(time_entry)
+        center_key = f"DEGREE1_{center}" if center != "UNKNOWN" else ""
+        deg1_file = str(files.get(center_key, "") or files.get("DEGREE1", "") or "").strip()
+        deg1_values = select_tn13_degree1_entry(deg1_file, time_entry) if deg1_file else deg1_data.get(ym)
+    else:
+        deg1_values = None
+
+    if replace_degree1 and deg1_values is not None:
+        c10, c11, s11 = deg1_values
         sh.C[1, 0] = c10
         sh.C[1, 1] = c11
         sh.S[1, 1] = s11
