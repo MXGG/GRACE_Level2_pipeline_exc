@@ -28,6 +28,21 @@ def _set_label_text(obj, name: str, text: str) -> None:
         label.setText(text)
 
 
+def _append_monitor_metric(monitor, attr_name: str, text: str) -> None:
+    if hasattr(monitor, attr_name):
+        _set_label_text(monitor, attr_name, text)
+        return
+    try:
+        from PySide6.QtWidgets import QLabel
+
+        label = QLabel(text)
+        label.setWordWrap(True)
+        setattr(monitor, attr_name, label)
+        monitor.card_status.body.addWidget(label)
+    except Exception:
+        return
+
+
 def _enable_monitor_page(window) -> None:
     """Route the Run Monitor nav item to the real monitor page and neutralize mock text."""
     from grace_pipeline.ui.qt.mock_data import PAGE_TITLES
@@ -61,6 +76,8 @@ def _enable_monitor_page(window) -> None:
         _set_label_text(monitor, "lbl_pipeline_status", "Idle")
         _set_label_text(monitor, "lbl_overall_progress", "0 / 0")
         _set_label_text(monitor, "lbl_current_task", "Waiting for a pipeline run.")
+        _append_monitor_metric(monitor, "lbl_current_subtask", "Subtask: not started")
+        _append_monitor_metric(monitor, "lbl_eta", "ETA: not available")
         _set_label_text(monitor, "lbl_run_config", "Config: not loaded")
         _set_label_text(monitor, "lbl_run_filters", "Filters: not evaluated")
         _set_label_text(monitor, "lbl_run_output", "Output Root: not resolved")
