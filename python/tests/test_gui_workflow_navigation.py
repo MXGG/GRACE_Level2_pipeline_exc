@@ -68,8 +68,10 @@ class GuiWorkflowNavigationTest(unittest.TestCase):
         self.app.processEvents()
         self.assertTrue(self.window.top_progress_wrap.isVisible())
         self.assertEqual(self.window.top_progress_percent.text(), "25%")
-        self.assertIn("Monthly filter", self.window.top_progress_task.text())
-        self.assertIn("Gaussian", self.window.top_progress_task.text())
+        self.assertIn("ETC", self.window.top_progress_task.text())
+        self.assertIn("ETA", self.window.top_progress_task.text())
+        self.assertIn("Monthly filter", self.window.page_dashboard.lbl_dashboard_stage.text())
+        self.assertIn("Gaussian", self.window.page_dashboard.lbl_dashboard_stage.text())
         self.assertTrue(self.window.btn_top_pause.isEnabled())
         self.assertTrue(self.window.btn_top_stop.isEnabled())
 
