@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import configparser
 import json
 import os
 import re
@@ -46,6 +47,28 @@ def _looks_like_repo_root(path: Path) -> bool:
     )
 
 
+def _ini_path(root: Path) -> Path:
+    return root / "grace-l2.ini"
+
+
+def _read_ini_path(root: Path, key: str) -> Optional[Path]:
+    ini = _ini_path(root)
+    if not ini.exists():
+        return None
+    parser = configparser.ConfigParser()
+    try:
+        parser.read(ini, encoding="utf-8-sig")
+        value = parser.get("Paths", key, fallback="").strip()
+    except Exception:
+        return None
+    if not value:
+        return None
+    path = Path(value).expanduser()
+    if not path.is_absolute():
+        path = root / path
+    return path.resolve()
+
+
 def get_root_dir() -> Path:
     """Return the active repository/install root directory."""
     env_root = _existing_path(os.environ.get("GRACE_L2_HOME"))
@@ -62,7 +85,10 @@ def get_root_dir() -> Path:
     for candidate in [cwd, *cwd.parents]:
         if _looks_like_repo_root(candidate):
             return candidate.resolve()
-    return Path(__file__).resolve().parents[4]
+    # For editable/pip-style CLI usage outside a repository tree, the working
+    # directory is the user's runtime root. Falling back to the installed package
+    # path would place default data/output paths under site-packages.
+    return cwd
 
 
 def get_bundle_dir() -> Path:
@@ -79,6 +105,9 @@ def get_data_dir(root_dir: Optional[Union[str, Path]] = None) -> Path:
     env_data = _existing_path(os.environ.get("GRACE_L2_DATA"))
     if env_data:
         return env_data
+    ini_data = _read_ini_path(root, "DataDir")
+    if ini_data:
+        return ini_data
     bundle_data = get_bundle_dir() / "data" if getattr(sys, "frozen", False) else None
     if bundle_data and bundle_data.exists():
         return bundle_data
@@ -91,6 +120,10 @@ def get_output_dir(root_dir: Optional[Union[str, Path]] = None) -> Path:
     env_output = _path_value(os.environ.get("GRACE_L2_OUTPUT"))
     if env_output:
         return env_output
+    ini_output = _read_ini_path(root, "OutputDir")
+    if ini_output:
+        return ini_output
+    # Canonical repository/runtime output directory is plural `outputs`.
     return root / "outputs"
 
 
@@ -100,6 +133,9 @@ def get_config_dir(root_dir: Optional[Union[str, Path]] = None) -> Path:
     env_cfg = _existing_path(os.environ.get("GRACE_L2_CONFIG"))
     if env_cfg:
         return env_cfg
+    ini_cfg = _read_ini_path(root, "ConfigDir")
+    if ini_cfg:
+        return ini_cfg
     for candidate in [root / "configs", root / "cfg", root / "matlab" / "cfg"]:
         if candidate.exists():
             return candidate.resolve()
@@ -140,6 +176,40 @@ def resolve_placeholders(obj: Any, root_dir: str) -> Any:
         return {k: resolve_placeholders(v, root_dir) for k, v in obj.items()}
     if isinstance(obj, list):
         return [resolve_placeholders(item, root_dir) for item in obj]
+    return obj
+
+
+def _remap_paths_from_saved_root(obj: Any, saved_root: str, runtime_root: str) -> Any:
+    saved_root = str(saved_root or "").strip()
+    runtime_root = str(runtime_root or "").strip()
+    if not saved_root or not runtime_root or saved_root == runtime_root:
+        return obj
+    try:
+        saved_norm = str(Path(saved_root).expanduser())
+        runtime_norm = str(Path(runtime_root).expanduser())
+    except Exception:
+        saved_norm = saved_root
+        runtime_norm = runtime_root
+    saved_norm = saved_norm.rstrip("\\/")
+    runtime_norm = runtime_norm.rstrip("\\/")
+
+    def remap_string(value: str) -> str:
+        text = value
+        for prefix in {saved_root.rstrip("\\/"), saved_norm}:
+            if not prefix:
+                continue
+            if text == prefix:
+                return runtime_norm
+            if text.startswith(prefix + "\\") or text.startswith(prefix + "/"):
+                return runtime_norm + text[len(prefix):]
+        return text
+
+    if isinstance(obj, str):
+        return remap_string(obj)
+    if isinstance(obj, dict):
+        return {key: _remap_paths_from_saved_root(value, saved_root, runtime_root) for key, value in obj.items()}
+    if isinstance(obj, list):
+        return [_remap_paths_from_saved_root(item, saved_root, runtime_root) for item in obj]
     return obj
 
 
@@ -340,7 +410,7 @@ class Config:
         self.inversion = InversionConfig(
             Lmax=inv_cfg.get("Lmax", 60),
             remove_mean=inv_cfg.get("remove_mean", True),
-            mean_baseline_mode=inv_cfg.get("mean_baseline_mode", inv_cfg.get("mean_mode_range", "standard_2004_2009")),
+            mean_baseline_mode=inv_cfg.get("mean_baseline_mode", "standard_2004_2009"),
             mean_start_ym=inv_cfg.get("mean_start_ym", inv_cfg.get("mean_start", "")),
             mean_end_ym=inv_cfg.get("mean_end_ym", inv_cfg.get("mean_end", "")),
             lowdeg=inv_cfg.get("lowdeg", {}),
@@ -445,12 +515,16 @@ def load_config(
         user_cfg = _load_json_file(user_config, "user")
 
     merged = merge_configs(base_cfg, user_cfg)
+    saved_root = str((merged.get("path") or {}).get("ROOT") or "").strip()
+    if saved_root and saved_root not in {"${ROOT}", root_dir_str}:
+        merged = _remap_paths_from_saved_root(merged, saved_root, root_dir_str)
+        merged.setdefault("path", {})["ROOT"] = root_dir_str
     resolved = resolve_placeholders(merged, root_dir_str)
 
     if not resolved.get("path"):
         resolved["path"] = {}
     path_cfg = resolved["path"]
-    path_cfg["ROOT"] = path_cfg.get("ROOT") or root_dir_str
+    path_cfg["ROOT"] = root_dir_str
     if not path_cfg.get("GFC"):
         path_cfg["GFC"] = str(data_dir / "GRACE" / "GSM")
     if not path_cfg.get("OUTPUT"):
