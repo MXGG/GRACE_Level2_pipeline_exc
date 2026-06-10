@@ -57,7 +57,7 @@ from grace_pipeline.app.leakage_helpers import (
 )
 from grace_pipeline.domain.leakage import classify_leakage_scene, infer_operator_spec, recommend_correction_method, resolve_strategy_request
 from grace_pipeline.app.pipeline import run_pipeline
-from grace_pipeline.core.time_index import TimeEntry, build_time_index, summarize_time_coverage
+from grace_pipeline.core.time_index import TimeEntry, build_time_index, extract_ym_from_gfc, summarize_time_coverage
 from grace_pipeline.infra.config import Config, find_default_config, get_config_dir, get_root_dir, load_config
 from grace_pipeline.inversion.gfc_reader import read_gfc, read_gsm_month
 from grace_pipeline.inversion.low_degree import compute_mean_sh, get_mean_mode, replace_low_degree, select_mean_sh
@@ -66,6 +66,7 @@ from grace_pipeline.infra.stack.loader import load_stack_any, load_stack_slice_a
 from grace_pipeline.infra.stack.probe import probe_stack_any
 from grace_pipeline.services.gfc_download import (
     clear_earthdata_token,
+    clear_earthdata_credentials,
     download_gfc_range,
     download_low_degree_files,
     download_mascon_nc,
@@ -76,6 +77,8 @@ from grace_pipeline.services.gfc_download import (
     normalize_center,
     save_earthdata_token,
     EARTHDATA_TOKEN_URL,
+    EARTHDATA_TOKEN_STORE,
+    CMR_GRANULE_URL,
 )
 from grace_pipeline.ui.plotting.boundaries import (
     boundary_bbox,
@@ -735,6 +738,7 @@ class MainWindowController:
         w.page_data_paths.btn_save_config.clicked.connect(self.on_save_config)
         w.page_data_paths.btn_validate_paths.clicked.connect(self.on_validate_paths)
         w.page_data_paths.btn_download_gfc_range.clicked.connect(self.on_download_gfc_range)
+        w.page_data_paths.btn_open_download_site.clicked.connect(self.on_open_download_site)
         w.page_data_paths.cmb_gfc_center.currentTextChanged.connect(lambda *_args: self._sync_download_source_controls(update_options=False))
         w.page_data_paths.cmb_download_product.currentTextChanged.connect(lambda *_args: self._sync_download_source_controls(update_options=True))
 
@@ -1098,11 +1102,11 @@ class MainWindowController:
         active_checked = bool(active and active in buttons and buttons[active].isChecked())
         title_map = {
             "gaussian": "Gaussian 参数",
-            "pnmn": "P4M6 参数",
-            "gaussian_pnmn": "P4M6_GAUSS 参数",
+            "pnmn": "PnMl 参数",
+            "gaussian_pnmn": "Gaussian+PnMl 参数",
             "ddk": "DDK 参数",
             "fan": "FAN 参数",
-            "fan_pnmn": "P4M6_FAN 参数",
+            "fan_pnmn": "FAN+PnMl 参数",
             "hsaf": "HSAF 参数",
         }
         page.lbl_filter_parameter_title.setText(title_map.get(active, "参数设置") if active_checked else "参数设置")
@@ -1293,6 +1297,7 @@ class MainWindowController:
             page.lbl_gfc_download_status.setText(f"{center} GSM 使用 ICGEM 下载，无需 Earthdata 登录。")
         elif product_type == "MASCON_NC":
             page.lbl_gfc_download_status.setText("Mascon NC 支持 CSR、JPL、GSFC；分辨率需与机构发布产品匹配。")
+        page.btn_open_download_site.setToolTip(self._download_source_url(product_type, center))
         page.btn_download_gfc_range.setToolTip(page.lbl_gfc_download_status.text())
 
     def _configured_gfc_center(self) -> str:
@@ -1319,6 +1324,26 @@ class MainWindowController:
         if product_type == "MASCON_NC":
             return center.startswith("JPL") or center == "JPL"
         return center in {"CSR", "JPL", "GFZ"}
+
+    def _download_source_url(self, product_type: str | None = None, center: str | None = None) -> str:
+        product_type = product_type or self._download_product_type()
+        center = normalize_center(center or self._configured_gfc_center())
+        if product_type == "MASCON_NC":
+            if center == "CSR":
+                return "https://www2.csr.utexas.edu/grace/RL06_mascons.html"
+            if center == "GSFC":
+                return "https://earth.gsfc.nasa.gov/geo/data/grace-mascons"
+            return "https://podaac.jpl.nasa.gov/dataset/TELLUS_GRAC-GRFO_MASCON_GRID_RL06.3_V4"
+        if center == "HUST":
+            return "https://icgem.gfz-potsdam.de/sp/03_other/HUST/HUST-Grace2016/unfiltered"
+        if center == "ITSG":
+            return "https://icgem.gfz-potsdam.de/sp/03_other/ITSG/ITSG-Grace2018/monthly"
+        return CMR_GRANULE_URL
+
+    def on_open_download_site(self) -> None:
+        url = self._download_source_url()
+        webbrowser.open(url)
+        self.on_log(f"[GFC] Opened data source page: {url}", "stdout")
 
     def _ensure_earthdata_auth_for_download(self, product_type: str, center: str) -> bool:
         if not self._download_needs_earthdata(product_type, center):
@@ -1455,8 +1480,11 @@ class MainWindowController:
         layout = QVBoxLayout(dialog)
         layout.setContentsMargins(16, 14, 16, 14)
         current_login = current_earthdata_login()
+        netrc_path = Path.home() / ".netrc"
         label = QLabel(
             f"Current local Earthdata state: {current_login or 'none'}\n"
+            f"Token store: {EARTHDATA_TOKEN_STORE}\n"
+            f"netrc file: {netrc_path}\n"
             "Open the official Earthdata token page in your browser, sign in there, generate a user token, then paste it below. "
             "Tokens are stored in a local token store, not in JSON configs."
         )
@@ -1473,10 +1501,12 @@ class MainWindowController:
         chk_replace = QCheckBox("Set this token as active")
         chk_replace.setChecked(True)
         chk_clear = QCheckBox("Clear saved Earthdata tokens")
+        chk_clear_netrc = QCheckBox("Clear local .netrc Earthdata credentials")
         form.addRow("Account Label", edit_label)
         form.addRow("User Token", edit_token)
         form.addRow("", chk_replace)
         form.addRow("", chk_clear)
+        form.addRow("", chk_clear_netrc)
         layout.addLayout(form)
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         layout.addWidget(buttons)
@@ -1487,11 +1517,18 @@ class MainWindowController:
                 self._show_warning("Earthdata Auth", "Earthdata credentials are required for this download.")
             return False
         try:
+            cleared: list[str] = []
             if chk_clear.isChecked():
                 path = clear_earthdata_token()
-                page = self.window.page_data_paths
-                page.lbl_gfc_download_status.setText(f"Earthdata tokens cleared from {path}.")
+                cleared.append(f"tokens: {path}")
                 self.on_log(f"[AUTH] Cleared Earthdata tokens in {path}", "stdout")
+            if chk_clear_netrc.isChecked():
+                path = clear_earthdata_credentials()
+                cleared.append(f"netrc: {path}")
+                self.on_log(f"[AUTH] Cleared Earthdata .netrc credentials in {path}", "stdout")
+            if cleared:
+                page = self.window.page_data_paths
+                page.lbl_gfc_download_status.setText("Earthdata credentials cleared from " + "; ".join(cleared) + ".")
                 return not require_credentials
             path = save_earthdata_token(edit_label.text(), edit_token.text(), replace_active=chk_replace.isChecked())
             self.window.page_data_paths.lbl_gfc_download_status.setText(f"Earthdata token saved to {path}.")
@@ -1712,7 +1749,8 @@ class MainWindowController:
                 self._set_badge_state(badge, missing_text, "danger")
 
         update(page.badge_gfc_input, page.edit_gfc_input_dir.text().strip(), "Verified", "Missing")
-        update(page.badge_ddk_data, page.edit_ddk_data_dir.text().strip(), "Verified", "Missing")
+        ddk_ok = self._ddk_kernel_files(page.edit_ddk_data_dir.text().strip())
+        self._set_badge_state(page.badge_ddk_data, "Built-in" if ddk_ok else "Missing kernels", "success" if ddk_ok else "warning")
         update(page.badge_output_root, page.edit_main_output_root.text().strip(), "Verified", "Will create", allow_missing=True)
         update(page.badge_logs_dir, page.edit_logs_dir.text().strip(), "Ready", "Auto-generated", allow_missing=True)
         update(page.badge_aux_path, page.edit_aux_path.text().strip(), "OK", "Missing")
@@ -2517,7 +2555,6 @@ class MainWindowController:
     def on_validate_paths(self):
         for edit, base_dir in (
             (self.window.page_data_paths.edit_gfc_input_dir, ROOT_DIR),
-            (self.window.page_data_paths.edit_ddk_data_dir, ROOT_DIR),
             (self.window.page_data_paths.edit_aux_path, ROOT_DIR),
             (self.window.page_data_paths.edit_boundary_root, ROOT_DIR),
             (self.window.page_data_paths.edit_boundary_path, ROOT_DIR),
@@ -2533,7 +2570,6 @@ class MainWindowController:
             self._normalize_path_edit(edit, base_dir=base_dir)
         checks = [
             ("GFC", self.window.page_data_paths.edit_gfc_input_dir.text()),
-            ("DDK", self.window.page_data_paths.edit_ddk_data_dir.text()),
             ("OUTPUT", self.window.page_data_paths.edit_main_output_root.text()),
             ("LOGS", self.window.page_data_paths.edit_logs_dir.text()),
             ("AUX", self.window.page_data_paths.edit_aux_path.text()),
@@ -2552,6 +2588,12 @@ class MainWindowController:
             exists = bool(value and Path(value).exists())
             self.on_log(f"[PATH] {name}: {'OK' if exists else 'MISSING'} -> {value}", "stderr" if not exists else "stdout")
             ok += int(exists)
+        if self.window.page_processing.btn_filter_ddk.isChecked():
+            kernels = self._ddk_kernel_files()
+            if kernels:
+                self.on_log(f"[PATH] DDK kernels: OK ({len(kernels)} files)", "stdout")
+            else:
+                self.on_log(f"[PATH] DDK kernels: MISSING -> {self.window.page_data_paths.edit_ddk_data_dir.text()}", "stderr")
         self._sync_data_path_badges()
         self._refresh_detected_time_range()
         self._show_info("Path Validation", f"Validated {len(checks)} paths, {ok} exist.")
@@ -2587,6 +2629,20 @@ class MainWindowController:
             self.window.page_basin.lbl_basin_info.setText(f"Load failed: {exc}")
             self._show_error("Basin", str(exc))
         self.window.refresh_translations()
+
+    def _ddk_kernel_files(self, ddk_dir: str | Path | None = None) -> list[Path]:
+        text = str(ddk_dir or self.window.page_data_paths.edit_ddk_data_dir.text() or "").strip()
+        if not text:
+            root = Path(DEFAULT_DATA_PATHS["DDK"])
+        else:
+            root = Path(self._native_path(text, base_dir=ROOT_DIR))
+        if not root.exists() or not root.is_dir():
+            return []
+        return sorted(path for path in root.glob("Wbd_*") if path.is_file())
+
+    def _missing_ddk_kernel_message(self) -> str:
+        ddk_dir = self._native_path(self.window.page_data_paths.edit_ddk_data_dir.text(), base_dir=ROOT_DIR)
+        return f"DDK kernel files were not found in {ddk_dir}. Expected files matching Wbd_*."
 
     def on_load_basin_boundary_info(self):
         page = self.window.page_basin
@@ -2917,6 +2973,54 @@ class MainWindowController:
 
         self._run_in_thread("all", _target, "RUNNING SH -> GRID TOOL")
 
+    def _grid_to_sh_template_gfc(self, source_path: Path, label: str, cfg_local: Config) -> Path | None:
+        if source_path.suffix.lower() == ".gfc" and source_path.exists():
+            return source_path
+        target_ym = self._ym_from_date(str(label))
+        gfc_dir = Path(str(getattr(cfg_local.path, "GFC", "") or ""))
+        if not target_ym or not gfc_dir.exists():
+            return None
+        for candidate in sorted(gfc_dir.glob("*.gfc")):
+            if extract_ym_from_gfc(str(candidate)) == target_ym:
+                return candidate
+        return None
+
+    def _write_grid_to_sh_gfc(self, template: Path, target: Path, c_arr: np.ndarray, s_arr: np.ndarray, lmax: int) -> None:
+        tmp = target.with_suffix(target.suffix + ".tmp")
+        with template.open("r", encoding="utf-8", errors="ignore") as fin, tmp.open("w", encoding="utf-8", newline="\n") as fout:
+            for raw in fin:
+                line = raw.rstrip("\r\n")
+                parts = line.split()
+                token = parts[0] if parts else ""
+                key = token.lower()
+                if (key.startswith("gfc") or key in {"grcof", "grcof2"}) and len(parts) >= 5:
+                    try:
+                        degree = int(parts[1])
+                        order = int(parts[2])
+                    except ValueError:
+                        fout.write(line + "\n")
+                        continue
+                    if 0 <= order <= degree <= int(lmax):
+                        rest = parts[5:]
+                        fout.write(
+                            f"{token} {degree:4d} {order:4d} "
+                            f"{float(c_arr[degree, order]): .12E} "
+                            f"{float(s_arr[degree, order]): .12E}"
+                        )
+                        if rest:
+                            fout.write(" " + " ".join(rest))
+                        fout.write("\n")
+                    else:
+                        fout.write(line + "\n")
+                    continue
+                stripped = line.strip()
+                if stripped.lower().startswith("max_degree"):
+                    prefix = line[: len(line) - len(line.lstrip())]
+                    fout.write(f"{prefix}max_degree               {int(lmax)}\n")
+                else:
+                    fout.write(line + "\n")
+        tmp.replace(target)
+
     def on_tool_grid_to_sh(self):
         self.pull_ui_to_host()
         self.window.page_processing.lbl_sh_tool_status.setText("Status: running Grid -> SH analysis...")
@@ -2966,9 +3070,18 @@ class MainWindowController:
                     "source_file": str(source_path),
                 },
             )
+            template = self._grid_to_sh_template_gfc(source_path, str(label), cfg_local)
+            gfc_file = None
+            if template is not None:
+                gfc_file = out_file.with_suffix(".gfc")
+                self._write_grid_to_sh_gfc(template, gfc_file, np.asarray(c_arr, dtype=float), np.asarray(s_arr, dtype=float), int(lmax))
             self.signals.log.emit(f"[TOOL][GRID2SH] source={source_path} frame={time_index} Lmax={lmax}/{lmax_requested}", "stdout")
             self.signals.log.emit(f"[OUTPUT] {out_file}", "stdout")
-            self.window.page_processing.lbl_sh_tool_status.setText(f"Status: Grid -> SH completed ({out_file.name}).")
+            if gfc_file is not None:
+                self.signals.log.emit(f"[OUTPUT] {gfc_file}", "stdout")
+                self.window.page_processing.lbl_sh_tool_status.setText(f"Status: Grid -> SH completed ({out_file.name}, {gfc_file.name}).")
+            else:
+                self.window.page_processing.lbl_sh_tool_status.setText(f"Status: Grid -> SH completed ({out_file.name}; no GFC template found).")
 
         self._run_in_thread("all", _target, "RUNNING GRID -> SH TOOL")
 

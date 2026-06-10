@@ -14,6 +14,9 @@ from PySide6.QtWidgets import QApplication
 
 ROOT = Path(__file__).resolve().parents[2]
 PYTHON_ROOT = ROOT / "python"
+os.environ["GRACE_L2_HOME"] = str(ROOT)
+os.environ["GRACE_L2_DATA"] = str(ROOT / "data")
+os.environ["GRACE_L2_OUTPUT"] = str(ROOT / "outputs")
 if str(PYTHON_ROOT) not in sys.path:
     sys.path.insert(0, str(PYTHON_ROOT))
 

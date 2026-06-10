@@ -456,7 +456,7 @@ class MainWindow(QMainWindow):
 
     def _bind_screen_signals(self):
         handle = self.windowHandle()
-        if handle is not None and not self._screen_changed_bound:
+        if handle is not None and hasattr(handle, "screenChanged") and not self._screen_changed_bound:
             handle.screenChanged.connect(self._on_screen_changed)
             self._screen_changed_bound = True
         screen = self._current_screen()

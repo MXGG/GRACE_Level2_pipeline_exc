@@ -349,8 +349,9 @@ def _move_filter_paths_to_processing(window) -> None:
     _safe_show(data_page.btn_open_logs)
 
     _move_field_row_to_layout(data_page.edit_ddk_data_dir, data_page.card_reference_paths.body, insert_index=0)
-    for widget in (data_page.edit_ddk_data_dir, data_page.edit_low_degree_path, data_page.edit_degree1_path, data_page.edit_gia_path):
+    for widget in (data_page.edit_low_degree_path, data_page.edit_degree1_path, data_page.edit_gia_path):
         _show_field_row_for_widget(widget)
+    _hide_field_row_for_widget(data_page.edit_ddk_data_dir)
 
     for widget in (
         getattr(data_page, "edit_boundary_path", None), getattr(data_page, "edit_boundary_root", None),
@@ -520,6 +521,8 @@ def _patch_download_controls(window, controller) -> None:
             page.lbl_gfc_download_status.setText(f"{center} GSM 使用 ICGEM 下载，无需 Earthdata 登录。")
         elif product_type == "MASCON_NC":
             page.lbl_gfc_download_status.setText("Mascon NC 支持 CSR、JPL、GSFC；分辨率需与机构发布产品匹配。")
+        if hasattr(page, "btn_open_download_site"):
+            page.btn_open_download_site.setToolTip(self._download_source_url(product_type, center))
         page.btn_download_gfc_range.setToolTip(page.lbl_gfc_download_status.text())
 
     def gfc_download_range(self) -> tuple[str, str]:
@@ -606,6 +609,10 @@ def _patch_download_controls(window, controller) -> None:
     with contextlib.suppress(Exception):
         window.page_data_paths.btn_download_gfc_range.clicked.disconnect()
     window.page_data_paths.btn_download_gfc_range.clicked.connect(controller.on_download_gfc_range)
+    if hasattr(window.page_data_paths, "btn_open_download_site"):
+        with contextlib.suppress(Exception):
+            window.page_data_paths.btn_open_download_site.clicked.disconnect()
+        window.page_data_paths.btn_open_download_site.clicked.connect(controller.on_open_download_site)
 
 
 def _patch_filter_run_validation(window, controller) -> None:
@@ -628,8 +635,8 @@ def _patch_filter_run_validation(window, controller) -> None:
             if not path.exists():
                 issues.append(f"{label}: missing ({path})")
 
-        if page.btn_filter_ddk.isChecked():
-            exists("DDK data directory", paths.edit_ddk_data_dir.text())
+        if page.btn_filter_ddk.isChecked() and not self._ddk_kernel_files(paths.edit_ddk_data_dir.text()):
+            issues.append(self._missing_ddk_kernel_message())
         if page.chk_lowdeg_enable.isChecked():
             if page.chk_replace_c20.isChecked() or page.chk_replace_c30.isChecked():
                 exists("C20/C30 replacement file", paths.edit_low_degree_path.text())

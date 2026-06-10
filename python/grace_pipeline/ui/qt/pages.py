@@ -409,6 +409,8 @@ class DataPathsPage(ScrollPage):
         self.btn_download_gfc_range = QPushButton("下载")
         self.btn_download_gfc_range.setObjectName("PrimaryButton")
         self.btn_download_gfc_range.setMinimumWidth(148)
+        self.btn_open_download_site = QPushButton("访问数据网页")
+        self.btn_open_download_site.setObjectName("GhostButton")
         gfc_action_row = QWidget()
         gfc_action_layout = QHBoxLayout(gfc_action_row)
         gfc_action_layout.setContentsMargins(0, 0, 0, 0)
@@ -421,6 +423,7 @@ class DataPathsPage(ScrollPage):
         gfc_action_layout.addWidget(self.edit_download_dir, 1)
         gfc_action_layout.addWidget(self.btn_download_dir_browse, 0)
         gfc_action_layout.addWidget(self.btn_download_gfc_range, 0)
+        gfc_action_layout.addWidget(self.btn_open_download_site, 0)
         self.lbl_gfc_download_status = QLabel("GFC download: idle.")
         self.lbl_gfc_download_status.setWordWrap(True)
         self.card_input_dirs.body.addWidget(_make_field_row("数据下载", gfc_action_row, label_width=PATH_FIELD_LABEL_WIDTH))
@@ -451,14 +454,14 @@ class DataPathsPage(ScrollPage):
         self.btn_ddk_browse = QPushButton("Folder...")
         self.btn_ddk_browse.setObjectName("GhostButton")
         self.badge_ddk_data = build_badge("Pending", "primary")
-        self.card_input_dirs.body.addWidget(
-            _make_field_row(
-                "DDK 数据目录",
-                _make_edit_browse_widget(self.edit_ddk_data_dir, self.btn_ddk_browse),
-                self.badge_ddk_data,
-                label_width=PATH_FIELD_LABEL_WIDTH,
-            )
+        self.row_ddk_data_dir = _make_field_row(
+            "DDK 数据目录",
+            _make_edit_browse_widget(self.edit_ddk_data_dir, self.btn_ddk_browse),
+            self.badge_ddk_data,
+            label_width=PATH_FIELD_LABEL_WIDTH,
         )
+        self.card_input_dirs.body.addWidget(self.row_ddk_data_dir)
+        self.row_ddk_data_dir.hide()
 
         self.chk_remote_sync = QCheckBox("Enabled")
         self.chk_remote_sync.setChecked(True)
@@ -705,13 +708,14 @@ class ProcessingSetupPage(ScrollPage):
         self.btn_sh_tool_browse.setObjectName("GhostButton")
         self.btn_tool_sh_to_grid = QPushButton("Run SH -> Grid Synthesis")
         self.btn_tool_sh_to_grid.setObjectName("GhostButton")
+        self.btn_tool_sh_to_grid.setVisible(False)
+        self.btn_tool_sh_to_grid.setEnabled(False)
         self.btn_tool_grid_to_sh = QPushButton("Run Grid -> SH Analysis")
         self.btn_tool_grid_to_sh.setObjectName("GhostButton")
         sh_tool_row = QWidget()
         sh_tool_layout = QHBoxLayout(sh_tool_row)
         sh_tool_layout.setContentsMargins(0, 0, 0, 0)
         sh_tool_layout.setSpacing(8)
-        sh_tool_layout.addWidget(self.btn_tool_sh_to_grid)
         sh_tool_layout.addWidget(self.btn_tool_grid_to_sh)
         sh_tool_layout.addStretch(1)
         self.card_sh_tools.body.addWidget(self.lbl_sh_tool_status)
@@ -721,11 +725,11 @@ class ProcessingSetupPage(ScrollPage):
 
         self.card_filters = CardFrame("滤波方法")
         self.btn_filter_gaussian = QCheckBox("Gaussian")
-        self.btn_filter_p4m6 = QCheckBox("P4M6")
-        self.btn_filter_gaussian_pnmn = QCheckBox("P4M6_GAUSS")
+        self.btn_filter_p4m6 = QCheckBox("PnMl")
+        self.btn_filter_gaussian_pnmn = QCheckBox("Gaussian+PnMl")
         self.btn_filter_ddk = QCheckBox("DDK")
         self.btn_filter_fan = QCheckBox("FAN")
-        self.btn_filter_fan_pnmn = QCheckBox("P4M6_FAN")
+        self.btn_filter_fan_pnmn = QCheckBox("FAN+PnMl")
         self.btn_filter_hsaf = QCheckBox("HSAF")
         filter_buttons = [
             self.btn_filter_gaussian,
@@ -737,9 +741,9 @@ class ProcessingSetupPage(ScrollPage):
             self.btn_filter_hsaf,
         ]
         for btn in filter_buttons:
-            btn.setChecked(btn in (self.btn_filter_gaussian, self.btn_filter_p4m6, self.btn_filter_gaussian_pnmn, self.btn_filter_ddk, self.btn_filter_hsaf))
+            btn.setChecked(btn is self.btn_filter_gaussian)
 
-        self._selected_filter_panel = "gaussian_pnmn"
+        self._selected_filter_panel = "gaussian"
         filter_workspace = QWidget()
         filter_workspace.setObjectName("FilterWorkspace")
         filter_workspace_layout = QHBoxLayout(filter_workspace)

@@ -39,16 +39,17 @@
       "enable": true
     },
     "p4m6": {
-      "enable": true
+      "enable": false
     },
     "fan": {
-      "enable": true
+      "enable": false
     },
     "ddk": {
-      "enable": true,
+      "enable": false,
       "type": "DDK4"
     },
     "hankel": {
+      "enable": false,
       "stack_mode": true,
       "params": {
         "N": 30,

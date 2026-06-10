@@ -14,6 +14,9 @@ from PySide6.QtWidgets import QApplication
 
 ROOT = Path(__file__).resolve().parents[2]
 PYTHON_ROOT = ROOT / "python"
+os.environ["GRACE_L2_HOME"] = str(ROOT)
+os.environ["GRACE_L2_DATA"] = str(ROOT / "data")
+os.environ["GRACE_L2_OUTPUT"] = str(ROOT / "outputs")
 if str(PYTHON_ROOT) not in sys.path:
     sys.path.insert(0, str(PYTHON_ROOT))
 
@@ -49,6 +52,7 @@ class GuiEmbeddedToolsTest(unittest.TestCase):
                 [
                     "product_type GSM",
                     "modelname TEST",
+                    "max_degree 2",
                     "end_of_head",
                     "gfc 0 0 1.0 0.0",
                     "gfc 1 0 0.0 0.0",
@@ -131,59 +135,10 @@ class GuiEmbeddedToolsTest(unittest.TestCase):
         )
         return boundary
 
-    def test_processing_sh_to_grid_tool_runs_and_writes_output(self):
-        with tempfile.TemporaryDirectory() as td:
-            root = Path(td)
-            gfc_dir = root / "gfc"
-            gfc_dir.mkdir(parents=True, exist_ok=True)
-            gfc = self._create_sample_gfc(gfc_dir)
-
-            self.window.set_active_page("processing")
-            self.window.page_data_paths.edit_main_output_root.setText(str(root / "output"))
-            self.window.page_data_paths.edit_gfc_input_dir.setText(str(gfc_dir))
-            self.window.page_preview.edit_dataset_source.setText(str(gfc))
-            self.window.page_processing.slider_degree_order.setValue(2)
-            self.app.processEvents()
-
-            self.window.controller.on_tool_sh_to_grid()
-            self.app.processEvents()
-
-            out_dir = root / "output" / "local" / "tools" / "sh_grid"
-            files = list(out_dir.glob("*.mat"))
-            self.assertTrue(files, "Expected SH->Grid tool to produce MAT output.")
-            self.assertIn("completed", self.window.page_processing.lbl_sh_tool_status.text().lower())
-
-    def test_processing_sh_to_grid_removes_gfc_static_mean_before_ewh(self):
-        with tempfile.TemporaryDirectory() as td:
-            root = Path(td)
-            gfc_dir = root / "gfc"
-            gfc_dir.mkdir(parents=True, exist_ok=True)
-            source = self._create_dated_sample_gfc(
-                gfc_dir,
-                "GSM-2_2006060-2006090_GRAC_UTCSR_BA01_0600.gfc",
-                c30=2.0e-10,
-            )
-            self._create_dated_sample_gfc(
-                gfc_dir,
-                "GSM-2_2006091-2006120_GRAC_UTCSR_BA01_0600.gfc",
-                c30=-2.0e-10,
-            )
-
-            self.window.set_active_page("processing")
-            self.window.page_data_paths.edit_main_output_root.setText(str(root / "output"))
-            self.window.page_data_paths.edit_gfc_input_dir.setText(str(gfc_dir))
-            self.window.page_processing.edit_sh_tool_source.setText(str(source))
-            self.window.page_processing.slider_degree_order.setValue(3)
-            self.app.processEvents()
-
-            self.window.controller.on_tool_sh_to_grid()
-            self.app.processEvents()
-
-            out_file = next((root / "output" / "local" / "tools" / "sh_grid").glob("*.mat"))
-            payload = sio.loadmat(out_file, squeeze_me=True, struct_as_record=False)
-            grid = np.asarray(payload["grid_data"], dtype=float)
-            self.assertLess(float(np.nanmax(np.abs(grid))), 100.0)
-            self.assertIn("anomaly_removed=True", self.window.filters_text.toPlainText())
+    def test_processing_sh_to_grid_tool_is_hidden(self):
+        self.window.set_active_page("processing")
+        self.assertFalse(self.window.page_processing.btn_tool_sh_to_grid.isVisible())
+        self.assertFalse(self.window.page_processing.btn_tool_sh_to_grid.isEnabled())
 
     def test_processing_grid_to_sh_tool_runs_and_writes_output(self):
         with tempfile.TemporaryDirectory() as td:
@@ -210,9 +165,41 @@ class GuiEmbeddedToolsTest(unittest.TestCase):
             self.assertEqual(int(payload["Lmax"].squeeze()), 2)
             self.assertIn("completed", self.window.page_processing.lbl_sh_tool_status.text().lower())
 
+    def test_processing_grid_to_sh_tool_writes_gfc_when_template_matches(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            stack = self._create_sample_sh_analysis_stack(root)
+            gfc_dir = root / "gfc"
+            gfc_dir.mkdir()
+            template = self._create_sample_gfc(gfc_dir)
+            template.rename(gfc_dir / "GSM-2_200205_TEST.gfc")
+
+            self.window.set_active_page("processing")
+            self.window.page_data_paths.edit_main_output_root.setText(str(root / "output"))
+            self.window.page_data_paths.edit_gfc_input_dir.setText(str(gfc_dir))
+            self.window.page_processing.edit_sh_tool_source.setText(str(stack))
+            self.window.page_preview.slider_time_index.setValue(1)
+            self.window.page_processing.slider_degree_order.setValue(2)
+            self.app.processEvents()
+
+            self.window.controller.on_tool_grid_to_sh()
+            self.app.processEvents()
+
+            out_dir = root / "output" / "local" / "tools" / "grid_sh"
+            gfc_files = list(out_dir.glob("*.gfc"))
+            self.assertTrue(gfc_files, "Expected Grid->SH tool to write GFC output when a template is available.")
+            text = gfc_files[0].read_text(encoding="utf-8")
+            self.assertIn("gfc", text)
+            self.assertIn("max_degree", text)
+
     def test_processing_filter_checkboxes_expand_parameter_panels(self):
         self.window.set_active_page("processing")
         page = self.window.page_processing
+
+        self.assertEqual(self.window.controller._enabled_filter_names(), ["Gaussian"])
+        self.assertEqual(page.btn_filter_p4m6.text(), "PnMl")
+        self.assertEqual(page.btn_filter_gaussian_pnmn.text(), "Gaussian+PnMl")
+        self.assertEqual(page.btn_filter_fan_pnmn.text(), "FAN+PnMl")
 
         for checkbox in (
             page.btn_filter_gaussian,

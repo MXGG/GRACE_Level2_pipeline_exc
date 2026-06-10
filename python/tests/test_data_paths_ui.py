@@ -15,6 +15,9 @@ from PySide6.QtWidgets import QApplication
 
 ROOT = Path(__file__).resolve().parents[2]
 PYTHON_ROOT = ROOT / "python"
+os.environ["GRACE_L2_HOME"] = str(ROOT)
+os.environ["GRACE_L2_DATA"] = str(ROOT / "data")
+os.environ["GRACE_L2_OUTPUT"] = str(ROOT / "outputs")
 if str(PYTHON_ROOT) not in sys.path:
     sys.path.insert(0, str(PYTHON_ROOT))
 
@@ -52,7 +55,7 @@ class DataPathsUiTest(unittest.TestCase):
         return os.path.normpath(str(path))
 
     def test_page_initializes_with_real_project_paths(self):
-        self.assertEqual(self.window._nav_buttons["data_paths"].text(), "Data Paths")
+        self.assertNotIn("data_paths", self.window._nav_buttons)
         self.assertEqual(self.window.breadcrumb.text(), "Data Paths")
 
         expected = {
@@ -96,7 +99,8 @@ class DataPathsUiTest(unittest.TestCase):
 
         self.assertEqual(self.page.badge_boundary_root.text(), "OK")
         self.assertEqual(self.page.badge_gfc_input.text(), "Verified")
-        self.assertEqual(self.page.badge_ddk_data.text(), "Verified")
+        self.assertFalse(self.page.row_ddk_data_dir.isVisible())
+        self.assertEqual(self.page.badge_ddk_data.text(), "Built-in")
         self.assertEqual(self.page.badge_aux_path.text(), "OK")
         self.assertEqual(self.page.badge_boundary_path.text(), "OK")
         self.assertEqual(self.page.badge_degree1.text(), "OK")
@@ -139,7 +143,7 @@ class DataPathsUiTest(unittest.TestCase):
         self.page.edit_ddk_data_dir.editingFinished.emit()
         self.app.processEvents()
         self.assertEqual(self.page.edit_ddk_data_dir.text(), self._native(DEFAULT_DATA_PATHS["DDK"]))
-        self.assertEqual(self.page.badge_ddk_data.text(), "Verified")
+        self.assertEqual(self.page.badge_ddk_data.text(), "Built-in")
         self.assertEqual(self.page.edit_ddk_data_dir.cursorPosition(), 0)
 
         self.page.edit_mascon_gad.setText("CSR_GRACE_GRACE-FO_RL0603_Mascons_GAD-component.nc")
@@ -547,6 +551,39 @@ class DataPathsUiTest(unittest.TestCase):
             self.assertEqual(calls[0]["resolution"], "0.5")
             self.assertEqual(self.page.edit_mascon_reference.text(), self._native(mascon_file))
 
+    def test_download_source_button_opens_selected_product_page(self):
+        opened = []
+        original_open = qt_controller.webbrowser.open
+        qt_controller.webbrowser.open = lambda url: opened.append(url) or True
+        self.addCleanup(setattr, qt_controller.webbrowser, "open", original_open)
+
+        self.page.cmb_download_product.setCurrentText("Mascon NC")
+        self.window.controller._sync_download_source_controls(update_options=True)
+        self.page.cmb_gfc_center.setCurrentText("GSFC")
+        self.window.controller.on_open_download_site()
+
+        self.assertTrue(opened)
+        self.assertIn("gsfc", opened[-1].lower())
+
+        self.page.cmb_download_product.setCurrentText("GSM 文件")
+        self.window.controller._sync_download_source_controls(update_options=True)
+        self.page.cmb_gfc_center.setCurrentText("HUST")
+        self.window.controller.on_open_download_site()
+        self.assertIn("icgem", opened[-1].lower())
+
+    def test_ddk_filter_requires_kernel_files_when_enabled(self):
+        configure_global_run_monitor(self.window)
+        with tempfile.TemporaryDirectory() as tmp:
+            warnings = []
+            self.window.controller._show_warning = lambda title, text: warnings.append((title, text))
+            self.page.edit_ddk_data_dir.setText(str(Path(tmp) / "empty_ddk"))
+            Path(self.page.edit_ddk_data_dir.text()).mkdir()
+            self.window.page_processing.btn_filter_ddk.setChecked(True)
+            self.window.controller.on_run_pipeline()
+
+        self.assertTrue(warnings)
+        self.assertIn("Wbd_*", warnings[-1][1])
+
     def test_console_ignores_page_navigation_noise(self):
         self.window.console_text.clear()
         self.window.set_active_page("processing")
@@ -584,7 +621,7 @@ class DataPathsUiTest(unittest.TestCase):
         self.window.apply_ui_preferences(UIPreferences(theme="light", language="zh"), persist=False)
         self.app.processEvents()
 
-        self.assertNotEqual(self.window._nav_buttons["data_paths"].text(), "Data Paths")
+        self.assertNotIn("data_paths", self.window._nav_buttons)
         self.assertNotEqual(self.window.breadcrumb.text(), "Data Paths")
         self.assertNotEqual(self.window.btn_settings.text(), "Settings")
         self.assertNotEqual(self.window.console_tabs.tabText(0), "Console")
@@ -618,7 +655,8 @@ class DataPathsUiTest(unittest.TestCase):
         self.assertEqual(second.ui_preferences.theme, "dark")
         self.assertEqual(second.ui_preferences.language, "zh")
         self.assertEqual(second._resolved_theme, "dark")
-        self.assertNotEqual(second._nav_buttons["data_paths"].text(), "Data Paths")
+        self.assertNotIn("data_paths", second._nav_buttons)
+        self.assertNotEqual(second.breadcrumb.text(), "Data Paths")
         self.assertIn("#0d1726", self.app.styleSheet())
 
 

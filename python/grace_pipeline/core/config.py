@@ -147,10 +147,10 @@ def find_default_config(root_dir: Optional[Union[str, Path]] = None) -> Optional
     root = Path(root_dir).resolve() if root_dir is not None else get_root_dir()
     bundle = get_bundle_dir()
     candidates = [
-        get_config_dir(root) / "default.json",
         root / "configs" / "default.json",
         root / "cfg" / "default.json",
         root / "matlab" / "cfg" / "default.json",
+        get_config_dir(root) / "default.json",
         bundle / "configs" / "default.json",
         bundle / "cfg" / "default.json",
         bundle / "matlab" / "cfg" / "default.json",
@@ -354,9 +354,9 @@ DEFAULT_CONFIG: Dict[str, Any] = {
     },
     "filter": {
         "gaussian": {"enable": True, "radius_km": 300},
-        "p4m6": {"enable": True, "poly_deg": 4, "m_start": 6},
+        "p4m6": {"enable": False, "poly_deg": 4, "m_start": 6},
         "fan": {"enable": False, "radius1_km": 300, "radius2_km": 300},
-        "ddk": {"enable": True, "type": "DDK4", "data_dir": "data/DDK"},
+        "ddk": {"enable": False, "type": "DDK4", "data_dir": "data/DDK"},
         "hankel": {"enable": False, "variant": "global", "engine": "matlab_v3", "mode": "profile", "params": {"N": 30, "P": 10, "K": 6, "J": 1}},
         "pre_hankel_input": "P4M6",
     },

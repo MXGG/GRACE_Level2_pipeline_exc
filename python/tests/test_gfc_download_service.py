@@ -1,4 +1,5 @@
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -76,6 +77,33 @@ class GfcDownloadServiceTest(unittest.TestCase):
         self.assertEqual(extract_ym_from_gfc("HUST-Grace2016-200301.gfc"), "2003-01")
         self.assertEqual(extract_ym_from_gfc("ITSG-Grace2018_n120_2002-04.gfc"), "2002-04")
         self.assertEqual(extract_ym_from_gfc("GSM-2_2024001-2024031_GRFO_UTCSR_BA01_0603.gfc"), "2024-01")
+
+    def test_clear_earthdata_credentials_preserves_other_netrc_hosts(self):
+        original_home = gfc_download.Path.home
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            netrc_path = home / ".netrc"
+            netrc_path.write_text(
+                "\n".join(
+                    [
+                        "machine urs.earthdata.nasa.gov login earth password secret",
+                        "machine archive.podaac.earthdata.nasa.gov login podaac password secret",
+                        "machine example.com login keep password keep",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            try:
+                gfc_download.Path.home = classmethod(lambda cls: home)
+                gfc_download.clear_earthdata_credentials()
+            finally:
+                gfc_download.Path.home = original_home
+
+            text = netrc_path.read_text(encoding="utf-8")
+            self.assertNotIn("urs.earthdata.nasa.gov", text)
+            self.assertNotIn("archive.podaac.earthdata.nasa.gov", text)
+            self.assertIn("example.com", text)
 
 
 if __name__ == "__main__":

@@ -90,7 +90,7 @@
       "radius_km": 300
     },
     "p4m6": {
-      "enable": true,
+      "enable": false,
       "poly_deg": 4,
       "m_start": 6
     },
@@ -100,12 +100,12 @@
       "radius2_km": 300
     },
     "ddk": {
-      "enable": true,
+      "enable": false,
       "type": "DDK4",
       "data_dir": "${ROOT}/data/DDK"
     },
     "hankel": {
-      "enable": true,
+      "enable": false,
       "variant": "global",
       "engine": "matlab_v3",
       "adaptive": [],
