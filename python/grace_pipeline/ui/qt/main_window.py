@@ -209,6 +209,9 @@ class MainWindow(QMainWindow):
         layout.addLayout(left, 1)
 
         self.pipeline_status = build_badge("CONFIG READY", "success")
+        self.pipeline_status.setToolTip("Pipeline configuration status")
+        self.pipeline_status.setMinimumWidth(112)
+        self.pipeline_status.setAlignment(Qt.AlignCenter)
         layout.addWidget(self.pipeline_status)
 
         self.top_progress_wrap = QFrame()
@@ -240,14 +243,14 @@ class MainWindow(QMainWindow):
         self.top_progress_wrap.setVisible(False)
         layout.addWidget(self.top_progress_wrap, 2)
 
-        self.btn_console = QPushButton("Console")
+        self.btn_console = QPushButton("Log")
         self.btn_console.setObjectName("GhostButton")
         self.btn_console.setCheckable(True)
         self.btn_console.setToolTip("Show or hide process logs")
         self.btn_help = QPushButton("Help")
         self.btn_help.setObjectName("GhostButton")
         self.btn_help.setToolTip("Open the desktop workflow guide")
-        self.btn_settings = QPushButton("Settings")
+        self.btn_settings = QPushButton("Appearance")
         self.btn_settings.setObjectName("GhostButton")
         self.btn_settings.setToolTip("Theme and language preferences")
         self.btn_console.toggled.connect(self._toggle_console)

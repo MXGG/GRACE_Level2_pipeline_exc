@@ -89,7 +89,7 @@ class GuiWorkflowNavigationTest(unittest.TestCase):
             self.assertTrue(self.window._nav_buttons[page_key].isChecked())
 
     def test_console_and_navigation_controls_stay_in_sync(self):
-        self.assertEqual(self.window.btn_console.text(), "Console")
+        self.assertEqual(self.window.btn_console.text(), "Log")
         self.assertEqual(self.window.btn_nav_toggle.text(), "☰")
 
         QTest.mouseClick(self.window.page_dashboard.btn_console_run, Qt.LeftButton)
