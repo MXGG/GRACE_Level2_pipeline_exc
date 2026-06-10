@@ -26,6 +26,7 @@ def start_gui(argv: list[str] | None = None):
     from PySide6.QtWidgets import QApplication
 
     from grace_pipeline.ui.qt.global_monitor import configure_global_run_monitor
+    from grace_pipeline.ui.qt.help_docs import bind_help_docs
     from grace_pipeline.ui.qt.main_window import MainWindow
     from grace_pipeline.ui.qt.splash import create_splash_screen
     from grace_pipeline.ui.qt.theme import app_stylesheet
@@ -65,6 +66,7 @@ def start_gui(argv: list[str] | None = None):
         splash.set_progress(32, "Preparing interface fonts and theme...")
 
     window = MainWindow(load_persisted=True)
+    bind_help_docs(window)
     if splash is not None:
         splash.set_progress(68, "Constructing processing workspace...")
 
