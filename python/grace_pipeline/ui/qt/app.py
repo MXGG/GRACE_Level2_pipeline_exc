@@ -27,6 +27,7 @@ def start_gui(argv: list[str] | None = None):
 
     from grace_pipeline.ui.qt.global_monitor import configure_global_run_monitor
     from grace_pipeline.ui.qt.main_window import MainWindow
+    from grace_pipeline.ui.qt.splash import create_splash_screen
     from grace_pipeline.ui.qt.theme import app_stylesheet
 
     os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
@@ -41,6 +42,11 @@ def start_gui(argv: list[str] | None = None):
 
     app.setOrganizationName("GRACE-L2")
     app.setApplicationName("GRACE Level-2 Pipeline")
+
+    splash = create_splash_screen()
+    if splash is not None:
+        splash.set_progress(12, "Loading runtime environment...")
+
     app.setStyleSheet(app_stylesheet("system", app=app))
     _load_windows_fonts()
     preferred_families = [
@@ -55,10 +61,21 @@ def start_gui(argv: list[str] | None = None):
     if not family:
         font.setPointSize(10)
     app.setFont(font)
+    if splash is not None:
+        splash.set_progress(32, "Preparing interface fonts and theme...")
 
     window = MainWindow(load_persisted=True)
+    if splash is not None:
+        splash.set_progress(68, "Constructing processing workspace...")
+
     configure_global_run_monitor(window)
+    if splash is not None:
+        splash.set_progress(84, "Binding run monitor and workflow controls...")
+
     window.show()
+    if splash is not None:
+        splash.set_progress(100, "Ready.")
+        splash.finish(window)
 
     if owns_app:
         return app.exec()
