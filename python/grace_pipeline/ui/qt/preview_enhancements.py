@@ -25,8 +25,8 @@ from PySide6.QtWidgets import (
 )
 
 from grace_pipeline.infra.config import get_root_dir
-from grace_pipeline.ui.plotting.boundaries import plot_line, read_boundary_file, split_dateline
-from grace_pipeline.ui.plotting.overlays import draw_boundaries, draw_coastlines
+from grace_pipeline.ui.plotting.boundaries import plot_line, split_dateline
+from grace_pipeline.ui.plotting.overlays import draw_coastlines
 from grace_pipeline.ui.plotting.projections import (
     apply_proj_scale,
     get_conic_parallels,
@@ -427,7 +427,6 @@ def _grid_context(controller):
 
 def _apply_bbox(controller, grid, lon, lat):
     page = controller.window.page_preview
-    bbox = None
     if page.chk_auto_region.isChecked():
         bbox = (float(np.nanmin(lon)), float(np.nanmax(lon)), float(np.nanmin(lat)), float(np.nanmax(lat)))
         page.edit_region_lon_min.setText(f"{bbox[0]:.6g}")
@@ -537,7 +536,6 @@ def _render_3d_globe(controller) -> None:
     page = controller.window.page_preview
     path, idx, frame, grid, lon, lat = _grid_context(controller)
     grid, lon, lat, _bbox = _apply_bbox(controller, grid, lon, lat)
-    # Downsample for responsive 3-D rendering.
     lon_step = max(1, int(np.ceil(lon.size / 180)))
     lat_step = max(1, int(np.ceil(lat.size / 90)))
     lon_s = lon[::lon_step]
@@ -546,16 +544,15 @@ def _render_3d_globe(controller) -> None:
     lon2d, lat2d = np.meshgrid(lon_s, lat_s)
     grid_plot = grid_s.T if grid_s.shape == (lon_s.size, lat_s.size) else grid_s
     finite = grid_plot[np.isfinite(grid_plot)]
-    if finite.size:
-        cmin = parse_float(page.edit_cmin.text())
-        cmax = parse_float(page.edit_cmax.text())
-        if cmin is None or cmax is None:
-            q = float(np.nanpercentile(np.abs(finite), 98.0))
-            if q <= 0:
-                q = float(np.nanmax(np.abs(finite)) or 1.0)
-            cmin = -q if cmin is None else cmin
-            cmax = q if cmax is None else cmax
-    else:
+    cmin = parse_float(page.edit_cmin.text())
+    cmax = parse_float(page.edit_cmax.text())
+    if finite.size and (cmin is None or cmax is None):
+        q = float(np.nanpercentile(np.abs(finite), 98.0))
+        if q <= 0:
+            q = float(np.nanmax(np.abs(finite)) or 1.0)
+        cmin = -q if cmin is None else cmin
+        cmax = q if cmax is None else cmax
+    if cmin is None or cmax is None:
         cmin, cmax = -1.0, 1.0
     norm = mpl.colors.Normalize(vmin=cmin, vmax=cmax)
     cmap = mpl.colormaps[page.cmb_cmap.currentText().strip() or "RdBu_r"]
@@ -568,12 +565,13 @@ def _render_3d_globe(controller) -> None:
     x = radius * np.cos(lat_rad) * np.cos(lon_rad)
     y = radius * np.cos(lat_rad) * np.sin(lon_rad)
     z = radius * np.sin(lat_rad)
-    facecolors = cmap(norm(np.nan_to_num(grid_plot, nan=np.nanmean(finite) if finite.size else 0.0)))
+    fill_value = float(np.nanmean(finite)) if finite.size else 0.0
+    facecolors = cmap(norm(np.nan_to_num(grid_plot, nan=fill_value)))
     controller._figure.clear()
     ax = controller._figure.add_subplot(111, projection="3d")
     controller._ax = ax
     ax.plot_surface(x, y, z, facecolors=facecolors, rstride=1, cstride=1, linewidth=0, antialiased=False, shade=False, alpha=0.98)
-    _draw_3d_graticule(controller, ax)
+    _draw_3d_graticule(ax)
     _draw_3d_coastlines(controller, ax)
     ax.set_axis_off()
     ax.set_box_aspect((1, 1, 1))
@@ -587,7 +585,7 @@ def _render_3d_globe(controller) -> None:
     controller._canvas.draw_idle()
 
 
-def _draw_3d_graticule(controller, ax) -> None:
+def _draw_3d_graticule(ax) -> None:
     for lat in np.arange(-60, 61, 30):
         lons = np.linspace(-180, 180, 361)
         lats = np.full_like(lons, lat, dtype=float)
@@ -689,10 +687,6 @@ def _polish_rendered_figure(controller, *, export: bool = False) -> None:
         fig.subplots_adjust(left=0.04, right=0.94, top=0.96, bottom=0.05)
 
 
-def _safe_original_render(controller) -> None:
-    controller._preview_original_render()
-
-
 def _enhanced_render(self) -> None:
     try:
         if not _handle_cpt_combo(self):
@@ -703,7 +697,7 @@ def _enhanced_render(self) -> None:
         elif label in FALLBACK_RENDER_PROJECTIONS:
             _render_2d_fallback(self)
         else:
-            _safe_original_render(self)
+            self._preview_original_render()
             _post_polish_overlay(self)
             _polish_rendered_figure(self, export=False)
             self._canvas.draw_idle()
