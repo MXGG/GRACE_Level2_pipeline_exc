@@ -1,9 +1,10 @@
-"""Preview map rendering and export refinements for the Qt GUI."""
+"""Preview-page rendering, colormap, unit and export refinements."""
 
 from __future__ import annotations
 
 import contextlib
 import re
+import warnings
 from pathlib import Path
 from types import MethodType
 
@@ -25,7 +26,6 @@ from PySide6.QtWidgets import (
 
 from grace_pipeline.infra.config import get_root_dir
 
-
 ROOT_DIR = get_root_dir().resolve()
 ROBUST_PROJECTIONS = [
     "Robinson (Global)",
@@ -36,7 +36,7 @@ ROBUST_PROJECTIONS = [
     "Winkel Tripel",
     "Eckert IV",
 ]
-DEFAULT_CMAPS = [
+BASE_CMAPS = [
     "RdBu_r",
     "coolwarm",
     "seismic",
@@ -47,7 +47,6 @@ DEFAULT_CMAPS = [
     "turbo",
     "matlab_jet",
     "grace_bwr",
-    "导入 CPT...",
 ]
 
 
@@ -59,16 +58,20 @@ def _tr(window, en: str, zh: str) -> str:
     return zh if _is_zh(window) else en
 
 
+def _safe_disconnect(signal) -> None:
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", RuntimeWarning)
+        with contextlib.suppress(Exception):
+            signal.disconnect()
+
+
 def _set_combo_items(combo, values, current=None) -> None:
-    if combo is None:
-        return
     old = current or combo.currentText()
     combo.blockSignals(True)
     combo.clear()
     for value in values:
         combo.addItem(value, value)
-    target = old if old in values else (current or values[0])
-    idx = combo.findText(target)
+    idx = combo.findText(old)
     combo.setCurrentIndex(max(0, idx))
     combo.blockSignals(False)
 
@@ -90,7 +93,7 @@ def _register_default_colormaps() -> None:
             mpl.colormaps.register(cmap, name="grace_bwr")
 
 
-def _load_cpt_colormap(path: str):
+def _load_cpt_colormap(path: str) -> str:
     import matplotlib as mpl
     from matplotlib.colors import LinearSegmentedColormap
 
@@ -125,16 +128,18 @@ def _load_cpt_colormap(path: str):
     return name
 
 
+def _import_cpt_label(window) -> str:
+    return _tr(window, "Import CPT...", "导入 CPT...")
+
+
 def _is_import_cpt_text(text: str) -> bool:
     return str(text or "").strip().lower() in {"import cpt...", "导入 cpt..."}
 
 
 def _handle_cpt_combo(controller) -> bool:
-    """Open CPT import dialog immediately when the pseudo item is selected."""
-
     page = controller.window.page_preview
-    current = page.cmb_cmap.currentText().strip()
-    if not _is_import_cpt_text(current):
+    if not _is_import_cpt_text(page.cmb_cmap.currentText()):
+        page._last_valid_cmap = page.cmb_cmap.currentText().strip() or "RdBu_r"
         return True
     path, _ = QFileDialog.getOpenFileName(
         controller.window,
@@ -150,22 +155,13 @@ def _handle_cpt_combo(controller) -> bool:
         return False
     cmap_name = _load_cpt_colormap(path)
     if page.cmb_cmap.findText(cmap_name) < 0:
-        insert_at = max(0, page.cmb_cmap.count() - 1)
-        page.cmb_cmap.insertItem(insert_at, cmap_name, cmap_name)
+        page.cmb_cmap.insertItem(max(0, page.cmb_cmap.count() - 1), cmap_name, cmap_name)
     page.cmb_cmap.blockSignals(True)
     page.cmb_cmap.setCurrentText(cmap_name)
     page.cmb_cmap.blockSignals(False)
     page._last_valid_cmap = cmap_name
     page._custom_cpt_path = path
     return True
-
-
-def _on_cmap_changed(controller) -> None:
-    page = controller.window.page_preview
-    if _is_import_cpt_text(page.cmb_cmap.currentText()):
-        _handle_cpt_combo(controller)
-    else:
-        page._last_valid_cmap = page.cmb_cmap.currentText().strip() or "RdBu_r"
 
 
 def _unit_from_meta(meta: dict | None, var_name: str) -> str:
@@ -179,7 +175,6 @@ def _unit_from_meta(meta: dict | None, var_name: str) -> str:
         value = var_units.get(var_name) or var_units.get(str(var_name).lower())
         if value:
             return str(value)
-    # GRACE-L2 GUI processing chain stores equivalent-water-height grids in mm.
     return "mm"
 
 
@@ -197,6 +192,76 @@ def _current_unit(controller) -> str:
     return _unit_from_meta(meta, var_name)
 
 
+def _apply_preview_labels(window) -> None:
+    page = window.page_preview
+    replacements = {
+        "Load Stack Info": _tr(window, "Read Data", "读取数据"),
+        "Read Dataset": _tr(window, "Read Data", "读取数据"),
+        "读取栈信息": "读取数据",
+        "Stack Status": _tr(window, "Data Status", "数据状态"),
+        "栈状态": "数据状态",
+        "Dataset Source": _tr(window, "Data Source", "数据源"),
+        "Data Variable": _tr(window, "Variable", "数据变量"),
+        "Time Index": _tr(window, "Time", "时间"),
+        "Projection": _tr(window, "Projection", "投影方式"),
+        "Colormap": _tr(window, "Colormap", "色带"),
+        "Color Min": _tr(window, "Minimum", "色标最小值"),
+        "Color Max": _tr(window, "Maximum", "色标最大值"),
+        "Use Detected Extent": _tr(window, "Use Data Extent", "使用数据范围"),
+        "Render Preview": _tr(window, "Render", "渲染预览"),
+        "Export Figure": _tr(window, "Export", "导出图像"),
+        "Hide Controls": _tr(window, "Hide Controls", "隐藏控制"),
+        "Hide Status": _tr(window, "Hide Status", "隐藏状态"),
+        "Tools": _tr(window, "Tools", "工具"),
+        "Map Status": _tr(window, "Map Status", "地图状态"),
+        "Dataset": _tr(window, "Dataset", "数据集"),
+        "Cursor": _tr(window, "Cursor", "光标"),
+        "Value": _tr(window, "Value", "数值"),
+        "Latency": _tr(window, "Latency", "延迟"),
+    }
+    for label in page.findChildren(QLabel):
+        if label.text() in replacements:
+            label.setText(replacements[label.text()])
+    for widget in page.findChildren(QWidget):
+        if hasattr(widget, "text") and hasattr(widget, "setText"):
+            with contextlib.suppress(Exception):
+                text = widget.text()
+                if text in replacements:
+                    widget.setText(replacements[text])
+    with contextlib.suppress(Exception):
+        page.btn_load_stack.setText(_tr(window, "Read Data", "读取数据"))
+        page.btn_plot.setText(_tr(window, "Render", "渲染预览"))
+        page.btn_export_figure.setText(_tr(window, "Export", "导出图像"))
+        page.canvas_preview_title.setText("")
+        page.canvas_preview_title.setVisible(False)
+    with contextlib.suppress(Exception):
+        if page.lbl_stack_info.text().strip() in {"Stack not loaded.", "栈未读取。", "未读取。"}:
+            page.lbl_stack_info.setText(_tr(window, "Not loaded", "未读取"))
+    with contextlib.suppress(Exception):
+        if "cm" in page.lbl_grid_value.text() and page.lbl_dataset.text().startswith("GRACE Level-2"):
+            page.lbl_grid_value.setText("—")
+    with contextlib.suppress(Exception):
+        last_idx = page.cmb_cmap.count() - 1
+        if last_idx >= 0:
+            label = _import_cpt_label(window)
+            page.cmb_cmap.setItemText(last_idx, label)
+            page.cmb_cmap.setItemData(last_idx, label)
+
+
+def _patch_refresh_translations(window) -> None:
+    if getattr(window, "_preview_refresh_patch", False):
+        return
+    original = window.refresh_translations
+
+    def patched_refresh_translations(self):
+        result = original()
+        _apply_preview_labels(self)
+        return result
+
+    window.refresh_translations = MethodType(patched_refresh_translations, window)
+    window._preview_refresh_patch = True
+
+
 def _polish_rendered_figure(controller, *, export: bool = False) -> None:
     fig = getattr(controller, "_figure", None)
     ax = getattr(controller, "_ax", None)
@@ -206,11 +271,11 @@ def _polish_rendered_figure(controller, *, export: bool = False) -> None:
     var_name = page.cmb_data_var.currentText().strip() or "value"
     unit = _current_unit(controller)
     cb_label = f"{var_name} ({unit})" if unit else var_name
-
-    # Do not duplicate the GUI title inside the map canvas/exported figure.
     with contextlib.suppress(Exception):
         ax.set_title("")
-
+    with contextlib.suppress(Exception):
+        page.canvas_preview_title.setText("")
+        page.canvas_preview_title.setVisible(False)
     with contextlib.suppress(Exception):
         for line in ax.lines:
             color = str(line.get_color()).lower()
@@ -221,61 +286,14 @@ def _polish_rendered_figure(controller, *, export: bool = False) -> None:
                 line.set_linewidth(0.24 if export else 0.34)
                 line.set_alpha(0.55)
         ax.tick_params(labelsize=8 if not export else 9)
-
     for cax in list(fig.axes):
         if cax is ax:
             continue
         with contextlib.suppress(Exception):
             cax.set_ylabel(cb_label, fontsize=9 if not export else 10)
             cax.tick_params(labelsize=8 if not export else 9)
-
     with contextlib.suppress(Exception):
         fig.subplots_adjust(left=0.04, right=0.94, top=0.96, bottom=0.05)
-
-
-def _replace_preview_text(window) -> None:
-    page = window.page_preview
-    if _is_zh(window):
-        replacements = {
-            "Preview Controls": "预览控制",
-            "Dataset Source": "数据源",
-            "Load Stack Info": "读取数据",
-            "Read Dataset": "读取数据",
-            "Stack Status": "数据状态",
-            "Data Status": "数据状态",
-            "Data Variable": "数据变量",
-            "Time Index": "时间索引",
-            "Projection": "投影方式",
-            "Colormap": "色带",
-            "Color Min": "色标最小值",
-            "Color Max": "色标最大值",
-            "Use Detected Extent": "使用数据范围",
-            "Render Preview": "渲染预览",
-            "Export Figure": "导出图像",
-            "Hide Controls": "隐藏控制",
-            "Hide Status": "隐藏状态",
-            "Tools": "工具",
-            "Map Status": "地图状态",
-            "Dataset": "数据集",
-            "Cursor": "光标",
-            "Value": "数值",
-            "Latency": "延迟",
-        }
-    else:
-        replacements = {
-            "Load Stack Info": "Read Data",
-            "Read Dataset": "Read Data",
-            "Stack Status": "Data Status",
-        }
-    for label in page.findChildren(QLabel):
-        if label.text() in replacements:
-            label.setText(replacements[label.text()])
-    for widget in page.findChildren(QWidget):
-        if hasattr(widget, "text") and hasattr(widget, "setText"):
-            with contextlib.suppress(Exception):
-                text = widget.text()
-                if text in replacements:
-                    widget.setText(replacements[text])
 
 
 def _safe_original_render(controller) -> None:
@@ -291,6 +309,7 @@ def _enhanced_render(self) -> None:
             return
         _safe_original_render(self)
         _polish_rendered_figure(self, export=False)
+        _apply_preview_labels(self.window)
         self._canvas.draw_idle()
     except Exception as exc:
         self._show_error(_tr(self.window, "Preview", "预览"), str(exc))
@@ -315,7 +334,6 @@ def _enhanced_load_stack_info(self) -> None:
         target_var = active_var if active_var in var_names else (current if current in var_names else var_names[0])
         page.cmb_data_var.setCurrentText(target_var)
         page.cmb_data_var.blockSignals(False)
-
         nt = int(shape[2]) if len(shape) >= 3 else 1
         page.slider_time_index.blockSignals(True)
         page.slider_time_index.setRange(0, max(0, nt - 1))
@@ -331,8 +349,7 @@ def _enhanced_load_stack_info(self) -> None:
         else:
             page.lbl_stack_info.setText(f"Size {shape[0]} × {shape[1]} × {nt}\nVariable {target_var} | Unit {unit}\nTime {first_label} — {last_label}")
         self._apply_preview_bbox_from_info(info)
-        self.window.refresh_translations()
-        _replace_preview_text(self.window)
+        _apply_preview_labels(self.window)
         self.on_log(f"[PREVIEW] Data loaded: {path}", "stdout")
     except Exception as exc:
         page.lbl_stack_info.setText((_tr(self.window, "Load failed", "读取失败")) + f": {exc}")
@@ -346,14 +363,11 @@ def _enhanced_var_changed(self) -> None:
     unit = _current_unit(self)
     lines = text.splitlines() if text else []
     if len(lines) >= 2 and (lines[1].startswith("变量") or lines[1].startswith("Variable")):
-        lines[1] = (f"变量 {active} | 单位 {unit}" if _is_zh(self.window) else f"Variable {active} | Unit {unit}")
+        lines[1] = f"变量 {active} | 单位 {unit}" if _is_zh(self.window) else f"Variable {active} | Unit {unit}"
         page.lbl_stack_info.setText("\n".join(lines))
-    elif text:
-        page.lbl_stack_info.setText(text)
-    else:
+    elif not text:
         page.lbl_stack_info.setText(f"变量 {active} | 单位 {unit}" if _is_zh(self.window) else f"Variable {active} | Unit {unit}")
-    self.window.refresh_translations()
-    _replace_preview_text(self.window)
+    _apply_preview_labels(self.window)
 
 
 def _enhanced_export(self) -> None:
@@ -369,28 +383,22 @@ def _enhanced_export(self) -> None:
         form = QFormLayout()
         form.setContentsMargins(0, 0, 0, 0)
         form.setSpacing(10)
-
         default_path = ROOT_DIR / "output" / "local" / "preview.png"
         row_path = QWidget()
-        row_path_layout = QHBoxLayout(row_path)
-        row_path_layout.setContentsMargins(0, 0, 0, 0)
-        row_path_layout.setSpacing(8)
+        row_layout = QHBoxLayout(row_path)
+        row_layout.setContentsMargins(0, 0, 0, 0)
         path_edit = QLineEdit(str(default_path))
         browse_btn = QPushButton(_tr(self.window, "Browse", "浏览"))
-        browse_btn.setObjectName("GhostButton")
-        row_path_layout.addWidget(path_edit, 1)
-        row_path_layout.addWidget(browse_btn)
+        row_layout.addWidget(path_edit, 1)
+        row_layout.addWidget(browse_btn)
         form.addRow(_tr(self.window, "Output file", "输出文件"), row_path)
-
         fmt_combo = QComboBox()
         fmt_combo.addItems(["png", "tif", "pdf", "svg"])
         form.addRow(_tr(self.window, "Format", "格式"), fmt_combo)
-
         dpi_combo = QComboBox()
         dpi_combo.addItems(["300", "450", "600"])
         dpi_combo.setCurrentText("450")
         form.addRow("DPI", dpi_combo)
-
         width_spin = QSpinBox()
         width_spin.setRange(1200, 12000)
         width_spin.setValue(3000)
@@ -398,29 +406,22 @@ def _enhanced_export(self) -> None:
         height_spin.setRange(800, 8000)
         height_spin.setValue(1800)
         size_row = QWidget()
-        size_row_layout = QHBoxLayout(size_row)
-        size_row_layout.setContentsMargins(0, 0, 0, 0)
-        size_row_layout.setSpacing(8)
-        size_row_layout.addWidget(width_spin)
-        size_row_layout.addWidget(QLabel("x"))
-        size_row_layout.addWidget(height_spin)
-        size_row_layout.addWidget(QLabel("px"))
-        size_row_layout.addStretch(1)
+        size_layout = QHBoxLayout(size_row)
+        size_layout.setContentsMargins(0, 0, 0, 0)
+        size_layout.addWidget(width_spin)
+        size_layout.addWidget(QLabel("×"))
+        size_layout.addWidget(height_spin)
+        size_layout.addWidget(QLabel("px"))
+        size_layout.addStretch(1)
         form.addRow(_tr(self.window, "Canvas size", "画布尺寸"), size_row)
         layout.addLayout(form)
-
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         buttons.button(QDialogButtonBox.Ok).setText(_tr(self.window, "Export", "导出"))
         buttons.button(QDialogButtonBox.Cancel).setText(_tr(self.window, "Cancel", "取消"))
         layout.addWidget(buttons)
 
         def choose_path():
-            path, _ = QFileDialog.getSaveFileName(
-                dialog,
-                _tr(self.window, "Export Figure", "导出图像"),
-                path_edit.text().strip() or str(default_path),
-                "PNG (*.png);;TIFF (*.tif);;PDF (*.pdf);;SVG (*.svg)",
-            )
+            path, _ = QFileDialog.getSaveFileName(dialog, _tr(self.window, "Export Figure", "导出图像"), path_edit.text().strip() or str(default_path), "PNG (*.png);;TIFF (*.tif);;PDF (*.pdf);;SVG (*.svg)")
             if path:
                 path_edit.setText(path)
 
@@ -429,7 +430,6 @@ def _enhanced_export(self) -> None:
         buttons.rejected.connect(dialog.reject)
         if dialog.exec() != QDialog.Accepted:
             return
-
         out_path = Path(path_edit.text().strip() or str(default_path))
         fmt = fmt_combo.currentText().strip().lower() or "png"
         if out_path.suffix.lower() != f".{fmt}":
@@ -440,7 +440,7 @@ def _enhanced_export(self) -> None:
         height_px = int(height_spin.value())
         old_size = tuple(self._figure.get_size_inches())
         old_dpi = float(self._figure.dpi)
-        old_texts = []
+        added = []
         try:
             self._figure.set_dpi(dpi)
             self._figure.set_size_inches(width_px / dpi, height_px / dpi, forward=True)
@@ -449,15 +449,14 @@ def _enhanced_export(self) -> None:
             time_text = self._preview_time_text(int(self.window.page_preview.slider_time_index.value()))
             variable = self.window.page_preview.cmb_data_var.currentText().strip() or "ewh"
             caption = f"{dataset}    Variable: {variable}" + (f"    Time: {time_text}" if time_text else "")
-            txt = self._figure.text(0.04, 0.018, caption, fontsize=8, color="#34495e")
-            old_texts.append(txt)
+            added.append(self._figure.text(0.04, 0.018, caption, fontsize=8, color="#34495e"))
             self._figure.savefig(str(out_path), dpi=dpi, format=fmt, bbox_inches="tight", pad_inches=0.05, facecolor="white")
             self._show_info(_tr(self.window, "Export Figure", "导出图像"), _tr(self.window, "Saved to:", "已保存至：") + f"\n{out_path}")
             self.on_log(f"[PREVIEW] Figure exported: {out_path} ({fmt}, {width_px}x{height_px}, {dpi} dpi)", "stdout")
         finally:
-            for txt in old_texts:
+            for item in added:
                 with contextlib.suppress(Exception):
-                    txt.remove()
+                    item.remove()
             self._figure.set_dpi(old_dpi)
             self._figure.set_size_inches(old_size[0], old_size[1], forward=True)
             _polish_rendered_figure(self, export=False)
@@ -466,19 +465,21 @@ def _enhanced_export(self) -> None:
         self._show_error(_tr(self.window, "Export Figure", "导出图像"), str(exc))
 
 
-def install_preview_enhancements(window) -> None:
-    """Patch preview controls, colour maps, rendering labels, and export defaults."""
+def _on_cmap_changed(controller) -> None:
+    _handle_cpt_combo(controller)
 
+
+def install_preview_enhancements(window) -> None:
     _register_default_colormaps()
     page = window.page_preview
     controller = window.controller
-
+    cpt_item = _import_cpt_label(window)
     _set_combo_items(page.cmb_projection, ROBUST_PROJECTIONS, current="Robinson (Global)")
-    _set_combo_items(page.cmb_cmap, DEFAULT_CMAPS, current="RdBu_r")
+    _set_combo_items(page.cmb_cmap, BASE_CMAPS + [cpt_item], current="RdBu_r")
     page._last_valid_cmap = "RdBu_r"
     page.chk_layer_coastlines.setChecked(True)
     page.chk_layer_grid.setChecked(True)
-    _replace_preview_text(window)
+    page.lbl_grid_value.setText("—")
 
     if not hasattr(controller, "_preview_original_render"):
         controller._preview_original_render = controller.on_render_preview
@@ -495,12 +496,11 @@ def install_preview_enhancements(window) -> None:
     controller.on_preview_var_changed = MethodType(_enhanced_var_changed, controller)
 
     for button, handler in ((page.btn_plot, controller.on_render_preview), (page.btn_export_figure, controller.on_export_figure), (page.btn_load_stack, controller.on_load_stack_info)):
-        with contextlib.suppress(Exception):
-            button.clicked.disconnect()
+        _safe_disconnect(button.clicked)
         button.clicked.connect(handler)
-    with contextlib.suppress(Exception):
-        page.cmb_data_var.currentIndexChanged.disconnect()
+    _safe_disconnect(page.cmb_data_var.currentIndexChanged)
     page.cmb_data_var.currentIndexChanged.connect(lambda _idx=0: controller.on_preview_var_changed())
-    with contextlib.suppress(Exception):
-        page.cmb_cmap.currentIndexChanged.disconnect()
+    _safe_disconnect(page.cmb_cmap.currentIndexChanged)
     page.cmb_cmap.currentIndexChanged.connect(lambda _idx=0: _on_cmap_changed(controller))
+    _patch_refresh_translations(window)
+    _apply_preview_labels(window)
