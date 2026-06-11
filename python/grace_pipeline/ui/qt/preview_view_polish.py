@@ -13,6 +13,7 @@ import warnings
 from types import MethodType
 
 import numpy as np
+from PySide6.QtWidgets import QCheckBox, QHBoxLayout, QWidget
 
 from grace_pipeline.ui.plotting.boundaries import plot_line, split_dateline
 from grace_pipeline.ui.plotting.projections import (
@@ -37,8 +38,87 @@ def _safe_disconnect(signal) -> None:
             signal.disconnect()
 
 
+def _is_zh(window) -> bool:
+    return getattr(getattr(window, "ui_preferences", None), "language", "en") == "zh"
+
+
+def _tr(window, en: str, zh: str) -> str:
+    return zh if _is_zh(window) else en
+
+
 def _is_3d_axes(ax) -> bool:
     return getattr(ax, "name", "") == "3d" or hasattr(ax, "get_zlim3d")
+
+
+def _display_grid_enabled(controller) -> bool:
+    page = controller.window.page_preview
+    if hasattr(page, "chk_show_graticule"):
+        return page.chk_show_graticule.isChecked()
+    return bool(getattr(page, "chk_layer_grid", None) and page.chk_layer_grid.isChecked())
+
+
+def _display_colorbar_enabled(controller) -> bool:
+    page = controller.window.page_preview
+    if hasattr(page, "chk_show_colorbar"):
+        return page.chk_show_colorbar.isChecked()
+    return True
+
+
+def _display_coastlines_enabled(controller) -> bool:
+    page = controller.window.page_preview
+    return bool(getattr(page, "chk_layer_coastlines", None) is None or page.chk_layer_coastlines.isChecked())
+
+
+def _rerender_safely(controller) -> None:
+    with contextlib.suppress(Exception):
+        if getattr(controller, "_figure", None) is not None:
+            controller.on_render_preview()
+
+
+def _sync_display_option_labels(window) -> None:
+    page = window.page_preview
+    if hasattr(page, "chk_show_graticule"):
+        page.chk_show_graticule.setText(_tr(window, "Show coordinate grid", "显示坐标网格"))
+    if hasattr(page, "chk_show_colorbar"):
+        page.chk_show_colorbar.setText(_tr(window, "Show color scale", "显示色标尺"))
+
+
+def _ensure_display_option_controls(window) -> None:
+    """Add the two explicit display switches requested for the preview sidebar."""
+
+    page = window.page_preview
+    if hasattr(page, "preview_display_options_row"):
+        _sync_display_option_labels(window)
+        return
+
+    row = QWidget()
+    row.setObjectName("InlineField")
+    layout = QHBoxLayout(row)
+    layout.setContentsMargins(0, 0, 0, 0)
+    layout.setSpacing(12)
+
+    chk_grid = QCheckBox(_tr(window, "Show coordinate grid", "显示坐标网格"))
+    chk_grid.setChecked(bool(getattr(page, "chk_layer_grid", None) and page.chk_layer_grid.isChecked()))
+    chk_colorbar = QCheckBox(_tr(window, "Show color scale", "显示色标尺"))
+    chk_colorbar.setChecked(True)
+    layout.addWidget(chk_grid, 1)
+    layout.addWidget(chk_colorbar, 1)
+
+    page.chk_show_graticule = chk_grid
+    page.chk_show_colorbar = chk_colorbar
+    page.preview_display_options_row = row
+
+    sidebar_layout = page.sidebar.layout()
+    insert_at = sidebar_layout.indexOf(page.chk_auto_region)
+    if insert_at < 0:
+        insert_at = max(0, sidebar_layout.count() - 1)
+    sidebar_layout.insertWidget(insert_at, row)
+
+    if hasattr(page, "chk_layer_grid"):
+        chk_grid.toggled.connect(page.chk_layer_grid.setChecked)
+        page.chk_layer_grid.toggled.connect(chk_grid.setChecked)
+    chk_grid.toggled.connect(lambda _checked, _window=window: _rerender_safely(_window.controller))
+    chk_colorbar.toggled.connect(lambda _checked, _window=window: _rerender_safely(_window.controller))
 
 
 def _set_large_canvas_layout(controller) -> None:
@@ -50,19 +130,24 @@ def _set_large_canvas_layout(controller) -> None:
         return
     axes = list(fig.axes)
     color_axes = [item for item in axes if item is not ax]
+    show_colorbar = _display_colorbar_enabled(controller)
     try:
         if _is_3d_axes(ax):
-            ax.set_position([0.01, 0.03, 0.80, 0.92])
+            ax.set_position([0.03, 0.03, 0.82 if show_colorbar else 0.93, 0.92])
             ax.set_xlim(-1.10, 1.10)
             ax.set_ylim(-1.10, 1.10)
             ax.set_zlim(-1.10, 1.10)
             ax.set_box_aspect((1, 1, 1))
             for cax in color_axes:
-                cax.set_position([0.84, 0.18, 0.025, 0.64])
+                cax.set_visible(show_colorbar)
+                if show_colorbar:
+                    cax.set_position([0.86, 0.18, 0.025, 0.64])
         else:
-            ax.set_position([0.025, 0.055, 0.80, 0.88])
+            ax.set_position([0.025, 0.055, 0.82 if show_colorbar else 0.93, 0.88])
             for cax in color_axes:
-                cax.set_position([0.855, 0.17, 0.024, 0.68])
+                cax.set_visible(show_colorbar)
+                if show_colorbar:
+                    cax.set_position([0.87, 0.17, 0.024, 0.68])
     except Exception:
         return
 
@@ -113,7 +198,7 @@ def _text_if_finite(ax, x, y, text, *, ha="center", va="center") -> None:
 
 def _draw_2d_graticule_and_labels(controller) -> None:
     ax = getattr(controller, "_ax", None)
-    if ax is None or _is_3d_axes(ax):
+    if ax is None or _is_3d_axes(ax) or not _display_grid_enabled(controller):
         return
     page = controller.window.page_preview
     proj = pe._projection_key(controller, page.cmb_projection.currentText().strip())
@@ -125,7 +210,6 @@ def _draw_2d_graticule_and_labels(controller) -> None:
     except Exception:
         lon0, lat0, lat1, lat2 = 0.0, 0.0, 30.0, 60.0
 
-    # Force clear and readable graticules for every 2-D projection.
     for lat_line in np.arange(-60, 61, 30):
         lons = np.linspace(-180, 180, 721)
         lats = np.full_like(lons, lat_line, dtype=float)
@@ -146,8 +230,6 @@ def _draw_2d_graticule_and_labels(controller) -> None:
             x, y = _project_line(controller, proj, lons, lats, lon0=lon0, lat0=lat0, lat1=lat1, lat2=lat2)
         _plot_2d_line(ax, x, y, linewidth=0.58, alpha=0.86)
 
-    # Add simple lon/lat labels. These are drawn as annotations because many
-    # projected axes are intentionally axis-off for a map-like display.
     label_lat = -82.0
     for lon_line in np.arange(-120, 181, 60):
         if proj == "PlateCarree":
@@ -173,7 +255,7 @@ def _draw_2d_graticule_and_labels(controller) -> None:
 
 def _draw_2d_coastlines(controller) -> None:
     ax = getattr(controller, "_ax", None)
-    if ax is None or _is_3d_axes(ax):
+    if ax is None or _is_3d_axes(ax) or not _display_coastlines_enabled(controller):
         return
     page = controller.window.page_preview
     proj = pe._projection_key(controller, page.cmb_projection.currentText().strip())
@@ -233,15 +315,16 @@ def _draw_3d_graticule_and_coastlines(controller) -> None:
     ax = getattr(controller, "_ax", None)
     if ax is None or not _is_3d_axes(ax):
         return
-    # Draw above the slightly displaced data surface so the coastlines and grid
-    # do not get buried by positive topographic/mass anomalies.
-    for lat in np.arange(-60, 61, 30):
-        lons = np.linspace(-180, 180, 361)
-        _plot_3d_lonlat(ax, lons, np.full_like(lons, lat), radius=1.075, linewidth=0.62, alpha=0.75, linestyle="--")
-    for lon in np.arange(-180, 181, 60):
-        lats = np.linspace(-85, 85, 241)
-        _plot_3d_lonlat(ax, np.full_like(lats, lon), lats, radius=1.075, linewidth=0.62, alpha=0.75, linestyle="--")
+    if _display_grid_enabled(controller):
+        for lat in np.arange(-60, 61, 30):
+            lons = np.linspace(-180, 180, 361)
+            _plot_3d_lonlat(ax, lons, np.full_like(lons, lat), radius=1.075, linewidth=0.62, alpha=0.75, linestyle="--")
+        for lon in np.arange(-180, 181, 60):
+            lats = np.linspace(-85, 85, 241)
+            _plot_3d_lonlat(ax, np.full_like(lats, lon), lats, radius=1.075, linewidth=0.62, alpha=0.75, linestyle="--")
 
+    if not _display_coastlines_enabled(controller):
+        return
     coast_path = ""
     with contextlib.suppress(Exception):
         coast_path = controller._resolve_coastline_path()
@@ -294,6 +377,7 @@ def install_preview_view_polish(window) -> None:
     """Install final preview view polishing hooks."""
     if getattr(window, "_preview_view_polish_installed", False):
         return
+    _ensure_display_option_controls(window)
     controller = window.controller
     page = window.page_preview
     original_render = controller.on_render_preview
@@ -307,8 +391,15 @@ def install_preview_view_polish(window) -> None:
     _safe_disconnect(page.btn_plot.clicked)
     page.btn_plot.clicked.connect(controller.on_render_preview)
 
-    # Keep the header and layout coherent when the user changes the view settings
-    # before pressing Render.
+    original_refresh = window.refresh_translations
+
+    def refresh_with_display_labels(self):
+        result = original_refresh()
+        _sync_display_option_labels(self)
+        return result
+
+    window.refresh_translations = MethodType(refresh_with_display_labels, window)
+
     for signal in (page.cmb_projection.currentIndexChanged, page.slider_time_index.valueChanged, page.cmb_data_var.currentIndexChanged):
         with contextlib.suppress(Exception):
             signal.connect(lambda *_args, _controller=controller: restore_preview_header(_controller.window))
