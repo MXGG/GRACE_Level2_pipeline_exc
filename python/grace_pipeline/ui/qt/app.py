@@ -30,6 +30,7 @@ def start_gui(argv: list[str] | None = None):
     from grace_pipeline.ui.qt.help_docs import bind_help_docs
     from grace_pipeline.ui.qt.main_window import MainWindow
     from grace_pipeline.ui.qt.preview_enhancements import install_preview_enhancements
+    from grace_pipeline.ui.qt.preview_title_status import install_preview_title_status
     from grace_pipeline.ui.qt.shell_enhancements import install_shell_enhancements
     from grace_pipeline.ui.qt.splash import create_splash_screen
     from grace_pipeline.ui.qt.theme import app_stylesheet
@@ -77,6 +78,7 @@ def start_gui(argv: list[str] | None = None):
     bind_help_docs(window)
     install_compact_polish(window)
     install_preview_enhancements(window)
+    install_preview_title_status(window)
     if splash is not None:
         splash.set_progress(84, "Binding run monitor and workflow controls...")
 
