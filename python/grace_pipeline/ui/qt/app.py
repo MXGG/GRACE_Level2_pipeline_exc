@@ -32,6 +32,7 @@ def start_gui(argv: list[str] | None = None):
     from grace_pipeline.ui.qt.shell_enhancements import install_shell_enhancements
     from grace_pipeline.ui.qt.splash import create_splash_screen
     from grace_pipeline.ui.qt.theme import app_stylesheet
+    from grace_pipeline.ui.qt.ui_compact_polish import install_compact_polish
 
     os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
     os.environ.setdefault("MKL_NUM_THREADS", "1")
@@ -73,6 +74,7 @@ def start_gui(argv: list[str] | None = None):
     configure_global_run_monitor(window)
     install_shell_enhancements(window)
     bind_help_docs(window)
+    install_compact_polish(window)
     if splash is not None:
         splash.set_progress(84, "Binding run monitor and workflow controls...")
 
