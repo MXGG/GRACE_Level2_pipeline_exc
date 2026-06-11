@@ -1,20 +1,21 @@
 """High-quality preview figure export.
 
-The earlier exporter appended a long metadata caption to the figure and then used
-``bbox_inches='tight'``.  For long CSR Mascon file names this made the exported
-image much wider than the map itself, leaving large blank margins and reducing
-the apparent map sharpness.  This exporter keeps metadata out of the canvas,
-exports the map/colorbar area only, and uses pixel-size presets instead of
-asking the user to solve the DPI problem manually.
+This exporter keeps metadata out of the exported canvas, avoids expensive tight
+bounding-box recomputation, and gives explicit export feedback so the UI does
+not appear to have frozen while Matplotlib writes a large figure.
 """
 
 from __future__ import annotations
 
 import contextlib
+import os
+import time
 from pathlib import Path
 from types import MethodType
 
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
+    QApplication,
     QComboBox,
     QDialog,
     QDialogButtonBox,
@@ -24,6 +25,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QPushButton,
+    QProgressDialog,
     QSpinBox,
     QVBoxLayout,
     QWidget,
@@ -62,22 +64,19 @@ def _apply_export_layout(controller, *, show_colorbar: bool) -> None:
         return
     is_3d = getattr(ax, "name", "") == "3d" or hasattr(ax, "get_zlim3d")
     if is_3d:
-        ax.set_position([0.025, 0.025, 0.82 if show_colorbar else 0.95, 0.94])
+        ax.set_position([0.030, 0.045, 0.80 if show_colorbar else 0.94, 0.90])
         with contextlib.suppress(Exception):
             ax.set_xlim(-1.10, 1.10)
             ax.set_ylim(-1.10, 1.10)
             ax.set_zlim(-1.10, 1.10)
             ax.set_box_aspect((1, 1, 1))
     else:
-        ax.set_position([0.020, 0.035, 0.84 if show_colorbar else 0.96, 0.93])
+        ax.set_position([0.025, 0.055, 0.82 if show_colorbar else 0.94, 0.88])
     for cax in caxes:
         cax.set_visible(show_colorbar)
         if show_colorbar:
-            cax.set_position([0.885, 0.17, 0.020, 0.70])
+            cax.set_position([0.870, 0.18, 0.022, 0.66])
             with contextlib.suppress(Exception):
-                # Export label uses variable name only.  Units are intentionally
-                # not written because GRACE/CSR products may use cm, mm, EWH,
-                # or product-specific water-thickness conventions.
                 cax.set_ylabel(controller.window.page_preview.cmb_data_var.currentText().strip() or "value", fontsize=9)
                 cax.tick_params(labelsize=8)
     with contextlib.suppress(Exception):
@@ -132,7 +131,7 @@ def _export_dialog(controller):
     size_layout.addStretch(1)
     form.addRow(_tr(window, "Canvas size", "画布尺寸"), size_row)
 
-    note = QLabel(_tr(window, "Recommended: keep 300–450 DPI and increase canvas pixels for sharper raster output.", "建议：保持 300–450 DPI，通过提高画布像素改善栅格图清晰度。"))
+    note = QLabel(_tr(window, "Recommended: keep 300–450 DPI and increase canvas pixels for sharper raster output. PNG export uses this pixel size directly.", "建议：保持 300–450 DPI，通过提高画布像素改善栅格图清晰度。PNG 导出会直接采用该像素尺寸。"))
     note.setWordWrap(True)
     form.addRow("", note)
     layout.addLayout(form)
@@ -166,6 +165,24 @@ def _export_dialog(controller):
     }
 
 
+def _progress(window, text: str) -> QProgressDialog:
+    progress = QProgressDialog(text, "", 0, 0, window)
+    progress.setWindowTitle(_tr(window, "Export Figure", "导出图像"))
+    progress.setCancelButton(None)
+    progress.setWindowModality(Qt.ApplicationModal)
+    progress.setMinimumDuration(0)
+    progress.show()
+    QApplication.processEvents()
+    return progress
+
+
+def _replace_output(tmp_path: Path, out_path: Path) -> None:
+    # os.replace is atomic on Windows when source and target are on the same
+    # volume.  It also avoids leaving a half-written output file if savefig
+    # fails midway.
+    os.replace(str(tmp_path), str(out_path))
+
+
 def _high_quality_export(self) -> None:
     fig, ax, _caxes = _data_axes(self)
     if fig is None or ax is None:
@@ -188,24 +205,51 @@ def _high_quality_export(self) -> None:
     old_dpi = float(fig.dpi)
     old_positions = {item: item.get_position().frozen() for item in fig.axes}
     old_visible = {item: item.get_visible() for item in fig.axes}
+    progress = None
+    tmp_path = out_path.with_name(f".{out_path.stem}.tmp{out_path.suffix}")
 
     try:
+        progress = _progress(self.window, _tr(self.window, "Exporting figure, please wait...", "正在导出图像，请稍候..."))
         fig.set_dpi(dpi)
         fig.set_size_inches(width_px / dpi, height_px / dpi, forward=True)
         page = self.window.page_preview
         show_colorbar = bool(getattr(page, "chk_show_colorbar", None) is None or page.chk_show_colorbar.isChecked())
         _apply_export_layout(self, show_colorbar=show_colorbar)
-        fig.savefig(
-            str(out_path),
-            dpi=dpi,
-            format=fmt,
-            bbox_inches="tight",
-            pad_inches=0.02,
-            facecolor="white",
-            metadata={"Software": "GRACE Level-2 Pipeline"} if fmt in {"png", "pdf", "svg"} else None,
+        QApplication.processEvents()
+
+        # Do not use bbox_inches='tight' here.  Tight bounding boxes trigger an
+        # additional full render pass and can create excessive blank margins
+        # when long annotations are present.  Fixed canvas export is faster and
+        # more predictable.
+        save_kwargs = {
+            "fname": str(tmp_path),
+            "dpi": dpi,
+            "format": fmt,
+            "facecolor": "white",
+            "bbox_inches": None,
+            "pad_inches": 0.0,
+        }
+        if fmt in {"png", "pdf", "svg"}:
+            save_kwargs["metadata"] = {"Software": "GRACE Level-2 Pipeline"}
+        fig.savefig(**save_kwargs)
+        _replace_output(tmp_path, out_path)
+        size_mb = out_path.stat().st_size / (1024 * 1024)
+        elapsed = time.perf_counter()
+        if progress is not None:
+            progress.close()
+            QApplication.processEvents()
+        self._show_info(
+            _tr(self.window, "Export Figure", "导出图像"),
+            _tr(self.window, "Export completed:", "导出完成：")
+            + f"\n{out_path}\n{width_px} × {height_px} px, {dpi} DPI, {size_mb:.2f} MB",
         )
-        self._show_info(_tr(self.window, "Export Figure", "导出图像"), _tr(self.window, "Saved to:", "已保存至：") + f"\n{out_path}")
-        self.on_log(f"[PREVIEW] Figure exported: {out_path} ({fmt}, {width_px}x{height_px}, {dpi} dpi)", "stdout")
+        self.on_log(f"[PREVIEW] Figure exported: {out_path} ({fmt}, {width_px}x{height_px}, {dpi} dpi, {size_mb:.2f} MB)", "stdout")
+    except Exception as exc:
+        if progress is not None:
+            progress.close()
+        with contextlib.suppress(Exception):
+            tmp_path.unlink(missing_ok=True)
+        self._show_error(_tr(self.window, "Export Figure", "导出图像"), str(exc))
     finally:
         for item, pos in old_positions.items():
             with contextlib.suppress(Exception):
