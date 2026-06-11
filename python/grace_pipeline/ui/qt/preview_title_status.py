@@ -1,9 +1,9 @@
 """Restore the preview canvas header after preview rendering patches.
 
 The Matplotlib axes title is intentionally kept empty for clean exported figures.
-This module restores the Qt-side canvas header above the figure, so the user
-still sees the current projection, time slice and dataset state in the preview
-panel itself.
+This module keeps the Qt-side header short so long data file names do not cover
+navigation-toolbar actions.  Full dataset information remains available from
+the status card and the header tooltip.
 """
 
 from __future__ import annotations
@@ -45,6 +45,14 @@ def _time_text(window) -> str:
     return ""
 
 
+def _variable_text(window) -> str:
+    with contextlib.suppress(Exception):
+        value = window.page_preview.cmb_data_var.currentText().strip()
+        if value:
+            return value
+    return ""
+
+
 def _dataset_text(window) -> str:
     page = window.page_preview
     dataset = page.lbl_dataset.text().strip()
@@ -60,16 +68,21 @@ def restore_preview_header(window) -> None:
     page = window.page_preview
     parts = [_projection_title(window)]
     time_label = _time_text(window)
-    dataset = _dataset_text(window)
+    variable = _variable_text(window)
     if time_label:
         parts.append(time_label)
-    if dataset:
-        parts.append(dataset)
+    if variable:
+        parts.append(variable)
     text = " | ".join(part for part in parts if part)
+    full_dataset = _dataset_text(window)
+    tooltip = text + (f"\n{full_dataset}" if full_dataset else "")
     with contextlib.suppress(Exception):
         page.canvas_preview_title.setText(text)
         page.canvas_preview_title.setVisible(True)
-        page.canvas_preview_title.setToolTip(text)
+        page.canvas_preview_title.setToolTip(tooltip)
+        page.canvas_preview_title.setWordWrap(False)
+        page.canvas_preview_title.setMinimumWidth(0)
+        page.canvas_preview_title.setMaximumWidth(560)
 
 
 def install_preview_title_status(window) -> None:
