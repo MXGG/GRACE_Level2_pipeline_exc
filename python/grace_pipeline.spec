@@ -22,6 +22,7 @@ SPEC_DIR = Path(SPECPATH)
 SRC_DIR = SPEC_DIR
 REPO_ROOT = SRC_DIR.parent
 APP_ICON = REPO_ROOT / "installer" / "grace-l2.ico"
+SPLASH_IMAGE = SRC_DIR / "grace_pipeline" / "ui" / "qt" / "assets" / "splash.png"
 
 extra_binaries = []
 extra_binaries += collect_dynamic_libs("netCDF4")
@@ -80,6 +81,9 @@ datas = [
     (str(SRC_DIR / "grace_pipeline" / "__init__.py"), "grace_pipeline"),
     (str(SRC_DIR / "grace_pipeline" / "gui.py"), "grace_pipeline"),
 ]
+if SPLASH_IMAGE.exists():
+    datas.append((str(SPLASH_IMAGE), "grace_pipeline/ui/qt/assets"))
+
 datas += collect_data_files("matplotlib", includes=["mpl-data/*"])
 
 hiddenimports = sorted(set(collect_submodules("grace_pipeline") + collect_submodules("netCDF4") + collect_submodules("h5py") + [

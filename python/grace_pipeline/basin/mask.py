@@ -38,6 +38,22 @@ def _split_parts(boundary: BasinBoundary):
     return parts
 
 
+def _match_lon_convention(poly_points: np.ndarray, lon_vec: np.ndarray) -> np.ndarray:
+    """Convert polygon longitudes to the same convention as the grid."""
+    poly = np.asarray(poly_points, dtype=float).copy()
+    lon = np.asarray(lon_vec, dtype=float).ravel()
+    finite = lon[np.isfinite(lon)]
+    if finite.size == 0 or poly.ndim != 2 or poly.shape[1] < 2:
+        return poly
+    lon_min = float(np.nanmin(finite))
+    lon_max = float(np.nanmax(finite))
+    if lon_min >= -1e-6 and lon_max > 180.0:
+        poly[:, 0] = np.mod(poly[:, 0], 360.0)
+    elif lon_min < 0.0 and lon_max <= 180.0:
+        poly[:, 0] = ((poly[:, 0] + 180.0) % 360.0) - 180.0
+    return poly
+
+
 def make_mask(
     boundary: BasinBoundary,
     lon_vec: np.ndarray,
@@ -65,6 +81,7 @@ def make_mask(
     mask_flat = np.zeros(points.shape[0], dtype=bool)
     parts = _split_parts(boundary)
     for poly_points in parts:
+        poly_points = _match_lon_convention(poly_points, lon_vec)
         if poly_points.shape[0] < 3:
             continue
         # Quick bbox reject to reduce expensive point-in-polygon calls.

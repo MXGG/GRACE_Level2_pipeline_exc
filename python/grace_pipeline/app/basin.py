@@ -8,6 +8,21 @@ import numpy as np
 import tkinter as tk
 
 
+def _mask_bbox(mask: np.ndarray):
+    idx_lon, idx_lat = np.where(np.asarray(mask, dtype=bool))
+    if idx_lon.size == 0 or idx_lat.size == 0:
+        return slice(0, 0), slice(0, 0)
+    return slice(int(idx_lon.min()), int(idx_lon.max()) + 1), slice(int(idx_lat.min()), int(idx_lat.max()) + 1)
+
+
+def _crop2(arr, lon_slice: slice, lat_slice: slice):
+    return np.asarray(arr)[lon_slice, lat_slice]
+
+
+def _crop3(arr, lon_slice: slice, lat_slice: slice):
+    return np.asarray(arr)[lon_slice, lat_slice, :]
+
+
 def run_basin_analysis(self):
     if not bool(self.var_basin_enable.get()):
         self._msg_warn("Basin", "Basin analysis is disabled.")
@@ -73,6 +88,12 @@ def run_basin_analysis(self):
     do_ts = bool(self.var_basin_do_ts.get())
     do_stats = bool(self.var_basin_do_stats.get())
     do_grid = bool(self.var_basin_do_grid.get())
+    can_fit_temporal_products = int(nt) >= 6
+    if do_stats and not can_fit_temporal_products:
+        self._append_log(
+            f"[BASIN] Trend/amplitude products require at least 6 time samples; input has {nt}. They will be skipped.",
+            tag="stderr",
+        )
     mean_grid_all = np.nanmean(grid3d, axis=2) if do_grid else None
 
     save_ts_txt = bool(self.var_basin_save_ts_txt.get())
@@ -179,13 +200,21 @@ def run_basin_analysis(self):
                     {"time": t_labels, "t_years": t_years, "ts": ts},
                 )
 
-        if do_stats and ts is not None:
+        if do_stats and can_fit_temporal_products and ts is not None:
             self._set_scope_progress_pct("basin", _pct(0.4))
             try:
                 stat = fit_seasonal_trend(t_years, ts)
                 lines = [
-                    "trend,amp_ann,phs_ann,amp_semi,const",
-                    f"{stat.get('trend', np.nan):.6f},{stat.get('amp_ann', np.nan):.6f},{stat.get('phs_ann', np.nan):.6f},{stat.get('amp_semi', np.nan):.6f},{stat.get('const', np.nan):.6f}",
+                    "trend,amp_ann,phs_ann,amp_semi,phs_semi,residual_rms,const",
+                    (
+                        f"{stat.get('trend', np.nan):.6f},"
+                        f"{stat.get('amp_ann', np.nan):.6f},"
+                        f"{stat.get('phs_ann', np.nan):.6f},"
+                        f"{stat.get('amp_semi', np.nan):.6f},"
+                        f"{stat.get('phs_semi', np.nan):.6f},"
+                        f"{stat.get('residual_rms', np.nan):.6f},"
+                        f"{stat.get('const', np.nan):.6f}"
+                    ),
                 ]
                 self._safe_write_text(os.path.join(out_dir, f"{prefix}_{b_name}_stats.txt"), lines)
             except Exception:
@@ -198,7 +227,9 @@ def run_basin_analysis(self):
             trend_grid = np.full((nlon, nlat), np.nan, dtype=float)
             amp_grid = np.full((nlon, nlat), np.nan, dtype=float)
             phase_grid = np.full((nlon, nlat), np.nan, dtype=float)
-            if do_stats:
+            amp_semi_grid = np.full((nlon, nlat), np.nan, dtype=float)
+            residual_rms_grid = np.full((nlon, nlat), np.nan, dtype=float)
+            if do_stats and can_fit_temporal_products:
                 idxs = np.argwhere(mask > 0)
                 n_pts = int(idxs.shape[0]) if hasattr(idxs, "shape") else len(idxs)
                 stride = max(1, n_pts // 25) if n_pts > 0 else 1
@@ -238,6 +269,8 @@ def run_basin_analysis(self):
                                         float(stat.get("trend", np.nan)),
                                         float(stat.get("amp_ann", np.nan)),
                                         float(stat.get("phs_ann", np.nan)),
+                                        float(stat.get("amp_semi", np.nan)),
+                                        float(stat.get("residual_rms", np.nan)),
                                     )
                                 )
                             except Exception:
@@ -261,10 +294,12 @@ def run_basin_analysis(self):
                             except Exception:
                                 rows, done_local = [], 0
                             done_pts += int(done_local)
-                            for i, j, tr, am, ph in rows:
+                            for i, j, tr, am, ph, semi, residual in rows:
                                 trend_grid[i, j] = tr
                                 amp_grid[i, j] = am
                                 phase_grid[i, j] = ph
+                                amp_semi_grid[i, j] = semi
+                                residual_rms_grid[i, j] = residual
                             local = 0.45 + 0.45 * (min(done_pts, n_pts) / max(1, n_pts))
                             self._set_scope_progress_pct("basin", _pct(local))
                             if done_pts >= n_pts or (done_pts % max(1, stride * 5)) < chunk_size:
@@ -282,6 +317,8 @@ def run_basin_analysis(self):
                             trend_grid[i, j] = stat.get("trend", np.nan)
                             amp_grid[i, j] = stat.get("amp_ann", np.nan)
                             phase_grid[i, j] = stat.get("phs_ann", np.nan)
+                            amp_semi_grid[i, j] = stat.get("amp_semi", np.nan)
+                            residual_rms_grid[i, j] = stat.get("residual_rms", np.nan)
                         except Exception:
                             continue
                         if n_pts > 0:
@@ -295,26 +332,70 @@ def run_basin_analysis(self):
             trend_grid = np.where(mask > 0, trend_grid, np.nan)
             amp_grid = np.where(mask > 0, amp_grid, np.nan)
             phase_grid = np.where(mask > 0, phase_grid, np.nan)
+            amp_semi_grid = np.where(mask > 0, amp_semi_grid, np.nan)
+            residual_rms_grid = np.where(mask > 0, residual_rms_grid, np.nan)
             self._set_scope_progress_pct("basin", _pct(0.93))
 
+            lon_slice, lat_slice = _mask_bbox(mask)
+            lon_out = np.asarray(lon_vec)[lon_slice]
+            lat_out = np.asarray(lat_vec)[lat_slice]
+            mask_out = _crop2(mask, lon_slice, lat_slice)
+            mean_out = _crop2(mean_grid, lon_slice, lat_slice)
+            trend_out = _crop2(trend_grid, lon_slice, lat_slice)
+            amp_out = _crop2(amp_grid, lon_slice, lat_slice)
+            phase_out = _crop2(phase_grid, lon_slice, lat_slice)
+            amp_semi_out = _crop2(amp_semi_grid, lon_slice, lat_slice)
+            residual_out = _crop2(residual_rms_grid, lon_slice, lat_slice)
+
             if save_grid_mat:
+                masked_grid = np.where(mask[:, :, None] > 0, grid3d, np.nan)
+                masked_grid_out = _crop3(masked_grid, lon_slice, lat_slice)
+                grid_payload = {
+                    "lon": lon_out,
+                    "lat": lat_out,
+                    "time": t_labels,
+                    "t_years": t_years,
+                    "grid": masked_grid_out,
+                    "mean": mean_out,
+                    "mask": mask_out,
+                    "source_lon_index": np.arange(lon_slice.start, lon_slice.stop, dtype=int),
+                    "source_lat_index": np.arange(lat_slice.start, lat_slice.stop, dtype=int),
+                    "bbox_lonlat": np.asarray(
+                        [
+                            float(lon_out[0]) if lon_out.size else np.nan,
+                            float(lon_out[-1]) if lon_out.size else np.nan,
+                            float(lat_out[0]) if lat_out.size else np.nan,
+                            float(lat_out[-1]) if lat_out.size else np.nan,
+                        ],
+                        dtype=float,
+                    ),
+                    "available_products": np.asarray(
+                        ["masked_grid", "mean", "trend", "annual_amplitude", "semiannual_amplitude", "residual_rms"] if can_fit_temporal_products and do_stats else ["masked_grid", "mean"],
+                        dtype=object,
+                    ),
+                }
+                if can_fit_temporal_products and do_stats:
+                    grid_payload.update(
+                        {
+                            "trend": trend_out,
+                            "amp_ann": amp_out,
+                            "phase_ann": phase_out,
+                            "amp_semi": amp_semi_out,
+                            "residual_rms": residual_out,
+                        }
+                    )
                 self._safe_savemat(
                     os.path.join(out_dir, f"{prefix}_{b_name}_grid.mat"),
-                    {
-                        "lon": lon_vec,
-                        "lat": lat_vec,
-                        "mean": mean_grid,
-                        "trend": trend_grid,
-                        "amp_ann": amp_grid,
-                        "phase_ann": phase_grid,
-                        "mask": mask,
-                    },
+                    grid_payload,
                 )
             if save_grid_txt:
-                self._save_grid_txt(os.path.join(out_dir, f"{prefix}_{b_name}_mean.txt"), lon_vec, lat_vec, mean_grid)
-                self._save_grid_txt(os.path.join(out_dir, f"{prefix}_{b_name}_trend.txt"), lon_vec, lat_vec, trend_grid)
-                self._save_grid_txt(os.path.join(out_dir, f"{prefix}_{b_name}_amp.txt"), lon_vec, lat_vec, amp_grid)
-                self._save_grid_txt(os.path.join(out_dir, f"{prefix}_{b_name}_phase.txt"), lon_vec, lat_vec, phase_grid)
+                self._save_grid_txt(os.path.join(out_dir, f"{prefix}_{b_name}_mean.txt"), lon_out, lat_out, mean_out)
+                if can_fit_temporal_products and do_stats:
+                    self._save_grid_txt(os.path.join(out_dir, f"{prefix}_{b_name}_trend.txt"), lon_out, lat_out, trend_out)
+                    self._save_grid_txt(os.path.join(out_dir, f"{prefix}_{b_name}_amp.txt"), lon_out, lat_out, amp_out)
+                    self._save_grid_txt(os.path.join(out_dir, f"{prefix}_{b_name}_amp_semi.txt"), lon_out, lat_out, amp_semi_out)
+                    self._save_grid_txt(os.path.join(out_dir, f"{prefix}_{b_name}_residual_rms.txt"), lon_out, lat_out, residual_out)
+                    self._save_grid_txt(os.path.join(out_dir, f"{prefix}_{b_name}_phase.txt"), lon_out, lat_out, phase_out)
 
         self._set_scope_progress_pct("basin", _pct(1.0))
         self._append_log(f"[BASIN] ({b_idx}/{n_basins}) {b_name}: done.")

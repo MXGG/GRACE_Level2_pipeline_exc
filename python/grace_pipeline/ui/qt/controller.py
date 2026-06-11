@@ -12,7 +12,7 @@ import sys
 import threading
 import time
 import webbrowser
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import numpy as np
@@ -47,6 +47,7 @@ from grace_pipeline.basin import (
     make_mask as basin_make_mask,
     read_boundary as basin_read_boundary,
 )
+from grace_pipeline.basin.boundary import resolve_shapefile_name_field
 from grace_pipeline.core.grid import ensure_latlon_order, make_lonlat_vec
 from grace_pipeline.app.leakage_helpers import (
     build_global_land_mask,
@@ -254,6 +255,7 @@ class QtWorkflowHost:
         self._stack_cache = None
         self._stack_cache_path = ""
         self._stack_cache_meta = {}
+        self._stack_info_cache = None
         self._stack_frame_cache = {}
         self._basin_cache = None
         self._basin_cache_path = ""
@@ -271,7 +273,7 @@ class QtWorkflowHost:
         self.var_basin_tag = QtVar("DATA")
         self.var_basin_do_ts = QtVar(True)
         self.var_basin_do_stats = QtVar(True)
-        self.var_basin_do_grid = QtVar(False)
+        self.var_basin_do_grid = QtVar(True)
         self.var_basin_save_ts_txt = QtVar(True)
         self.var_basin_save_ts_mat = QtVar(True)
         self.var_basin_save_grid_txt = QtVar(False)
@@ -433,6 +435,18 @@ class QtWorkflowHost:
             years = np.arange(nt, dtype=float)
             return years, labels
         flat = np.asarray(t_arr).reshape(-1)
+        time_units = str(meta.get("time_units") or "").strip().lower()
+        time_calendar = str(meta.get("time_calendar") or "").strip().lower()
+        day_base = None
+        if "days since" in time_units:
+            raw_base = time_units.split("days since", 1)[1].strip().split()[0]
+            with contextlib.suppress(Exception):
+                day_base = datetime.fromisoformat(raw_base)
+        elif time_calendar and flat.size and np.issubdtype(np.asarray(flat).dtype, np.number):
+            finite = np.asarray(flat, dtype=float)
+            finite = finite[np.isfinite(finite)]
+            if finite.size and 30.0 <= float(np.nanmin(finite)) and float(np.nanmax(finite)) <= 20000.0:
+                day_base = datetime(2002, 1, 1)
         labels = []
         years = []
         for idx, item in enumerate(flat[:nt]):
@@ -440,6 +454,10 @@ class QtWorkflowHost:
                 if hasattr(item, "strftime"):
                     labels.append(item.strftime("%Y-%m"))
                     years.append(item.year + (item.month - 0.5) / 12.0)
+                elif day_base is not None and np.isfinite(float(item)):
+                    dt = day_base + timedelta(days=float(item))
+                    labels.append(dt.strftime("%Y-%m"))
+                    years.append(dt.year + (dt.month - 0.5) / 12.0)
                 else:
                     s = str(item).strip()
                     if len(s) >= 7 and s[4] in "-/":
@@ -495,7 +513,8 @@ class QtWorkflowHost:
             self._stack_frame_cache = {}
         self._stack_cache_path = path
         self._stack_cache_meta = meta or {}
-        return {"shape": shape, "lon": lon, "lat": lat, "t": t_arr, "meta": meta or {}}
+        self._stack_info_cache = {"path": path, "shape": shape, "lon": lon, "lat": lat, "t": t_arr, "meta": meta or {}}
+        return dict(self._stack_info_cache)
 
     def get_stack_data(self, path: str, active_var: str | None = None):
         if self._stack_cache is not None and self._stack_cache_path == path:
@@ -508,6 +527,14 @@ class QtWorkflowHost:
         self._stack_cache = data
         self._stack_cache_path = path
         self._stack_cache_meta = meta or {}
+        self._stack_info_cache = {
+            "path": path,
+            "shape": tuple(np.asarray(ewh).shape),
+            "lon": lon,
+            "lat": lat,
+            "t": t_arr,
+            "meta": meta or {},
+        }
         self._stack_frame_cache = {}
         return data
 
@@ -691,6 +718,7 @@ class MainWindowController:
         self._basin_preview_figure = None
         self._basin_preview_ax = None
         self._basin_preview_toolbar = None
+        self._basin_boundaries = []
         self._proj_scale = None
         self._proj_x0 = None
         self._preview_pick_state = None
@@ -856,6 +884,10 @@ class MainWindowController:
             w.page_basin.btn_preview_selected_basin.clicked.connect(lambda: self.on_refresh_basin_preview(show_errors=True))
         if hasattr(w.page_basin, "btn_refresh_basin_preview"):
             w.page_basin.btn_refresh_basin_preview.clicked.connect(lambda: self.on_refresh_basin_preview(show_errors=True))
+        if hasattr(w.page_basin, "cmb_preview_basin"):
+            w.page_basin.cmb_preview_basin.currentIndexChanged.connect(lambda *_args: self.on_basin_preview_target_changed())
+        if hasattr(w.page_basin, "slider_basin_time_index"):
+            w.page_basin.slider_basin_time_index.valueChanged.connect(lambda *_args: self.on_basin_preview_target_changed())
         w.page_basin.btn_tool_grid_to_series.clicked.connect(self.on_tool_grid_to_series)
         w.page_basin.btn_tool_harmonic_fit.clicked.connect(self.on_tool_harmonic_fit)
         w.page_basin.btn_run_basin.clicked.connect(self.on_run_basin)
@@ -1585,42 +1617,78 @@ class MainWindowController:
             btn.style().unpolish(btn)
             btn.style().polish(btn)
         if hasattr(page, "lbl_selected_basin"):
-            selected_names = self._selected_basin_names()
-            selected = selected_names[0] if selected_names else ""
-            mode = page.cmb_basin_selection_mode.currentText().strip()
-            if index == 1:
-                page.lbl_selected_basin.setText("Selected basin: all boundary features")
-            elif len(selected_names) > 1:
-                page.lbl_selected_basin.setText(f"Selected basins: {len(selected_names)} features; preview uses {selected}")
-            elif selected:
-                page.lbl_selected_basin.setText(f"Selected basin: {selected}")
-            else:
-                page.lbl_selected_basin.setText(f"Selected basin: first boundary feature ({mode})")
+            selected = self._preview_basin_name()
+            page.lbl_selected_basin.setText(f"Preview basin: {selected or 'first boundary feature'}")
 
     def on_basin_table_selection_changed(self) -> None:
         page = self.window.page_basin
-        if page.cmb_basin_selection_mode.currentIndex() == 1:
-            if hasattr(page, "lbl_selected_basin"):
-                page.lbl_selected_basin.setText("Selected basin: all boundary features")
-            return
         names = self._selected_basin_names()
         if not names:
             return
+        if hasattr(page, "cmb_preview_basin"):
+            idx = page.cmb_preview_basin.findText(names[0])
+            if idx >= 0 and page.cmb_preview_basin.currentIndex() != idx:
+                page.cmb_preview_basin.setCurrentIndex(idx)
         if hasattr(page, "lbl_selected_basin"):
-            if len(names) == 1:
-                page.lbl_selected_basin.setText(f"Selected basin: {names[0]}")
-            else:
-                page.lbl_selected_basin.setText(f"Selected basins: {len(names)} features; preview uses {names[0]}")
+            page.lbl_selected_basin.setText(f"Preview basin: {names[0]}")
         if hasattr(page, "lbl_basin_preview_status"):
-            page.lbl_basin_preview_status.setText(f"Preview target: {names[0]}. Click Preview Selected Basin to render.")
+            page.lbl_basin_preview_status.setText(f"Preview target: {names[0]}.")
+
+    def on_basin_preview_target_changed(self) -> None:
+        page = self.window.page_basin
+        self._sync_basin_time_slice_label()
+        selected = self._preview_basin_name()
+        if selected and hasattr(page, "lbl_selected_basin"):
+            page.lbl_selected_basin.setText(f"Preview basin: {selected}")
+        with contextlib.suppress(Exception):
+            self.on_refresh_basin_preview(show_errors=False)
 
     def _basin_name_field(self) -> str:
         page = self.window.page_basin
+        if hasattr(page, "cmb_basin_name_field"):
+            value = page.cmb_basin_name_field.currentText().strip()
+            if value:
+                return value
         if hasattr(page, "edit_basin_name_field"):
             value = page.edit_basin_name_field.text().strip()
             if value:
                 return value
         return "Name"
+
+    def _populate_basin_name_field_options(self, boundary_path: str) -> str:
+        page = self.window.page_basin
+        current = self._basin_name_field()
+        if Path(boundary_path).suffix.lower() != ".shp" or not hasattr(page, "cmb_basin_name_field"):
+            return current
+        try:
+            import shapefile
+
+            sf = shapefile.Reader(boundary_path)
+            fields = [str(f[0]) for f in sf.fields[1:]]
+        except Exception:
+            return current
+        resolved = current
+        if fields:
+            lower_fields = {field.lower(): field for field in fields}
+            if current.lower() not in lower_fields:
+                with contextlib.suppress(Exception):
+                    resolved = resolve_shapefile_name_field(boundary_path, current) or fields[0]
+            else:
+                resolved = lower_fields[current.lower()]
+        page.cmb_basin_name_field.blockSignals(True)
+        page.cmb_basin_name_field.clear()
+        for field in fields or [resolved or "Name"]:
+            page.cmb_basin_name_field.addItem(field, field)
+        if resolved:
+            idx = page.cmb_basin_name_field.findText(resolved)
+            if idx >= 0:
+                page.cmb_basin_name_field.setCurrentIndex(idx)
+            else:
+                page.cmb_basin_name_field.setEditText(resolved)
+            if hasattr(page, "edit_basin_name_field"):
+                page.edit_basin_name_field.setText(resolved)
+        page.cmb_basin_name_field.blockSignals(False)
+        return resolved or current
 
     def _resolve_basin_boundary_file(self, value: str) -> str:
         raw = str(value or "").strip()
@@ -1642,6 +1710,31 @@ class MainWindowController:
         names = self._selected_basin_names()
         return names[0] if names else ""
 
+    def _preview_basin_name(self) -> str:
+        page = self.window.page_basin
+        if hasattr(page, "cmb_preview_basin"):
+            text = str(page.cmb_preview_basin.currentText() or "").strip()
+            if text and text != "First boundary":
+                return text
+        return self._selected_basin_name()
+
+    def _sync_basin_time_slice_label(self) -> None:
+        page = self.window.page_basin
+        if not hasattr(page, "slider_basin_time_index") or not hasattr(page, "lbl_basin_time_slice"):
+            return
+        idx = int(page.slider_basin_time_index.value())
+        total = int(page.slider_basin_time_index.maximum()) + 1
+        label = ""
+        with contextlib.suppress(Exception):
+            cache = self.host._basin_cache or {}
+            shape = np.asarray(cache.get("ewh")).shape
+            nt = int(shape[2]) if len(shape) >= 3 else 1
+            _t_years, labels = self.host._resolve_time(cache.get("t"), nt, meta=cache.get("meta", {}) or {})
+            if labels and 0 <= idx < len(labels):
+                label = str(labels[idx])
+        suffix = f" | {label}" if label else ""
+        page.lbl_basin_time_slice.setText(f"Time slice: {idx + 1} / {max(1, total)}{suffix}")
+
     def _selected_basin_names(self) -> list[str]:
         page = self.window.page_basin
         rows = set()
@@ -1659,18 +1752,44 @@ class MainWindowController:
                     names.append(name)
         return names
 
-    def _populate_basin_table_from_boundaries(self, boundaries) -> None:
+    def _populate_basin_table_from_boundaries(self, boundaries, lon_vec=None, lat_vec=None) -> None:
         rows = []
         for idx, basin in enumerate(boundaries, start=1):
             name = str(getattr(basin, "name", "") or f"basin_{idx}")
             lon = np.asarray(getattr(basin, "lon", []), dtype=float)
+            lat = np.asarray(getattr(basin, "lat", []), dtype=float)
             vertex_count = int(np.count_nonzero(np.isfinite(lon)))
             part_count = len(getattr(basin, "parts", []) or []) or 1
-            rows.append((str(idx), name, f"{vertex_count} vertices", f"{part_count} part(s)"))
+            cells_text = f"{vertex_count} vertices"
+            if lon_vec is not None and lat_vec is not None:
+                with contextlib.suppress(Exception):
+                    mask = basin_make_mask(basin, np.asarray(lon_vec, dtype=float).squeeze(), np.asarray(lat_vec, dtype=float).squeeze())
+                    cells_text = f"{int(np.count_nonzero(mask))} grid cells"
+            finite_lon = lon[np.isfinite(lon)]
+            finite_lat = lat[np.isfinite(lat)]
+            region = f"{part_count} part(s)"
+            if finite_lon.size and finite_lat.size:
+                region = (
+                    f"{float(np.nanmin(finite_lon)):.2f}..{float(np.nanmax(finite_lon)):.2f}, "
+                    f"{float(np.nanmin(finite_lat)):.2f}..{float(np.nanmax(finite_lat)):.2f} | {part_count} part(s)"
+                )
+            rows.append((str(idx), name, cells_text, region))
         page = self.window.page_basin
         populate_table(page.table_basins, ["ID", "Basin Name", "Cells / Area", "Region / Parts"], rows)
         page.table_basins.setSelectionMode(QAbstractItemView.ExtendedSelection)
         page.table_basins.setSelectionBehavior(type(page.table_basins).SelectRows)
+        if hasattr(page, "cmb_preview_basin"):
+            current = self._preview_basin_name()
+            page.cmb_preview_basin.blockSignals(True)
+            page.cmb_preview_basin.clear()
+            if rows:
+                for row in rows:
+                    page.cmb_preview_basin.addItem(row[1], row[1])
+                idx = page.cmb_preview_basin.findText(current)
+                page.cmb_preview_basin.setCurrentIndex(idx if idx >= 0 else 0)
+            else:
+                page.cmb_preview_basin.addItem("First boundary", "")
+            page.cmb_preview_basin.blockSignals(False)
         if rows:
             page.table_basins.selectRow(0)
 
@@ -2415,6 +2534,8 @@ class MainWindowController:
         w.page_basin.edit_boundary_file.setText(str(basin_cfg.get("boundary_file", "")))
         if hasattr(w.page_basin, "edit_basin_name_field"):
             w.page_basin.edit_basin_name_field.setText(str(basin_cfg.get("name_field", "Name") or "Name"))
+        if hasattr(w.page_basin, "cmb_basin_name_field"):
+            w.page_basin.cmb_basin_name_field.setEditText(str(basin_cfg.get("name_field", "Name") or "Name"))
         w.page_basin.edit_export_path.setText(str(basin_cfg.get("output_dir", Path(getattr(cfg.path, "OUTPUT", "")) / "local" / "basin")))
         if basin_cfg.get("aggregation_strategy"):
             w.page_basin.cmb_aggregation_strategy.setCurrentText(str(basin_cfg.get("aggregation_strategy")))
@@ -2423,7 +2544,7 @@ class MainWindowController:
         if hasattr(w.page_basin, "chk_basin_save_series"):
             w.page_basin.chk_basin_save_series.setChecked(bool(basin_cfg.get("do_time_series", True)))
             w.page_basin.chk_basin_save_stats.setChecked(bool(basin_cfg.get("do_statistics", True)))
-            w.page_basin.chk_basin_save_mask_grid.setChecked(bool(basin_cfg.get("do_grid", False)))
+            w.page_basin.chk_basin_save_mask_grid.setChecked(bool(basin_cfg.get("do_grid", True)))
             w.page_basin.chk_basin_save_ts_txt.setChecked(bool(basin_cfg.get("save_ts_txt", True)))
             w.page_basin.chk_basin_save_ts_mat.setChecked(bool(basin_cfg.get("save_ts_mat", True)))
             w.page_basin.chk_basin_save_grid_mat.setChecked(bool(basin_cfg.get("save_grid_mat", True)))
@@ -2489,7 +2610,7 @@ class MainWindowController:
             self.host.var_basin_names.set(basin_names)
         self.host.var_basin_out_dir.set(w.page_basin.edit_export_path.text().strip())
         self.host.var_basin_use_file_time.set(True)
-        self.host.var_basin_do_grid.set(bool(getattr(w.page_basin, "chk_basin_save_mask_grid", None).isChecked()) if hasattr(w.page_basin, "chk_basin_save_mask_grid") else False)
+        self.host.var_basin_do_grid.set(bool(getattr(w.page_basin, "chk_basin_save_mask_grid", None).isChecked()) if hasattr(w.page_basin, "chk_basin_save_mask_grid") else True)
         self.host.var_basin_do_ts.set(bool(getattr(w.page_basin, "chk_basin_save_series", None).isChecked()) if hasattr(w.page_basin, "chk_basin_save_series") else True)
         self.host.var_basin_do_stats.set(bool(getattr(w.page_basin, "chk_basin_save_stats", None).isChecked()) if hasattr(w.page_basin, "chk_basin_save_stats") else True)
         self.host.var_basin_save_ts_txt.set(bool(getattr(w.page_basin, "chk_basin_save_ts_txt", None).isChecked()) if hasattr(w.page_basin, "chk_basin_save_ts_txt") else True)
@@ -2620,11 +2741,26 @@ class MainWindowController:
                     if labels:
                         time_text = f"Time: {labels[0]} -> {labels[-1]} ({len(labels)} samples)"
                 page.lbl_basin_time_range.setText(time_text)
+            if hasattr(page, "slider_basin_time_index"):
+                page.slider_basin_time_index.blockSignals(True)
+                page.slider_basin_time_index.setRange(0, max(0, nt - 1))
+                page.slider_basin_time_index.setValue(0)
+                page.slider_basin_time_index.setEnabled(nt > 1)
+                page.slider_basin_time_index.blockSignals(False)
+                self._sync_basin_time_slice_label()
             if not page.edit_export_path.text().strip() or page.edit_export_path.text().strip().startswith("./"):
                 page.edit_export_path.setText(str(Path(getattr(self.host.cfg.path, "OUTPUT", ROOT_DIR / "output")) / "local" / "basin"))
+            if self._basin_boundaries:
+                with contextlib.suppress(Exception):
+                    lon_vec = np.asarray(self.host._basin_cache.get("lon"), dtype=float).squeeze()
+                    lat_vec = np.asarray(self.host._basin_cache.get("lat"), dtype=float).squeeze()
+                    self._populate_basin_table_from_boundaries(self._basin_boundaries, lon_vec=lon_vec, lat_vec=lat_vec)
             self.on_log(f"[BASIN] Input loaded: {self.host.var_basin_data.get()}", "stdout")
             with contextlib.suppress(Exception):
-                self.on_refresh_basin_preview(show_errors=False)
+                if page.edit_boundary_file.text().strip():
+                    self.on_generate_basin_mask_preview()
+                else:
+                    self.on_refresh_basin_preview(show_errors=False)
         except Exception as exc:
             self.window.page_basin.lbl_basin_info.setText(f"Load failed: {exc}")
             self._show_error("Basin", str(exc))
@@ -2653,19 +2789,29 @@ class MainWindowController:
             boundary_path = self._resolve_basin_boundary_file(boundary_path)
             if page.edit_boundary_file.text().strip() != boundary_path:
                 page.edit_boundary_file.setText(boundary_path)
-            boundaries = basin_read_boundary(boundary_path, name_field=self._basin_name_field())
+            name_field = self._populate_basin_name_field_options(boundary_path)
+            boundaries = basin_read_boundary(boundary_path, name_field=name_field)
             if not boundaries:
                 raise ValueError("No basin polygon found in boundary file.")
-            self._populate_basin_table_from_boundaries(boundaries)
+            self._basin_boundaries = list(boundaries)
+            lon_vec = lat_vec = None
+            with contextlib.suppress(Exception):
+                if self.host._basin_cache is not None:
+                    lon_vec = np.asarray(self.host._basin_cache.get("lon"), dtype=float).squeeze()
+                    lat_vec = np.asarray(self.host._basin_cache.get("lat"), dtype=float).squeeze()
+            self._populate_basin_table_from_boundaries(boundaries, lon_vec=lon_vec, lat_vec=lat_vec)
             if hasattr(page, "lbl_boundary_info"):
                 page.lbl_boundary_info.setText(f"Boundary loaded: {len(boundaries)} feature(s)")
             if hasattr(page, "lbl_selected_basin"):
-                page.lbl_selected_basin.setText(f"Selected basin: {self._selected_basin_name() or getattr(boundaries[0], 'name', 'basin')}")
+                page.lbl_selected_basin.setText(f"Preview basin: {self._preview_basin_name() or getattr(boundaries[0], 'name', 'basin')}")
             if hasattr(page, "lbl_mask_info"):
-                page.lbl_mask_info.setText("Mask: boundary loaded, grid mask not generated")
+                page.lbl_mask_info.setText("Mask: boundary loaded; waiting for grid input" if lon_vec is None or lat_vec is None else "Mask: generating from boundary and grid")
             self.on_log(f"[BASIN] Boundary loaded: {boundary_path} ({len(boundaries)} feature(s))", "stdout")
             with contextlib.suppress(Exception):
-                self.on_refresh_basin_preview(show_errors=False)
+                if lon_vec is not None and lat_vec is not None:
+                    self.on_generate_basin_mask_preview()
+                else:
+                    self.on_refresh_basin_preview(show_errors=False)
         except Exception as exc:
             if hasattr(page, "lbl_boundary_info"):
                 page.lbl_boundary_info.setText(f"Boundary load failed: {exc}")
@@ -3299,7 +3445,7 @@ class MainWindowController:
             boundaries = basin_read_boundary(resolved_boundary, name_field=self._basin_name_field())
             if not boundaries:
                 raise ValueError("No basin polygon found in boundary file.")
-            selected_name = self._selected_basin_name()
+            selected_name = self._preview_basin_name()
             if selected_name:
                 filtered = [b for b in boundaries if str(getattr(b, "name", "")).strip().lower() == selected_name.lower()]
                 if filtered:
@@ -3349,7 +3495,11 @@ class MainWindowController:
         try:
             ctx = context or self._build_basin_spatial_context(require_boundary=False)
             grid3d = np.asarray(ctx["grid3d"], dtype=float)
-            grid2d = np.asarray(grid3d[:, :, 0] if grid3d.ndim >= 3 else grid3d, dtype=float)
+            time_idx = 0
+            if grid3d.ndim >= 3 and hasattr(page, "slider_basin_time_index"):
+                time_idx = max(0, min(int(page.slider_basin_time_index.value()), int(grid3d.shape[2]) - 1))
+            grid2d = np.asarray(grid3d[:, :, time_idx] if grid3d.ndim >= 3 else grid3d, dtype=float)
+            self._sync_basin_time_slice_label()
             lon = np.asarray(ctx["lon_vec"], dtype=float).squeeze()
             lat = np.asarray(ctx["lat_vec"], dtype=float).squeeze()
             mask = np.asarray(ctx.get("mask"), dtype=bool) if ctx.get("mask") is not None else None
@@ -3446,7 +3596,13 @@ class MainWindowController:
                 arr = np.asarray(part, dtype=float)
                 if arr.ndim == 2 and arr.shape[0] >= 2:
                     ax.plot(arr[:, 0], arr[:, 1], color="#005db5", linewidth=1.4)
-            ax.set_title(f"{ctx['basin_name']} | {Path(ctx['stack_path']).name}", fontsize=10, loc="left")
+            label = ""
+            labels = ctx.get("labels")
+            if labels is None:
+                labels = []
+            if 0 <= time_idx < len(labels):
+                label = f" | {labels[time_idx]}"
+            ax.set_title(f"{ctx['basin_name']} | {Path(ctx['stack_path']).name}{label}", fontsize=10, loc="left")
             ax.set_xlabel("Longitude")
             ax.set_ylabel("Latitude")
             ax.set_xlim(xlim)
@@ -3461,7 +3617,7 @@ class MainWindowController:
             fig.savefig(str(out_file), dpi=140)
             self._basin_preview_canvas.draw_idle()
             page.lbl_basin_preview_status.setText(
-                f"Preview: {ctx['basin_name']} | regional view | mask cells={int(np.count_nonzero(mask)) if mask is not None else 0}"
+                f"Preview: {ctx['basin_name']} | slice {time_idx + 1} | mask cells={int(np.count_nonzero(mask)) if mask is not None else 0}"
             )
             self.on_log(f"[BASIN] Preview rendered: {out_file}", "stdout")
         except Exception as exc:
@@ -3578,7 +3734,7 @@ class MainWindowController:
             page.slider_time_index.setRange(0, max(0, nt - 1))
             page.slider_time_index.setValue(0)
             page.slider_time_index.blockSignals(False)
-            page.lbl_time_index.setText("Index: 0")
+            self._sync_preview_time_label(0)
             page.lbl_stack_info.setText(f"{shape[0]} x {shape[1]} x {nt} | active={target_var}")
             self._apply_preview_bbox_from_info(info)
             self.window.refresh_translations()
@@ -3588,8 +3744,37 @@ class MainWindowController:
             self._show_error("Preview", str(exc))
 
     def on_preview_index_changed(self, idx: int):
-        self.window.page_preview.lbl_time_index.setText(f"Index: {idx}")
+        self._sync_preview_time_label(idx)
         self.window.refresh_translations()
+
+    def _sync_preview_time_label(self, idx: int | None = None) -> None:
+        page = self.window.page_preview
+        idx = int(page.slider_time_index.value() if idx is None else idx)
+        total = int(page.slider_time_index.maximum()) + 1
+        label = self._preview_time_text(idx)
+        suffix = f" | {label}" if label else ""
+        page.lbl_time_index.setText(f"Time slice: {idx + 1} / {max(1, total)}{suffix}")
+
+    def _preview_time_text(self, idx: int) -> str:
+        label = ""
+        with contextlib.suppress(Exception):
+            info = self.host._stack_info_cache or {}
+            if info.get("path") == self.window.page_preview.edit_dataset_source.text().strip():
+                shape = tuple(info.get("shape") or ())
+                nt = int(shape[2]) if len(shape) >= 3 else 1
+                _t_years, labels = self.host._resolve_time(info.get("t"), nt, meta=info.get("meta", {}) or {})
+                if labels and 0 <= idx < len(labels):
+                    label = str(labels[idx])
+        if label:
+            return label
+        with contextlib.suppress(Exception):
+            cache = self.host._stack_cache or {}
+            shape = np.asarray(cache.get("ewh")).shape
+            nt = int(shape[2]) if len(shape) >= 3 else 1
+            _t_years, labels = self.host._resolve_time(cache.get("t"), nt, meta=cache.get("meta", {}) or {})
+            if labels and 0 <= idx < len(labels):
+                label = str(labels[idx])
+        return label
 
     def on_preview_var_changed(self):
         current = self.window.page_preview.lbl_stack_info.text().strip()
@@ -4076,7 +4261,9 @@ class MainWindowController:
             else:
                 self.window.page_preview.lbl_grid_value.setText("NaN")
             self.window.page_preview.lbl_engine_latency.setText(f"{(time.perf_counter() - start) * 1000.0:.1f} ms")
-            self.window.page_preview.canvas_preview_title.setText(f"{self.window.page_preview.cmb_projection.currentText()}: index {idx}")
+            time_text = self._preview_time_text(idx)
+            title_suffix = f"slice {idx + 1}" + (f" | {time_text}" if time_text else "")
+            self.window.page_preview.canvas_preview_title.setText(f"{self.window.page_preview.cmb_projection.currentText()}: {title_suffix}")
             self._apply_preview_main_splitter()
             self.on_log(f"[PREVIEW] Rendered {Path(path).name} [{active_var_name}] idx={idx}", "stdout")
         except Exception as exc:

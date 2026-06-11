@@ -466,13 +466,32 @@ TRANSLATIONS = {
         "Tools use the selected grid stack and boundary, then write series and harmonic-fit outputs under output/local/tools.": "\u5de5\u5177\u4f7f\u7528\u5f53\u524d\u7f51\u683c\u6808\u548c\u8fb9\u754c\uff0c\u5e76\u5c06\u65f6\u5e8f\u4e0e\u8c10\u6ce2\u62df\u5408\u7ed3\u679c\u5199\u5165 output/local/tools\u3002",
         "Run Analysis": "\u8fd0\u884c\u5206\u6790",
         "1. Grid Input": "1. \u7f51\u683c\u6570\u636e\u8f93\u5165",
+        "2. Boundary Mask Extraction": "2. \u8fb9\u754c\u63a9\u819c\u63d0\u53d6",
         "2. Basin Boundary and Mask": "2. \u6d41\u57df\u8fb9\u754c\u4e0e\u63a9\u819c",
+        "3. Basin Spatial Preview": "3. \u6d41\u57df\u7a7a\u95f4\u9884\u89c8",
+        "4. Basin Products and Output": "4. \u6d41\u57df\u4ea7\u54c1\u4e0e\u8f93\u51fa",
         "3. Analysis Products and Output": "3. \u5206\u6790\u4ea7\u54c1\u4e0e\u8f93\u51fa",
         "Selected Basin Spatial Preview": "\u5f53\u524d\u6d41\u57df\u7a7a\u95f4\u9884\u89c8",
+        "Preview: load grid and boundary, then choose a basin and time slice.": "\u9884\u89c8\uff1a\u8bfb\u53d6\u7f51\u683c\u548c\u8fb9\u754c\u540e\uff0c\u9009\u62e9\u6d41\u57df\u548c\u65f6\u95f4\u5207\u7247\u3002",
         "Preview: select one basin on the left, then render its spatial distribution and mask.": "\u9884\u89c8\uff1a\u5728\u5de6\u4fa7\u9009\u62e9\u4e00\u4e2a\u6d41\u57df\uff0c\u7136\u540e\u6e32\u67d3\u5b83\u7684\u7a7a\u95f4\u5206\u5e03\u548c\u63a9\u819c\u3002",
+        "Preview Spatial Distribution": "\u9884\u89c8\u7a7a\u95f4\u5206\u5e03",
+        "Basin": "\u6d41\u57df",
+        "Time Slice": "\u65f6\u95f4\u5207\u7247",
+        "Time slice: 1 / 1": "\u65f6\u95f4\u5207\u7247\uff1a1 / 1",
         "Preview Selected Basin": "\u9884\u89c8\u5f53\u524d\u6d41\u57df",
         "Refresh Selected Basin Preview": "\u5237\u65b0\u5f53\u524d\u6d41\u57df\u9884\u89c8",
         "Selected Basin(s)": "\u5df2\u9009\u6d41\u57df",
+        "Preview Basin": "\u9884\u89c8\u6d41\u57df",
+        "Preview basin: first boundary feature": "\u9884\u89c8\u6d41\u57df\uff1a\u7b2c\u4e00\u4e2a\u8fb9\u754c\u8981\u7d20",
+        "Mask: load grid and boundary to generate automatically": "\u63a9\u819c\uff1a\u8bfb\u53d6\u7f51\u683c\u548c\u8fb9\u754c\u540e\u81ea\u52a8\u751f\u6210",
+        "Basin time series: area-weighted values for each boundary": "\u6d41\u57df\u65f6\u5e8f\uff1a\u6bcf\u4e2a\u8fb9\u754c\u7684\u9762\u79ef\u52a0\u6743\u503c",
+        "Trend and amplitude products: basin statistics and spatial trend maps": "\u8d8b\u52bf\u4e0e\u632f\u5e45\u4ea7\u54c1\uff1a\u6d41\u57df\u7edf\u8ba1\u548c\u7a7a\u95f4\u8d8b\u52bf\u56fe",
+        "Trend, amplitude, and residual products: basin statistics and spatial maps": "\u8d8b\u52bf\u3001\u632f\u5e45\u4e0e\u6b8b\u5dee\u4ea7\u54c1\uff1a\u6d41\u57df\u7edf\u8ba1\u548c\u7a7a\u95f4\u56fe",
+        "Masked spatial grids: basin mask, clipped grid stack, mean, trend, and amplitude": "\u63a9\u819c\u7a7a\u95f4\u7f51\u683c\uff1a\u6d41\u57df\u63a9\u819c\u3001\u88c1\u526a\u7f51\u683c\u6808\u3001\u5747\u503c\u3001\u8d8b\u52bf\u548c\u632f\u5e45",
+        "Masked spatial grids: basin bounding box, clipped stack, mean, trend, amplitude, and residual": "\u63a9\u819c\u7a7a\u95f4\u7f51\u683c\uff1a\u6d41\u57df\u5916\u63a5\u77e9\u5f62\u3001\u88c1\u526a\u7f51\u683c\u6808\u3001\u5747\u503c\u3001\u8d8b\u52bf\u3001\u632f\u5e45\u548c\u6b8b\u5dee",
+        "Run Analysis processes all loaded boundary features. Single-epoch grids export masked spatial data; trend and amplitude maps require a time series.": "\u8fd0\u884c\u5206\u6790\u4f1a\u5904\u7406\u6240\u6709\u5df2\u8bfb\u53d6\u7684\u8fb9\u754c\u8981\u7d20\u3002\u5355\u5386\u5143\u7f51\u683c\u53ea\u5bfc\u51fa\u63a9\u819c\u7a7a\u95f4\u6570\u636e\uff1b\u8d8b\u52bf\u548c\u632f\u5e45\u56fe\u9700\u8981\u65f6\u95f4\u5e8f\u5217\u3002",
+        "Run Analysis processes all loaded boundary features. Single-epoch or short grids export masked spatial data; trend and amplitude maps require at least 6 time samples.": "\u8fd0\u884c\u5206\u6790\u4f1a\u5904\u7406\u6240\u6709\u5df2\u8bfb\u53d6\u7684\u8fb9\u754c\u8981\u7d20\u3002\u5355\u5386\u5143\u6216\u77ed\u65f6\u95f4\u5e8f\u5217\u7f51\u683c\u53ea\u5bfc\u51fa\u63a9\u819c\u7a7a\u95f4\u6570\u636e\uff1b\u8d8b\u52bf\u548c\u632f\u5e45\u56fe\u9700\u8981\u81f3\u5c11 6 \u4e2a\u65f6\u95f4\u6837\u672c\u3002",
+        "Run Analysis processes all loaded boundary features. Spatial products are cropped to each basin bounding box and preserve lon/lat/time. Trend, amplitude, and residual maps require at least 6 time samples.": "\u8fd0\u884c\u5206\u6790\u4f1a\u5904\u7406\u6240\u6709\u5df2\u8bfb\u53d6\u7684\u8fb9\u754c\u8981\u7d20\u3002\u7a7a\u95f4\u4ea7\u54c1\u4f1a\u88c1\u526a\u5230\u6bcf\u4e2a\u6d41\u57df\u7684\u5916\u63a5\u77e9\u5f62\uff0c\u5e76\u4fdd\u7559\u7ecf\u7eac\u5ea6\u548c\u65f6\u95f4\u4fe1\u606f\u3002\u8d8b\u52bf\u3001\u632f\u5e45\u548c\u6b8b\u5dee\u56fe\u9700\u8981\u81f3\u5c11 6 \u4e2a\u65f6\u95f4\u6837\u672c\u3002",
         "Spatial extraction: area-weighted basin time series": "\u7a7a\u95f4\u63d0\u53d6\uff1a\u9762\u79ef\u52a0\u6743\u6d41\u57df\u65f6\u5e8f",
         "Amplitude/trend analysis: trend, annual, and semiannual statistics": "\u632f\u5e45/\u8d8b\u52bf\u5206\u6790\uff1a\u8d8b\u52bf\u3001\u5e74\u5468\u671f\u548c\u534a\u5e74\u5468\u671f\u7edf\u8ba1",
         "Spatial grid output: mask and diagnostic grids": "\u7a7a\u95f4\u7f51\u683c\u8f93\u51fa\uff1a\u63a9\u819c\u548c\u8bca\u65ad\u7f51\u683c",
@@ -528,6 +547,7 @@ PREFIX_TRANSLATIONS = {
         "Variable: ": "\u53d8\u91cf\uff1a",
         "Loaded: ": "\u5df2\u8bfb\u53d6\uff1a",
         "Preview target: ": "\u9884\u89c8\u76ee\u6807\uff1a",
+        "Preview basin: ": "\u9884\u89c8\u6d41\u57df\uff1a",
         "Selected basin: ": "\u5f53\u524d\u6d41\u57df\uff1a",
         "Selected basins: ": "\u5df2\u9009\u6d41\u57df\uff1a",
         "Preview: ": "\u9884\u89c8\uff1a",
@@ -553,6 +573,17 @@ def translate_text(text: str, language: str = "en") -> str:
     preview_target = re.match(r"^Preview target: (.+)\. Click Preview Selected Basin to render\.$", value)
     if language == "zh" and preview_target:
         return f"\u9884\u89c8\u76ee\u6807\uff1a{preview_target.group(1)}\u3002\u70b9\u51fb\u201c\u9884\u89c8\u5f53\u524d\u6d41\u57df\u201d\u6e32\u67d3\u3002"
+    preview_target_simple = re.match(r"^Preview target: (.+)\.$", value)
+    if language == "zh" and preview_target_simple:
+        return f"\u9884\u89c8\u76ee\u6807\uff1a{preview_target_simple.group(1)}\u3002"
+    preview_basin = re.match(r"^Preview basin: (.+)$", value)
+    if language == "zh" and preview_basin:
+        return f"\u9884\u89c8\u6d41\u57df\uff1a{preview_basin.group(1)}"
+    time_slice = re.match(r"^Time slice: (\d+) / (\d+)(?: \| (.+))?$", value)
+    if language == "zh" and time_slice:
+        idx, total, label = time_slice.groups()
+        suffix = f" | {label}" if label else ""
+        return f"\u65f6\u95f4\u5207\u7247\uff1a{idx} / {total}{suffix}"
     selected_many = re.match(r"^Selected basins: (\d+) features; preview uses (.+)$", value)
     if language == "zh" and selected_many:
         count, name = selected_many.groups()
@@ -561,6 +592,10 @@ def translate_text(text: str, language: str = "en") -> str:
     if language == "zh" and preview_rendered:
         name, cells = preview_rendered.groups()
         return f"\u9884\u89c8\uff1a{name} | \u533a\u57df\u89c6\u56fe | \u63a9\u819c\u683c\u70b9={cells}"
+    preview_slice = re.match(r"^Preview: (.+) \| slice (\d+) \| mask cells=(\d+)$", value)
+    if language == "zh" and preview_slice:
+        name, idx, cells = preview_slice.groups()
+        return f"\u9884\u89c8\uff1a{name} | \u5207\u7247 {idx} | \u63a9\u819c\u683c\u70b9={cells}"
     boundary_loaded = re.match(r"^Boundary loaded: (\d+) feature\(s\)$", value)
     if language == "zh" and boundary_loaded:
         return f"\u8fb9\u754c\u5df2\u8bfb\u53d6\uff1a{boundary_loaded.group(1)} \u4e2a\u8981\u7d20"

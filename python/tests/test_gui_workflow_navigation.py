@@ -10,6 +10,12 @@ os.environ.setdefault("MPLBACKEND", "Agg")
 from PySide6.QtCore import Qt
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
+import numpy as np
+import scipy.io as sio
+try:
+    import shapefile
+except ImportError:  # pragma: no cover - optional local dependency guard
+    shapefile = None
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -153,8 +159,8 @@ class GuiWorkflowNavigationTest(unittest.TestCase):
         self.assertEqual(self.window.page_dashboard.btn_validate_paths.text(), "校验路径")
         self.assertEqual(self.window.page_leakage.btn_run_leakage.text(), "运行校正")
         self.assertEqual(self.window.page_basin.table_basins.horizontalHeaderItem(1).text(), "流域名称")
-        self.assertEqual(self.window.page_basin.btn_preview_selected_basin.text(), "预览当前流域")
-        self.assertEqual(self.window.page_basin.chk_basin_save_series.text(), "空间提取：面积加权流域时序")
+        self.assertEqual(self.window.page_basin.btn_refresh_basin_preview.text(), "预览空间分布")
+        self.assertEqual(self.window.page_basin.chk_basin_save_series.text(), "流域时序：每个边界的面积加权值")
         self.assertEqual(self.window.page_basin.table_basins.rowCount(), 0)
         self.assertEqual(self.window.page_preview.chk_layer_boundaries.text(), "边界叠加层")
         self.assertEqual(self.window.page_preview.chk_layer_rivers.text(), "附加自定义 SHP")
@@ -192,11 +198,35 @@ class GuiWorkflowNavigationTest(unittest.TestCase):
         basin = self.window.page_basin
         self.window.set_active_page("basin")
         self.app.processEvents()
-        QTest.mouseClick(basin.btn_mode_global, Qt.LeftButton)
-        self.app.processEvents()
+        self.assertFalse(basin.btn_mode_multi.isVisible())
+        self.assertFalse(basin.btn_mode_global.isVisible())
+        self.assertFalse(basin.btn_mode_point.isVisible())
+        self.assertFalse(basin.cmb_basin_selection_mode.isVisible())
         self.assertEqual(basin.cmb_basin_selection_mode.currentText(), "Global Scan")
         self.assertTrue(basin.btn_mode_global.isChecked())
         self.assertFalse(basin.btn_mode_multi.isChecked())
+
+    def test_preview_sidebar_source_controls_do_not_overflow_on_long_error(self):
+        self.window.resize(1280, 820)
+        self.window._layout_bucket = None
+        self.window.set_active_page("preview")
+        page = self.window.page_preview
+        page.page_splitter.setSizes([320, 900])
+        page.edit_dataset_source.setText("G:/" + "/".join(["very_long_folder_name"] * 12) + "/missing_stack.nc")
+        page.lbl_stack_info.setText(
+            "Load failed. NetCDF load failed: [Errno 2] No such file or directory: "
+            + "'"
+            + page.edit_dataset_source.text()
+            + "'"
+        )
+        self.app.processEvents()
+
+        source_width = page.dataset_source_block.width()
+        actions = page.btn_dataset_browse.parentWidget()
+        self.assertLessEqual(page.edit_dataset_source.geometry().right(), source_width)
+        self.assertLessEqual(page.btn_dataset_browse.geometry().right(), actions.width())
+        self.assertLessEqual(page.btn_load_stack.geometry().right(), actions.width())
+        self.assertGreater(page.btn_dataset_browse.width(), 40)
 
     def test_run_buttons_reach_controller_guards(self):
         warnings = []
@@ -226,6 +256,11 @@ class GuiWorkflowNavigationTest(unittest.TestCase):
     def test_basin_boundary_reader_populates_selectable_features(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
+            stack = root / "stack.mat"
+            lon = np.array([-20.0, 0.0, 20.0], dtype=float)
+            lat = np.array([-20.0, 0.0, 20.0], dtype=float)
+            ewh = np.ones((3, 3, 2), dtype=float)
+            sio.savemat(stack, {"lon": lon, "lat": lat, "ewh": ewh, "t": np.array([2003.0, 2003.1], dtype=float)})
             boundary = root / "sample_boundary.txt"
             boundary.write_text(
                 "\n".join(["-10 -10", "10 -10", "10 10", "-10 10", "-10 -10"]),
@@ -233,14 +268,20 @@ class GuiWorkflowNavigationTest(unittest.TestCase):
             )
 
             page = self.window.page_basin
+            page.edit_data_file.setText(str(stack))
+            self.window.controller.on_load_basin_info()
             page.edit_boundary_file.setText(str(boundary))
             self.window.controller.on_load_basin_boundary_info()
             self.app.processEvents()
 
             self.assertEqual(page.table_basins.rowCount(), 1)
             self.assertEqual(page.table_basins.item(0, 1).text(), "poly_1")
+            self.assertIn("grid cells", page.table_basins.item(0, 2).text())
             self.assertEqual(page.table_basins.currentRow(), 0)
+            self.assertEqual(page.cmb_preview_basin.currentText(), "poly_1")
+            self.assertEqual(page.slider_basin_time_index.maximum(), 1)
             self.assertIn("1 feature", page.lbl_boundary_info.text())
+            self.assertIn("Mask:", page.lbl_mask_info.text())
 
     def test_basin_boundary_directory_resolves_to_supported_file(self):
         with tempfile.TemporaryDirectory() as td:
@@ -260,6 +301,62 @@ class GuiWorkflowNavigationTest(unittest.TestCase):
 
             self.assertEqual(page.edit_boundary_file.text(), str(boundary))
             self.assertIn("1 feature", page.lbl_boundary_info.text())
+
+    @unittest.skipIf(shapefile is None, "pyshp is not installed")
+    def test_basin_shapefile_with_multiple_features_populates_preview_table(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            shp = root / "basins.shp"
+            writer = shapefile.Writer(str(shp))
+            writer.field("Name", "C")
+            writer.poly([[[-10, -10], [10, -10], [10, 10], [-10, 10], [-10, -10]]])
+            writer.record("center")
+            writer.poly([[[15, 15], [25, 15], [25, 25], [15, 25], [15, 15]]])
+            writer.record("corner")
+            writer.close()
+
+            page = self.window.page_basin
+            page.edit_boundary_file.setText(str(shp))
+            self.window.controller.on_load_basin_boundary_info()
+            self.app.processEvents()
+
+            self.assertEqual(page.table_basins.rowCount(), 2)
+            self.assertEqual(page.table_basins.item(0, 1).text(), "center")
+            self.assertEqual(page.table_basins.item(1, 1).text(), "corner")
+            self.assertEqual(page.cmb_preview_basin.count(), 2)
+            self.assertIn("2 feature", page.lbl_boundary_info.text())
+
+    @unittest.skipIf(shapefile is None, "pyshp is not installed")
+    def test_basin_shapefile_name_field_combo_uses_discovered_field(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            shp = root / "large_basin_style.shp"
+            writer = shapefile.Writer(str(shp))
+            writer.field("OBJECTID", "N")
+            writer.field("whymap_riv", "C")
+            writer.field("whymap_r_2", "C")
+            writer.poly([[[-10, -10], [10, -10], [10, 10], [-10, 10], [-10, -10]]])
+            writer.record(1, "KHATANGA", "Khatanga")
+            writer.poly([[[15, 15], [25, 15], [25, 25], [15, 25], [15, 15]]])
+            writer.record(2, "LENA", "")
+            writer.close()
+
+            page = self.window.page_basin
+            page.edit_boundary_file.setText(str(shp))
+            self.window.controller.on_load_basin_boundary_info()
+            self.app.processEvents()
+
+            self.assertEqual(page.cmb_basin_name_field.currentText(), "whymap_r_2")
+            fields = [page.cmb_basin_name_field.itemText(i) for i in range(page.cmb_basin_name_field.count())]
+            self.assertIn("OBJECTID", fields)
+            self.assertIn("whymap_r_2", fields)
+            self.assertEqual(page.table_basins.item(0, 1).text(), "Khatanga")
+            self.assertEqual(page.table_basins.item(1, 1).text(), "LENA")
+
+    def test_basin_temporal_options_are_hidden_from_user_flow(self):
+        page = self.window.page_basin
+        self.assertTrue(hasattr(page, "card_temporal"))
+        self.assertFalse(page.card_temporal.isVisible())
 
 
 if __name__ == "__main__":

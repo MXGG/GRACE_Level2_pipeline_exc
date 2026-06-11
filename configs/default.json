@@ -123,7 +123,13 @@
     "_comment": "Basin analysis settings",
     "analysis_enable": false,
     "boundary_file": "",
-    "name": ""
+    "name": "",
+    "do_time_series": true,
+    "do_statistics": true,
+    "do_grid": true,
+    "save_ts_txt": true,
+    "save_ts_mat": true,
+    "save_grid_mat": true
   },
   "leakage": {
     "_comment": "Leakage reduction/correction settings",

@@ -27,6 +27,24 @@ def wrap_lon(lon: np.ndarray) -> np.ndarray:
     """Wrap longitude to [-180, 180]."""
     return ((lon + 180) % 360) - 180
 
+
+_NAME_FIELD_CANDIDATES = [
+    "NAME",
+    "Name",
+    "name",
+    "BASIN",
+    "BASIN_NAME",
+    "BasinName",
+    "HYBAS_NAME",
+    "whymap_r_2",
+    "whymap_riv",
+    "river_name",
+    "RiverName",
+    "Id",
+    "ID",
+    "OBJECTID",
+]
+
 def read_boundary(file_path: str, name_field: str = 'Name') -> List[BasinBoundary]:
     """Read basin boundary from .shp/.txt/.bln file.
     
@@ -48,6 +66,43 @@ def read_boundary(file_path: str, name_field: str = 'Name') -> List[BasinBoundar
     if ext == '.bln':
         return read_bln(str(path))
     return read_txt_poly(str(path))
+
+
+def resolve_shapefile_name_field(file_path: str, name_field: str = "Name") -> str:
+    """Return the field that should be used as the basin display name."""
+    if shapefile is None:
+        raise ImportError("pyshp is required to read shapefiles. Install with: pip install pyshp")
+    sf = shapefile.Reader(file_path)
+    fields = [f[0] for f in sf.fields[1:]]
+    requested = str(name_field or "").strip()
+    if requested:
+        for field in fields:
+            if field.lower() == requested.lower():
+                return field
+    for candidate in _NAME_FIELD_CANDIDATES:
+        for field in fields:
+            if field.lower() == candidate.lower():
+                return field
+    return fields[0] if fields else ""
+
+
+def _record_display_name(rec, fields: list[str], preferred_idx: int, fallback: str) -> str:
+    order: list[int] = []
+    if preferred_idx >= 0:
+        order.append(preferred_idx)
+    lower_fields = {field.lower(): idx for idx, field in enumerate(fields)}
+    for candidate in _NAME_FIELD_CANDIDATES:
+        idx = lower_fields.get(candidate.lower())
+        if idx is not None and idx not in order:
+            order.append(idx)
+    for idx in order:
+        try:
+            value = str(rec[idx]).strip()
+        except Exception:
+            value = ""
+        if value and value.lower() not in {"none", "nan", "null"}:
+            return value
+    return fallback
 
 def _is_number(val: str) -> bool:
     try:
@@ -119,31 +174,18 @@ def read_shapefile(file_path: str, name_field: str) -> List[BasinBoundary]:
     # Check fields
     fields = [f[0] for f in sf.fields[1:]] # Skip DeletionFlag
     name_idx = -1
+    resolved_name_field = resolve_shapefile_name_field(file_path, name_field)
     
     # Try to find name field (case insensitive)
     for i, f in enumerate(fields):
-        if f.lower() == name_field.lower():
+        if f.lower() == resolved_name_field.lower():
             name_idx = i
             break
-            
-    # Fallback name fields
-    if name_idx == -1:
-        for candidate in ['NAME', 'Name', 'name', 'Id', 'ID', 'OBJECTID']:
-            for i, f in enumerate(fields):
-                if f == candidate:
-                    name_idx = i
-                    break
-            if name_idx != -1:
-                break
     
     for i, shape in enumerate(sf.shapes()):
         rec = sf.record(i)
         
-        # Get name
-        if name_idx != -1:
-            name = str(rec[name_idx])
-        else:
-            name = f"poly_{i+1}"
+        name = _record_display_name(rec, fields, name_idx, f"poly_{i+1}")
             
         # Extract coordinates
         # shape.points is list of (x, y)

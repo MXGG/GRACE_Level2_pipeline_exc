@@ -767,10 +767,10 @@ QRadioButton::indicator {{
         content_w = max(720, self.width() - nav_width)
         content_h = max(560, self.height() - 90)
 
-        sidebar_w = self._clamp(int(content_w * (0.19 if dpi_scale <= 1.1 else 0.21)), 240, 340)
+        sidebar_w = self._clamp(int(content_w * (0.26 if dpi_scale <= 1.1 else 0.28)), 320, 560)
         if page.sidebar_panel.isVisible():
-            page.sidebar_panel.setMinimumWidth(self._clamp(sidebar_w - 18, 220, 320))
-            page.sidebar_panel.setMaximumWidth(self._clamp(sidebar_w + 18, 280, 380))
+            page.sidebar_panel.setMinimumWidth(self._clamp(sidebar_w - 120, 280, 460))
+            page.sidebar_panel.setMaximumWidth(self._clamp(sidebar_w + 180, 460, 720))
             page.page_splitter.setSizes([sidebar_w, max(860, content_w - sidebar_w)])
         else:
             page.page_splitter.setSizes([0, max(860, content_w)])
