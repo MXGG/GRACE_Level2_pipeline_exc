@@ -1,6 +1,6 @@
 """Simplified leakage-correction wizard for the Qt GUI.
 
-The original page exposed too many algorithm families at once.  This module
+The original page exposed too many algorithm families at once. This module
 keeps the backend compatibility attributes but rebuilds the visible page into a
 three-step workflow:
 
@@ -16,7 +16,7 @@ from pathlib import Path
 from types import MethodType
 
 import numpy as np
-from PySide6.QtCore import QSignalBlocker, Qt
+from PySide6.QtCore import QSignalBlocker
 from PySide6.QtWidgets import (
     QButtonGroup,
     QComboBox,
@@ -38,6 +38,88 @@ from grace_pipeline.ui.qt.pages import (
     _make_stacked_field,
 )
 from grace_pipeline.ui.qt.widgets import CardFrame, CollapsibleSection
+
+
+_REUSED_WIDGET_ATTRS = (
+    "chk_leakage_enable",
+    "rb_method_fm",
+    "rb_method_sf",
+    "btn_run_leakage",
+    "btn_pause_leakage",
+    "btn_stop_leakage",
+    "btn_lrc_input_browse",
+    "btn_reference_input_browse",
+    "btn_regional_boundary_browse",
+    "btn_lrc_output_browse",
+    "btn_load_leakage_info",
+    "btn_open_preview_asset",
+    "btn_open_preview_corrected",
+    "edit_lrc_input",
+    "edit_reference_input",
+    "edit_regional_boundary",
+    "edit_lrc_output",
+    "edit_lrc_sf_factor",
+    "edit_operator_autodetect",
+    "edit_lrc_gaussian_km",
+    "edit_ddk_type",
+    "edit_coastal_buffer_cells",
+    "edit_coastal_attenuation_gain",
+    "edit_regularized_lambda",
+    "edit_regularized_step_size",
+    "edit_regularized_sigma",
+    "edit_regularized_iter",
+    "edit_fm_iteration_count",
+    "edit_fm_convergence_threshold",
+    "edit_fm_acceleration",
+    "edit_fm_patience",
+    "edit_fm_min_improve",
+    "edit_lrc_edge_buffer",
+    "cmb_lrc_format",
+    "cmb_scope",
+    "cmb_strategy_family",
+    "cmb_correction_strategy",
+    "cmb_scene_override",
+    "cmb_reference_mode",
+    "cmb_official_mode",
+    "cmb_preview_layer",
+    "cmb_preview_figure",
+    "cmb_preview_region",
+    "cmb_preview_time",
+    "lbl_leakage_info",
+    "lbl_dataset_shape_value",
+    "lbl_product_type_value",
+    "lbl_linkage_status",
+    "lbl_operator_value",
+    "lbl_scene_value",
+    "lbl_recommendation_value",
+    "lbl_boundary_status",
+    "lbl_preview_status",
+    "lbl_scientific_note",
+    "lbl_method_hint",
+    "txt_leakage_notes",
+    "badge_product",
+    "badge_operator",
+    "badge_scene",
+    "badge_strategy",
+    "card_note",
+)
+
+
+def _detach_reused_widgets(page) -> None:
+    """Detach widgets before rebuilding the page to avoid PySide deleting them.
+
+    Qt destroys child C++ objects when their parent container is destroyed. The
+    simplified wizard reuses many controls that were originally mounted inside
+    the legacy leakage page, so they must be reparented to None before the old
+    layout tree is cleared.
+    """
+
+    for attr in _REUSED_WIDGET_ATTRS:
+        widget = getattr(page, attr, None)
+        if widget is None:
+            continue
+        with contextlib.suppress(RuntimeError):
+            widget.setParent(None)
 
 
 def _clear_layout(layout) -> None:
@@ -89,7 +171,7 @@ def _sync_hidden_leakage_strategy(page) -> None:
         _combo_set(page.cmb_strategy_family, "regional")
         _combo_set(page.cmb_correction_strategy, "forward_modeling")
         _combo_set(page.cmb_reference_mode, "trend")
-        operator = str(page.cmb_lrc_filter_operator.currentData() or "Auto")
+        operator = str(getattr(page, "cmb_lrc_filter_operator", None).currentData() or "Auto") if getattr(page, "cmb_lrc_filter_operator", None) is not None else "Auto"
         page.edit_operator_autodetect.setText(operator)
 
 
@@ -261,6 +343,7 @@ def install_leakage_wizard(window) -> None:
     """Rebuild the visible leakage page into a simpler guided workflow."""
 
     page = window.page_leakage
+    _detach_reused_widgets(page)
     _clear_layout(page.body)
     page.add_header("Leakage Correction")
 
@@ -480,11 +563,10 @@ def install_leakage_wizard(window) -> None:
     card_output.body.addWidget(action_row)
     card_output.body.addWidget(page.lbl_preview_status)
 
-    # Diagnostic note remains available but compact.
-    page.card_note.setTitle("Run notes") if hasattr(page.card_note, "setTitle") else None
     page.txt_leakage_notes.setPlaceholderText("Runtime notes and method diagnostics will appear here after loading or running.")
     page.txt_leakage_notes.setMinimumHeight(110)
-    page.card_note.body.addWidget(page.txt_leakage_notes) if page.txt_leakage_notes.parent() is None else None
+    with contextlib.suppress(Exception):
+        page.card_note.body.addWidget(page.txt_leakage_notes)
 
     wrapper = QWidget()
     wrapper_layout = QVBoxLayout(wrapper)
