@@ -70,12 +70,9 @@ def start_gui(argv: list[str] | None = None):
 
     window = MainWindow(load_persisted=True)
     leakage_wizard_stable.install_leakage_wizard(window)
+    configure_global_run_monitor(window)
     install_shell_enhancements(window)
     bind_help_docs(window)
-    if splash is not None:
-        splash.set_progress(68, "Constructing processing workspace...")
-
-    configure_global_run_monitor(window)
     if splash is not None:
         splash.set_progress(84, "Binding run monitor and workflow controls...")
 
