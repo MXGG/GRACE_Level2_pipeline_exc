@@ -1,8 +1,7 @@
 """High-quality preview figure export.
 
 This exporter keeps metadata out of the exported canvas, avoids expensive tight
-bounding-box recomputation, and applies a publication-oriented export style so
-raster images remain readable when viewed outside the GUI.
+bounding-box recomputation, and only applies readable font sizes during export.
 """
 
 from __future__ import annotations
@@ -58,52 +57,44 @@ def _data_axes(controller):
 
 
 def _apply_export_layout(controller, *, show_colorbar: bool) -> None:
+    """Use the previous export layout and only enlarge colorbar fonts."""
+
     fig, ax, caxes = _data_axes(controller)
     if fig is None or ax is None:
         return
     is_3d = getattr(ax, "name", "") == "3d" or hasattr(ax, "get_zlim3d")
     if is_3d:
-        ax.set_position([0.020, 0.045, 0.83 if show_colorbar else 0.96, 0.91])
+        ax.set_position([0.030, 0.045, 0.80 if show_colorbar else 0.94, 0.90])
         with contextlib.suppress(Exception):
             ax.set_xlim(-1.10, 1.10)
             ax.set_ylim(-1.10, 1.10)
             ax.set_zlim(-1.10, 1.10)
             ax.set_box_aspect((1, 1, 1))
     else:
-        ax.set_position([0.015, 0.045, 0.845 if show_colorbar else 0.965, 0.905])
+        ax.set_position([0.025, 0.055, 0.82 if show_colorbar else 0.94, 0.88])
     for cax in caxes:
         cax.set_visible(show_colorbar)
         if show_colorbar:
-            cax.set_position([0.895, 0.16, 0.026, 0.70])
+            cax.set_position([0.870, 0.18, 0.022, 0.66])
             with contextlib.suppress(Exception):
                 cax.set_ylabel(controller.window.page_preview.cmb_data_var.currentText().strip() or "value", fontsize=16, labelpad=10)
-                cax.tick_params(labelsize=13, width=1.0, length=5)
+                cax.tick_params(labelsize=13)
     with contextlib.suppress(Exception):
         ax.set_title("")
 
 
-def _snapshot_export_style(fig):
-    snapshot: list[tuple[object, str, object]] = []
+def _snapshot_font_style(fig) -> list[tuple[object, object]]:
+    snapshot: list[tuple[object, object]] = []
     for text in fig.findobj(match=lambda item: hasattr(item, "get_fontsize") and hasattr(item, "set_fontsize")):
         with contextlib.suppress(Exception):
-            snapshot.append((text, "fontsize", text.get_fontsize()))
-    for line in fig.findobj(match=lambda item: hasattr(item, "get_linewidth") and hasattr(item, "set_linewidth")):
-        with contextlib.suppress(Exception):
-            snapshot.append((line, "linewidth", line.get_linewidth()))
-    for collection in fig.findobj(match=lambda item: hasattr(item, "set_antialiased")):
-        # Collection antialias state has no uniform public getter across all
-        # Matplotlib collection types.  It is safe to leave the non-antialiased
-        # state until the next GUI re-render; the visual difference is only in
-        # export and improves map edge sharpness.
-        with contextlib.suppress(Exception):
-            collection.set_antialiased(False)
-        with contextlib.suppress(Exception):
-            collection.set_antialiaseds([False])
+            snapshot.append((text, text.get_fontsize()))
     return snapshot
 
 
-def _apply_export_style(fig) -> list[tuple[object, str, object]]:
-    snapshot = _snapshot_export_style(fig)
+def _apply_export_font_style(fig) -> list[tuple[object, object]]:
+    """Only enlarge export fonts; do not alter linewidth, antialiasing or pixels."""
+
+    snapshot = _snapshot_font_style(fig)
     for text in fig.findobj(match=lambda item: hasattr(item, "get_fontsize") and hasattr(item, "set_fontsize")):
         with contextlib.suppress(Exception):
             size = float(text.get_fontsize())
@@ -113,29 +104,19 @@ def _apply_export_style(fig) -> list[tuple[object, str, object]]:
                 text.set_fontsize(13)
     for ax in fig.axes:
         with contextlib.suppress(Exception):
-            ax.tick_params(labelsize=12, width=1.0, length=5)
+            ax.tick_params(labelsize=12)
         with contextlib.suppress(Exception):
             ax.xaxis.label.set_fontsize(13)
             ax.yaxis.label.set_fontsize(13)
         with contextlib.suppress(Exception):
             ax.title.set_fontsize(0.1)
-    for line in fig.findobj(match=lambda item: hasattr(item, "get_linewidth") and hasattr(item, "set_linewidth")):
-        with contextlib.suppress(Exception):
-            lw = float(line.get_linewidth())
-            if 0 < lw < 0.75:
-                line.set_linewidth(0.90)
-            elif 0.75 <= lw < 1.0:
-                line.set_linewidth(1.05)
     return snapshot
 
 
-def _restore_export_style(snapshot) -> None:
-    for obj, attr, value in snapshot:
+def _restore_font_style(snapshot) -> None:
+    for obj, size in snapshot:
         with contextlib.suppress(Exception):
-            if attr == "fontsize":
-                obj.set_fontsize(value)
-            elif attr == "linewidth":
-                obj.set_linewidth(value)
+            obj.set_fontsize(size)
 
 
 def _export_dialog(controller):
@@ -169,13 +150,13 @@ def _export_dialog(controller):
     form.addRow("DPI", dpi_combo)
 
     width_spin = QSpinBox()
-    width_spin.setRange(1600, 20000)
+    width_spin.setRange(1600, 16000)
     width_spin.setSingleStep(200)
-    width_spin.setValue(6000)
+    width_spin.setValue(4800)
     height_spin = QSpinBox()
-    height_spin.setRange(1000, 12000)
+    height_spin.setRange(1000, 10000)
     height_spin.setSingleStep(200)
-    height_spin.setValue(3600)
+    height_spin.setValue(2800)
     size_row = QWidget()
     size_layout = QHBoxLayout(size_row)
     size_layout.setContentsMargins(0, 0, 0, 0)
@@ -186,7 +167,7 @@ def _export_dialog(controller):
     size_layout.addStretch(1)
     form.addRow(_tr(window, "Canvas size", "画布尺寸"), size_row)
 
-    note = QLabel(_tr(window, "Recommended PNG export: 6000 × 3600 px at 300 DPI. Increase pixels, not DPI, when text still looks small.", "建议 PNG 导出：6000 × 3600 px，300 DPI。文字仍偏小时优先提高像素尺寸，而不是单纯提高 DPI。"))
+    note = QLabel(_tr(window, "Recommended: keep 300–450 DPI and increase canvas pixels for sharper raster output. PNG export uses this pixel size directly.", "建议：保持 300–450 DPI，通过提高画布像素改善栅格图清晰度。PNG 导出会直接采用该像素尺寸。"))
     note.setWordWrap(True)
     form.addRow("", note)
     layout.addLayout(form)
@@ -257,7 +238,7 @@ def _high_quality_export(self) -> None:
     old_dpi = float(fig.dpi)
     old_positions = {item: item.get_position().frozen() for item in fig.axes}
     old_visible = {item: item.get_visible() for item in fig.axes}
-    style_snapshot = []
+    font_snapshot = []
     progress = None
     tmp_path = out_path.with_name(f".{out_path.stem}.tmp{out_path.suffix}")
 
@@ -268,7 +249,7 @@ def _high_quality_export(self) -> None:
         page = self.window.page_preview
         show_colorbar = bool(getattr(page, "chk_show_colorbar", None) is None or page.chk_show_colorbar.isChecked())
         _apply_export_layout(self, show_colorbar=show_colorbar)
-        style_snapshot = _apply_export_style(fig)
+        font_snapshot = _apply_export_font_style(fig)
         QApplication.processEvents()
 
         save_kwargs = {
@@ -300,7 +281,7 @@ def _high_quality_export(self) -> None:
             tmp_path.unlink(missing_ok=True)
         self._show_error(_tr(self.window, "Export Figure", "导出图像"), str(exc))
     finally:
-        _restore_export_style(style_snapshot)
+        _restore_font_style(font_snapshot)
         for item, pos in old_positions.items():
             with contextlib.suppress(Exception):
                 item.set_position(pos)
