@@ -1538,10 +1538,18 @@ class PreviewPage(QWidget):
         self.slider_time_index.setRange(0, 100)
         self.slider_time_index.setValue(75)
         self.lbl_time_index = QLabel("Index: 2018-06-15")
-        self.lbl_time_index.setWordWrap(True)
+        self.lbl_time_index.setWordWrap(False)
         self.lbl_time_index.setMinimumWidth(0)
-        self.lbl_time_index.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Maximum)
-        side_layout.addWidget(_make_stacked_field("Time Index", self.slider_time_index, self.lbl_time_index))
+        self.lbl_time_index.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.lbl_time_index.setFixedHeight(18)
+        time_index_widget = QWidget()
+        time_index_widget.setObjectName("InlineField")
+        time_index_layout = QVBoxLayout(time_index_widget)
+        time_index_layout.setContentsMargins(0, 0, 0, 0)
+        time_index_layout.setSpacing(4)
+        time_index_layout.addWidget(self.lbl_time_index)
+        time_index_layout.addWidget(self.slider_time_index)
+        side_layout.addWidget(_make_stacked_field("Time Index", time_index_widget))
 
         self.cmb_projection = _make_combo(
             [

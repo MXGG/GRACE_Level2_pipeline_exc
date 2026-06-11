@@ -321,6 +321,9 @@ def _update_config(self):
 
     if not isinstance(self.cfg.leakage, dict):
         self.cfg.leakage = {}
+    self.cfg.leakage.pop("fm_operator", None)
+    if isinstance(self.cfg.leakage.get("FM"), dict):
+        self.cfg.leakage["FM"].pop("operator", None)
     self.cfg.leakage["enable"] = bool(self.var_lrc_enable.get()) if hasattr(self, "var_lrc_enable") else False
     self.cfg.leakage["scope"] = str(self.var_lrc_scope.get()).lower() if hasattr(self, "var_lrc_scope") else "global"
     self.cfg.leakage["method"] = str(self.var_lrc_method.get()).upper() if hasattr(self, "var_lrc_method") else "SF"
@@ -393,6 +396,17 @@ def _update_config(self):
         if hasattr(self, "var_lrc_fm_hsaf_inner_workers")
         else int(self.cfg.leakage.get("fm_hsaf_inner_workers", 1))
     )
+    self.cfg.leakage["FM"] = {
+        "nIter": self.cfg.leakage["fm_max_iter"],
+        "minIter": self.cfg.leakage["fm_min_iter"],
+        "tol_rmse_mm": self.cfg.leakage["fm_tol"],
+        "accel": self.cfg.leakage["fm_accel"],
+        "patience": self.cfg.leakage["fm_patience"],
+        "min_improve": self.cfg.leakage["fm_min_improve"],
+        "metric": self.cfg.leakage.get("fm_metric", "land_weighted_mean"),
+        "mass_conservation": self.cfg.leakage.get("fm_mass_conservation", "legacy_land_mean_fill"),
+        "output_mode": self.cfg.leakage.get("fm_output_mode", "mask_zero"),
+    }
 
     if not isinstance(self.cfg.perf, dict):
         self.cfg.perf = {}
@@ -501,6 +515,9 @@ def _collect_config_dict(self):
     basin_cfg["name_field"] = self.var_basin_name_field.get().strip() or "Name"
 
     leak_cfg = _ensure(base, "leakage")
+    leak_cfg.pop("fm_operator", None)
+    if isinstance(leak_cfg.get("FM"), dict):
+        leak_cfg["FM"].pop("operator", None)
     leak_cfg["enable"] = bool(self.var_lrc_enable.get()) if hasattr(self, "var_lrc_enable") else False
     leak_cfg["scope"] = str(self.var_lrc_scope.get()).lower() if hasattr(self, "var_lrc_scope") else "global"
     leak_cfg["method"] = str(self.var_lrc_method.get()).upper() if hasattr(self, "var_lrc_method") else "SF"
@@ -572,6 +589,17 @@ def _collect_config_dict(self):
         if hasattr(self, "var_lrc_fm_hsaf_inner_workers")
         else int(leak_cfg.get("fm_hsaf_inner_workers", 1))
     )
+    leak_cfg["FM"] = {
+        "nIter": leak_cfg["fm_max_iter"],
+        "minIter": leak_cfg["fm_min_iter"],
+        "tol_rmse_mm": leak_cfg["fm_tol"],
+        "accel": leak_cfg["fm_accel"],
+        "patience": leak_cfg["fm_patience"],
+        "min_improve": leak_cfg["fm_min_improve"],
+        "metric": leak_cfg.get("fm_metric", "land_weighted_mean"),
+        "mass_conservation": leak_cfg.get("fm_mass_conservation", "legacy_land_mean_fill"),
+        "output_mode": leak_cfg.get("fm_output_mode", "mask_zero"),
+    }
 
     perf_cfg = _ensure(base, "perf")
     allow_frozen = bool(self.var_allow_frozen_parallel.get())

@@ -13,6 +13,7 @@ import threading
 import time
 import webbrowser
 from datetime import datetime, timedelta
+from calendar import monthrange
 from pathlib import Path
 
 import numpy as np
@@ -437,27 +438,104 @@ class QtWorkflowHost:
         flat = np.asarray(t_arr).reshape(-1)
         time_units = str(meta.get("time_units") or "").strip().lower()
         time_calendar = str(meta.get("time_calendar") or "").strip().lower()
-        day_base = None
-        if "days since" in time_units:
-            raw_base = time_units.split("days since", 1)[1].strip().split()[0]
+        numeric = None
+        with contextlib.suppress(Exception):
+            numeric = np.asarray(flat, dtype=float)
+
+        def _parse_since_base(keyword: str):
+            if keyword not in time_units:
+                return None
+            raw_base = time_units.split(keyword, 1)[1].strip().split()[0]
+            raw_base = raw_base.replace("z", "+00:00")
             with contextlib.suppress(Exception):
-                day_base = datetime.fromisoformat(raw_base)
-        elif time_calendar and flat.size and np.issubdtype(np.asarray(flat).dtype, np.number):
-            finite = np.asarray(flat, dtype=float)
-            finite = finite[np.isfinite(finite)]
-            if finite.size and 30.0 <= float(np.nanmin(finite)) and float(np.nanmax(finite)) <= 20000.0:
+                dt = datetime.fromisoformat(raw_base)
+                return dt.replace(tzinfo=None)
+            with contextlib.suppress(Exception):
+                return datetime.strptime(raw_base[:10], "%Y-%m-%d")
+            return None
+
+        day_base = _parse_since_base("days since")
+        month_base = _parse_since_base("months since")
+        year_base = _parse_since_base("years since")
+        if day_base is None and numeric is not None:
+            finite = numeric[np.isfinite(numeric)]
+            looks_like_mascon_day_offset = bool(
+                finite.size
+                and 30.0 <= float(np.nanmin(finite))
+                and float(np.nanmax(finite)) <= 20000.0
+                and (
+                    "day" in time_units
+                    or time_calendar
+                    or "lwe" in str(meta.get("active_var", "")).lower()
+                    or "mascon" in str(meta.get("active_var", "")).lower()
+                )
+            )
+            if looks_like_mascon_day_offset:
                 day_base = datetime(2002, 1, 1)
+
+        def _add_months(base: datetime, months_value: float) -> datetime:
+            whole = int(np.floor(float(months_value)))
+            frac = float(months_value) - whole
+            month0 = (base.month - 1) + whole
+            year = base.year + month0 // 12
+            month = month0 % 12 + 1
+            day = min(base.day, monthrange(year, month)[1])
+            dt = datetime(year, month, day)
+            if frac:
+                dt = dt + timedelta(days=frac * monthrange(year, month)[1])
+            return dt
+
+        def _format_decimal_year(value: float):
+            year = int(np.floor(float(value)))
+            rem = float(value) - year
+            if 1800 <= year <= 2300:
+                month = max(1, min(12, int(np.floor(rem * 12.0)) + 1))
+                return year, month
+            return None
+
+        def _format_yyyymm(value: float):
+            intval = int(round(float(value)))
+            year = intval // 100
+            month = intval % 100
+            if 1800 <= year <= 2300 and 1 <= month <= 12:
+                return year, month
+            return None
+
+        def _finite_float(value):
+            with contextlib.suppress(Exception):
+                out = float(value)
+                if np.isfinite(out):
+                    return out
+            return None
+
         labels = []
         years = []
         for idx, item in enumerate(flat[:nt]):
             try:
+                numeric_item = _finite_float(item)
                 if hasattr(item, "strftime"):
                     labels.append(item.strftime("%Y-%m"))
                     years.append(item.year + (item.month - 0.5) / 12.0)
-                elif day_base is not None and np.isfinite(float(item)):
-                    dt = day_base + timedelta(days=float(item))
+                elif day_base is not None and numeric_item is not None:
+                    dt = day_base + timedelta(days=numeric_item)
                     labels.append(dt.strftime("%Y-%m"))
                     years.append(dt.year + (dt.month - 0.5) / 12.0)
+                elif month_base is not None and numeric_item is not None:
+                    dt = _add_months(month_base, numeric_item)
+                    labels.append(dt.strftime("%Y-%m"))
+                    years.append(dt.year + (dt.month - 0.5) / 12.0)
+                elif year_base is not None and numeric_item is not None:
+                    dt = _add_months(year_base, numeric_item * 12.0)
+                    labels.append(dt.strftime("%Y-%m"))
+                    years.append(dt.year + (dt.month - 0.5) / 12.0)
+                elif numeric_item is not None and _format_yyyymm(numeric_item) is not None:
+                    year, month = _format_yyyymm(numeric_item)
+                    labels.append(f"{year:04d}-{month:02d}")
+                    years.append(year + (month - 0.5) / 12.0)
+                elif numeric_item is not None and _format_decimal_year(numeric_item) is not None:
+                    year, month = _format_decimal_year(numeric_item)
+                    labels.append(f"{year:04d}-{month:02d}")
+                    years.append(year + (month - 0.5) / 12.0)
                 else:
                     s = str(item).strip()
                     if len(s) >= 7 and s[4] in "-/":
@@ -2311,6 +2389,9 @@ class MainWindowController:
             basin_cfg["save_ts_mat"] = bool(w.page_basin.chk_basin_save_ts_mat.isChecked())
             basin_cfg["save_grid_mat"] = bool(w.page_basin.chk_basin_save_grid_mat.isChecked())
 
+        leak_cfg.pop("fm_operator", None)
+        if isinstance(leak_cfg.get("FM"), dict):
+            leak_cfg["FM"].pop("operator", None)
         leak_cfg["enable"] = True
         leak_cfg["strategy_family"] = self._combo_value(w.page_leakage.cmb_strategy_family).lower() if hasattr(w.page_leakage, "cmb_strategy_family") else "global_regularized"
         leak_cfg["scope"] = "regional" if leak_cfg["strategy_family"] == "regional" else "global"
@@ -2335,6 +2416,21 @@ class MainWindowController:
         leak_cfg["fm_accel"] = self._safe_float(w.page_leakage.edit_fm_acceleration.text(), 1.1)
         leak_cfg["fm_patience"] = max(0, int(round(self._safe_float(w.page_leakage.edit_fm_patience.text(), 8.0))))
         leak_cfg["fm_min_improve"] = self._safe_float(w.page_leakage.edit_fm_min_improve.text(), 1.0e-4)
+        leak_cfg.setdefault("fm_min_iter", 3)
+        leak_cfg.setdefault("fm_metric", "land_weighted_mean")
+        leak_cfg.setdefault("fm_mass_conservation", "legacy_land_mean_fill")
+        leak_cfg.setdefault("fm_output_mode", "mask_zero")
+        leak_cfg["FM"] = {
+            "nIter": leak_cfg["fm_max_iter"],
+            "minIter": leak_cfg["fm_min_iter"],
+            "tol_rmse_mm": leak_cfg["fm_tol"],
+            "accel": leak_cfg["fm_accel"],
+            "patience": leak_cfg["fm_patience"],
+            "min_improve": leak_cfg["fm_min_improve"],
+            "metric": leak_cfg["fm_metric"],
+            "mass_conservation": leak_cfg["fm_mass_conservation"],
+            "output_mode": leak_cfg["fm_output_mode"],
+        }
         leak_cfg["coastal_buffer_cells"] = max(1, int(round(self._safe_float(w.page_leakage.edit_coastal_buffer_cells.text(), 3.0)))) if hasattr(w.page_leakage, "edit_coastal_buffer_cells") else 3
         leak_cfg["coastal_attenuation_gain"] = self._safe_float(w.page_leakage.edit_coastal_attenuation_gain.text(), 1.0) if hasattr(w.page_leakage, "edit_coastal_attenuation_gain") else 1.0
         leak_cfg["regularized_lambda"] = self._safe_float(w.page_leakage.edit_regularized_lambda.text(), 0.18) if hasattr(w.page_leakage, "edit_regularized_lambda") else 0.18
@@ -3735,7 +3831,13 @@ class MainWindowController:
             page.slider_time_index.setValue(0)
             page.slider_time_index.blockSignals(False)
             self._sync_preview_time_label(0)
-            page.lbl_stack_info.setText(f"{shape[0]} x {shape[1]} x {nt} | active={target_var}")
+            _t_years, time_labels = self.host._resolve_time(info.get("t"), nt, meta=meta)
+            time_summary = ""
+            if time_labels:
+                first_label = str(time_labels[0])
+                last_label = str(time_labels[min(len(time_labels), nt) - 1])
+                time_summary = f" | time={first_label}" if first_label == last_label else f" | time={first_label}..{last_label}"
+            page.lbl_stack_info.setText(f"{shape[0]} x {shape[1]} x {nt} | active={target_var}{time_summary}")
             self._apply_preview_bbox_from_info(info)
             self.window.refresh_translations()
             self.on_log(f"[PREVIEW] Stack loaded: {path}", "stdout")
@@ -3753,7 +3855,7 @@ class MainWindowController:
         total = int(page.slider_time_index.maximum()) + 1
         label = self._preview_time_text(idx)
         suffix = f" | {label}" if label else ""
-        page.lbl_time_index.setText(f"Time slice: {idx + 1} / {max(1, total)}{suffix}")
+        page.lbl_time_index.setText(f"{idx + 1} / {max(1, total)}{suffix}")
 
     def _preview_time_text(self, idx: int) -> str:
         label = ""

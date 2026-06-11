@@ -19,6 +19,16 @@ function op = leakage_parse_filter_tag(tag, cfg)
     op.use_ddk    = startsWith(tagU, "DDK");
     op.use_hankel = contains(tagU, "HANKEL") | contains(tagU, "HSAF");
 
+    % HSAF products are generated from cfg.filter.pre_hankel_input. Mirror that
+    % route in the leakage forward operator so FM/SF simulates the same chain.
+    if op.use_hankel
+        hin = get_nested(cfg, {'filter','pre_hankel_input'}, 'P4M6');
+        hinU = upper(string(hin));
+        if hinU == "P4M6" || contains(hinU, "DECORR") || contains(hinU, "DESTRIP")
+            op.use_p4m6 = true;
+        end
+    end
+
     % Gaussian / Fan radii from cfg.filter if available
     op.gaussian_km = get_nested(cfg, {'filter','gaussian','radius_km'}, 0);
     op.fan_r1_km   = get_nested(cfg, {'filter','fan','radius1_km'}, 0);

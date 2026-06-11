@@ -2,6 +2,7 @@ import os
 import sys
 import tempfile
 import unittest
+import importlib.util
 from pathlib import Path
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -519,6 +520,50 @@ class GuiEmbeddedToolsTest(unittest.TestCase):
 
         self.assertEqual(labels[:2], ["2002-04", "2002-05"])
         self.assertGreater(float(years[0]), 2002.0)
+
+    @unittest.skipUnless(importlib.util.find_spec("netCDF4") is not None, "netCDF4 not available")
+    def test_preview_mascon_netcdf_time_units_are_displayed_as_months(self):
+        import netCDF4 as nc
+
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            path = root / "CSR_GRACE_GRACE-FO_RL06_Mascons_all-corrections.nc"
+            lon = np.array([0.25, 0.75], dtype=np.float32)
+            lat = np.array([-0.25, 0.25], dtype=np.float32)
+            time_values = np.array([107.0, 1961.5], dtype=np.float64)
+            data = np.zeros((2, 2, 2), dtype=np.float32)
+
+            with nc.Dataset(path, "w") as ds:
+                ds.createDimension("time", 2)
+                ds.createDimension("lat", 2)
+                ds.createDimension("lon", 2)
+                v_lon = ds.createVariable("lon", "f4", ("lon",))
+                v_lat = ds.createVariable("lat", "f4", ("lat",))
+                v_time = ds.createVariable("time", "f8", ("time",))
+                v_data = ds.createVariable("lwe_thickness", "f4", ("time", "lat", "lon"))
+                v_lon.units = "degrees_east"
+                v_lat.units = "degrees_north"
+                v_time.units = "days since 2002-01-01T00:00:00Z"
+                v_time.calendar = "gregorian"
+                v_data.units = "cm"
+                v_lon[:] = lon
+                v_lat[:] = lat
+                v_time[:] = time_values
+                v_data[:] = data
+
+            self.window.set_active_page("preview")
+            self.window.page_preview.edit_dataset_source.setText(str(path))
+            self.app.processEvents()
+
+            self.window.controller.on_load_stack_info()
+            self.app.processEvents()
+            self.assertIn("time=2002-04..2007-05", self.window.page_preview.lbl_stack_info.text())
+            self.assertIn("1 / 2 | 2002-04", self.window.page_preview.lbl_time_index.text())
+
+            self.window.page_preview.slider_time_index.setValue(1)
+            self.window.controller.on_preview_index_changed(1)
+            self.app.processEvents()
+            self.assertIn("2 / 2 | 2007-05", self.window.page_preview.lbl_time_index.text())
 
     def test_leakage_page_can_sync_input_from_preview_and_basin(self):
         with tempfile.TemporaryDirectory() as td:

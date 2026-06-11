@@ -6,13 +6,24 @@ function Gobs_sim = leakage_apply_forward_operator(Gtrue, lonVec, latVec, method
 
     Gtrue = ensure_latlon_order(Gtrue, lonVec, latVec);
 
-    % Parse operations from tag
-    op = leakage_parse_filter_tag(methodTag, cfg);
-
     % Prepare defaults
     if nargin < 6 || isempty(L)
         L = leakage_merge_cfg(cfg);
     end
+
+    fmOperator = 'optimized_sh';
+    if isfield(L, 'FM') && isfield(L.FM, 'operator') && ~isempty(L.FM.operator)
+        fmOperator = char(L.FM.operator);
+    elseif isfield(L, 'operator') && ~isempty(L.operator)
+        fmOperator = char(L.operator);
+    end
+    if any(strcmpi(fmOperator, {'optimized_sh','optimized','internal_sh'}))
+        Gobs_sim = leakage_apply_forward_operator_optimized(Gtrue, lonVec, latVec, methodTag, cfg, L);
+        return;
+    end
+
+    % Parse operations from tag
+    op = leakage_parse_filter_tag(methodTag, cfg);
     Lmax = L.Lmax;
     grid_interval = L.grid_interval;
 

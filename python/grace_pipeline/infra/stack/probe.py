@@ -283,6 +283,23 @@ def probe_stack_any(
                 lon = np.asarray(ds.variables[lon_key][:]).squeeze() if lon_key else None
                 lat = np.asarray(ds.variables[lat_key][:]).squeeze() if lat_key else None
                 t = np.asarray(ds.variables[time_key][:]).squeeze() if time_key else None
+                time_units = None
+                time_calendar = None
+                if time_key and time_key in ds.variables:
+                    try:
+                        t_var = ds.variables[time_key]
+                        time_units = getattr(t_var, "units", None)
+                        time_calendar = getattr(t_var, "calendar", None)
+                        bounds_name = getattr(t_var, "bounds", None)
+                        if bounds_name and bounds_name in ds.variables:
+                            tb = np.asarray(ds.variables[bounds_name][:], dtype=float)
+                            if tb.ndim == 2:
+                                if tb.shape[0] == 2:
+                                    t = np.nanmean(tb, axis=0)
+                                elif tb.shape[1] == 2:
+                                    t = np.nanmean(tb, axis=1)
+                    except Exception:
+                        pass
                 data_var = ds.variables[data_key]
                 dims = list(getattr(data_var, "dimensions", ()))
                 shape_raw = tuple(int(v) for v in data_var.shape)
@@ -295,6 +312,8 @@ def probe_stack_any(
                     "lon_key": lon_key,
                     "lat_key": lat_key,
                     "time_key": time_key,
+                    "time_units": time_units,
+                    "time_calendar": time_calendar,
                 }
                 return (nlon, nlat, nt), lon, lat, t, meta
             finally:
