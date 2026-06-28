@@ -22,14 +22,7 @@ def _alive(widget) -> bool:
 
 
 def compact_processing(window):
-    """Apply non-destructive compact sizing to the processing page.
-
-    The previous implementation rebuilt the page body by taking items out of
-    the existing layout. On the current WIP GUI this may delete CardFrame C++
-    objects before they are reparented, causing libshiboken runtime errors at
-    startup. This version keeps the existing object tree intact and only adjusts
-    sizing and spacing hints.
-    """
+    """Apply non-destructive compact sizing to the processing page."""
     from PySide6.QtWidgets import QSizePolicy
 
     page = getattr(window, "page_processing", None)
@@ -72,16 +65,33 @@ def button_roles(window):
         button.style().polish(button)
 
 
-def wire_data_page(window):
-    page = getattr(window, "page_data_paths", None)
-    ctrl = getattr(window, "controller", None)
-    if page is None or ctrl is None:
+def _connect_button(button, slot) -> None:
+    if not _alive(button):
         return
-    for child in page.findChildren(type(page.btn_download_gfc_range)):
-        if "数据网页" in child.text() or "Data Website" in canonical(child.text()):
-            with contextlib.suppress(Exception):
-                child.clicked.disconnect()
-            child.clicked.connect(ctrl.on_open_data_page)
+    with contextlib.suppress(Exception):
+        button.clicked.disconnect()
+    button.clicked.connect(slot)
+
+
+def wire_data_page(window):
+    ctrl = getattr(window, "controller", None)
+    if ctrl is None:
+        return
+
+    pages = [getattr(window, "page_data_paths", None), getattr(window, "page_processing", None)]
+    for page in pages:
+        if page is None:
+            continue
+        direct = getattr(page, "btn_open_download_site", None)
+        if direct is not None:
+            _connect_button(direct, ctrl.on_open_data_page)
+        ref_button = getattr(page, "btn_download_gfc_range", direct)
+        if ref_button is None:
+            continue
+        for child in page.findChildren(type(ref_button)):
+            text = child.text()
+            if "数据网页" in text or "访问数据" in text or "Data Website" in canonical(text):
+                _connect_button(child, ctrl.on_open_data_page)
 
 
 def apply(window):
