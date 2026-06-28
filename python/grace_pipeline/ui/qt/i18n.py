@@ -463,7 +463,7 @@ TRANSLATIONS = {
         "Quick Analysis Tools": "\u5feb\u901f\u5206\u6790\u5de5\u5177",
         "Extract Basin Series": "\u63d0\u53d6\u6d41\u57df\u65f6\u5e8f",
         "Estimate Trend / Amplitude": "\u4f30\u8ba1\u8d8b\u52bf / \u632f\u5e45",
-        "Tools use the selected grid stack and boundary, then write series and harmonic-fit outputs under output/local/tools.": "\u5de5\u5177\u4f7f\u7528\u5f53\u524d\u7f51\u683c\u6808\u548c\u8fb9\u754c\uff0c\u5e76\u5c06\u65f6\u5e8f\u4e0e\u8c10\u6ce2\u62df\u5408\u7ed3\u679c\u5199\u5165 output/local/tools\u3002",
+        "Tools use the selected grid stack and boundary, then write series and harmonic-fit outputs under outputs/local/tools.": "\u5de5\u5177\u4f7f\u7528\u5f53\u524d\u7f51\u683c\u6808\u548c\u8fb9\u754c\uff0c\u5e76\u5c06\u65f6\u5e8f\u4e0e\u8c10\u6ce2\u62df\u5408\u7ed3\u679c\u5199\u5165 outputs/local/tools\u3002",
         "Run Analysis": "\u8fd0\u884c\u5206\u6790",
         "1. Grid Input": "1. \u7f51\u683c\u6570\u636e\u8f93\u5165",
         "2. Boundary Mask Extraction": "2. \u8fb9\u754c\u63a9\u819c\u63d0\u53d6",

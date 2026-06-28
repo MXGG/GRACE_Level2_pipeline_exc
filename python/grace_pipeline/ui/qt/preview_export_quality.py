@@ -130,7 +130,7 @@ def _export_dialog(controller):
     form.setContentsMargins(0, 0, 0, 0)
     form.setSpacing(10)
 
-    default_path = ROOT_DIR / "output" / "local" / "preview.png"
+    default_path = ROOT_DIR / "outputs" / "local" / "preview.png"
     row_path = QWidget()
     row_layout = QHBoxLayout(row_path)
     row_layout.setContentsMargins(0, 0, 0, 0)

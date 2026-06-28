@@ -23,12 +23,12 @@
 | --- | --- |
 | 桌面可执行文件 | `dist/grace-pipeline-gui.exe` |
 | Python GUI 启动入口 | `grace-pipeline gui` |
-| Python CLI 运行入口 | `grace-pipeline run -c ../matlab/cfg/user.json` |
+| Python CLI 运行入口 | `grace-pipeline run -c ../configs/user.json -d ../configs/default.json` |
 | MATLAB 本地一键入口 | `matlab/src/main/run_oneclick.m` |
 | HPC 提交入口 | `hpc.ps1` |
-| 共享配置文件 | `matlab/cfg/default.json`、`matlab/cfg/user.json` |
-| 本地输出目录 | `output/local/` |
-| 远端输出目录 | `output/remote/<jobid>/` |
+| 共享配置文件 | `configs/default.json`、`configs/user.json` |
+| 本地输出目录 | `outputs/local/` |
+| 远端输出目录 | `outputs/remote/<jobid>/` |
 | 网格堆栈约定 | `[nLon x nLat x Nt]` |
 | HSAF 默认上游输入 | `P4M6` |
 
@@ -46,7 +46,7 @@ G:\GRACE_Level2_pipeline_exc\dist\grace-pipeline-gui.exe
 
 ```powershell
 cd G:\GRACE_Level2_pipeline_exc\python
-py -m pip install -e .
+py -m pip install -e ".[gui]"
 grace-pipeline gui
 ```
 
@@ -54,7 +54,7 @@ grace-pipeline gui
 
 ```powershell
 cd G:\GRACE_Level2_pipeline_exc\python
-grace-pipeline run -c ..\matlab\cfg\user.json
+grace-pipeline run -c ..\configs\user.json -d ..\configs\default.json
 ```
 
 #### 面向 MATLAB 本地处理
@@ -82,7 +82,7 @@ cd G:\GRACE_Level2_pipeline_exc
   - 桌面 UI、CLI、Python 侧流程编排、预览与 I/O
 - `data/`
   - 输入数据、参考数据、辅助文件
-- `output/`
+- `outputs/`
   - 本地与远端运行结果
 - `docs/`
   - 文档、报告、说明
@@ -93,8 +93,8 @@ cd G:\GRACE_Level2_pipeline_exc
 
 该项目明确区分两类运行结果：
 
-- 本地运行输出到 `output/local/...`
-- HPC 远端运行输出到 `output/remote/<jobid>/...`
+- 本地运行输出到 `outputs/local/...`
+- HPC 远端运行输出到 `outputs/remote/<jobid>/...`
 
 这样做的目的：
 
@@ -118,7 +118,7 @@ G:\GRACE_Level2_pipeline_exc\dist\grace-pipeline-gui.exe
 
 ```powershell
 cd G:\GRACE_Level2_pipeline_exc\python
-py -m pip install -e .
+py -m pip install -e ".[gui]"
 grace-pipeline gui
 ```
 
@@ -128,7 +128,7 @@ grace-pipeline gui
 
 ```powershell
 cd G:\GRACE_Level2_pipeline_exc\python
-grace-pipeline run -c ..\matlab\cfg\user.json
+grace-pipeline run -c ..\configs\user.json -d ..\configs\default.json
 ```
 
 ### 4.4 MATLAB 本地启动
@@ -177,8 +177,8 @@ cd G:\GRACE_Level2_pipeline_exc
 
 桌面端与后端流程共用同一套 JSON 配置：
 
-- `matlab/cfg/default.json`
-- `matlab/cfg/user.json`
+- `configs/default.json`
+- `configs/user.json`
 
 主要配置内容包括：
 
@@ -197,7 +197,7 @@ cd G:\GRACE_Level2_pipeline_exc
 远端运行路径：
 
 - 提交入口：`hpc.ps1`
-- SLURM 脚本：`matlab/scripts/run/run.slurm`
+- SLURM 脚本：`matlab/scripts/run/run.slurm`（兼容入口，最终转发到 `packaging/hpc/slurm/run_matlab.slurm`）
 
 当前假设：
 
@@ -205,7 +205,7 @@ cd G:\GRACE_Level2_pipeline_exc
 - 单任务
 - `--cpus-per-task=52`
 - 使用 MATLAB 2023a 模块
-- 结果输出到 `output/remote/$SLURM_JOB_ID`
+- 结果输出到 `outputs/remote/$SLURM_JOB_ID`
 
 ## 6. 前后端链路
 
@@ -264,7 +264,7 @@ Python 侧核心包结构：
 1. 读取共享配置
 2. 从 GFC 输入构建时间索引
 3. 执行反演与滤波链
-4. 将结果写入 `output/local/`
+4. 将结果写入 `outputs/local/`
 5. 将 stacks / monthly / plots 暴露给 Preview 页面使用
 
 ### 6.4 MATLAB / HPC 后端
@@ -278,7 +278,7 @@ Python 侧核心包结构：
 3. 提交 `run.slurm`
 4. 远端 MATLAB 执行 `run_oneclick.m`
 5. `run_oneclick.m` 读取 `cfg` 并执行 `run_pipeline(cfg)`
-6. 结果写入 `output/remote/<jobid>/`
+6. 结果写入 `outputs/remote/<jobid>/`
 7. 拉回本地继续检查与预览
 
 ## 7. 页面功能说明与截图
@@ -422,7 +422,7 @@ HSAF 相关要求：
 典型本地结构：
 
 ```text
-output/local/
+outputs/local/
 ├─ logs/
 ├─ monthly/
 ├─ plots/
@@ -435,7 +435,7 @@ output/local/
 典型远端结构：
 
 ```text
-output/remote/<jobid>/
+outputs/remote/<jobid>/
 ├─ logs/
 ├─ monthly/
 ├─ plots/
@@ -501,10 +501,10 @@ output/remote/<jobid>/
 如果后续继续围绕这个软件对话，最低限度需要记住这些事实：
 
 - 它是一个 Qt 桌面前端 + GRACE Level-2 处理后端的混合工程
-- 配置中心在 `matlab/cfg/default.json` 和 `matlab/cfg/user.json`
+- 配置中心在 `configs/default.json` 和 `configs/user.json`
 - 本地运行通常走 Python 桌面端
 - 远端生产运行通常走 MATLAB + SLURM + HPC
-- 输出分为 `output/local/` 和 `output/remote/<jobid>/`
+- 输出分为 `outputs/local/` 和 `outputs/remote/<jobid>/`
 - Preview 依赖 `[nLon x nLat x Nt]` 的 stack 数据结构
 - HSAF 默认输入应为 `P4M6`
 - 最核心的页面是：
@@ -524,4 +524,3 @@ output/remote/<jobid>/
 - MATLAB 本地入口：`matlab/src/main/run_oneclick.m`
 - HPC 入口：`hpc.ps1`
 - SLURM 脚本：`matlab/scripts/run/run.slurm`
-

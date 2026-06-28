@@ -104,7 +104,7 @@ class ConfigPathRemapTest(unittest.TestCase):
                 self.assertEqual(config_mod.get_data_dir(), env_data.resolve())
                 self.assertEqual(config_mod.get_output_dir(), env_output.resolve())
                 self.assertEqual(config_mod.find_default_config(), (bundle_root / "cfg" / "default.json").resolve())
-                self.assertEqual(config_mod.get_config_dir(), (install_root / "cfg").resolve())
+                self.assertEqual(config_mod.get_config_dir(), (install_root / "configs").resolve())
         finally:
             self._restore_runtime(old_attrs, old_env)
 

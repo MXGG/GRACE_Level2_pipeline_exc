@@ -273,6 +273,10 @@ class DashboardPage(ScrollPage):
         self.lbl_output_hint = QLabel("Local execution | Output directories resolved from active config.")
         self.lbl_output_hint.setWordWrap(True)
         self.card_output_root.body.addWidget(self.lbl_output_hint)
+        self.lbl_output_route = QLabel("Local runs: outputs/local/... | HPC pulls: outputs/remote/<jobid>/...")
+        self.lbl_output_route.setObjectName("MonoText")
+        self.lbl_output_route.setWordWrap(True)
+        self.card_output_root.body.addWidget(self.lbl_output_route)
 
         self.card_data_availability = CardFrame("Data Availability")
         self.lbl_data_count = QLabel("0")
@@ -835,11 +839,16 @@ class ProcessingSetupPage(ScrollPage):
             filter_parameter_layout.addWidget(panel)
             panel.setVisible(False)
 
-        self.hsaf_detail_panel = QFrame()
-        self.hsaf_detail_panel.setObjectName("FieldBlock")
-        hsaf_layout = QVBoxLayout(self.hsaf_detail_panel)
-        hsaf_layout.setContentsMargins(0, 4, 0, 0)
-        hsaf_layout.setSpacing(10)
+        self.hsaf_summary_note = QLabel(
+            "HSAF runs after the configured pre-Hankel input; P4M6 is the recommended default."
+        )
+        self.hsaf_summary_note.setObjectName("PageSubtitle")
+        self.hsaf_summary_note.setWordWrap(True)
+        filter_parameter_layout.addWidget(self.hsaf_summary_note)
+        self.hsaf_summary_note.setVisible(False)
+
+        self.hsaf_detail_panel = CollapsibleSection("HSAF advanced strategy parameters", expanded=False)
+        hsaf_layout = self.hsaf_detail_panel.body
 
         self.cmb_hsaf_input = _make_combo(["P4M6", "RAW"], "P4M6")
         self.cmb_hsaf_variant = _make_combo(["全局固定", "纬度自适应"], "全局固定")
@@ -1055,6 +1064,12 @@ class LeakagePage(ScrollPage):
                 columns=3,
             )
         )
+        self.lbl_leakage_required_note = QLabel(
+            "Required first step: load stack metadata. The GUI then recommends the workflow from product type, filter operator, and scope."
+        )
+        self.lbl_leakage_required_note.setObjectName("PageSubtitle")
+        self.lbl_leakage_required_note.setWordWrap(True)
+        self.card_input.body.addWidget(self.lbl_leakage_required_note)
         input_actions = QWidget()
         input_actions_layout = QHBoxLayout(input_actions)
         input_actions_layout.setContentsMargins(0, 0, 0, 0)
@@ -1363,7 +1378,7 @@ class BasinPage(ScrollPage):
 
         self.card_output = CardFrame("4. Basin Products and Output")
         self.card_output.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
-        self.edit_export_path = _make_line_edit("./output/local/basin/")
+        self.edit_export_path = _make_line_edit("./outputs/local/basin/")
         self.chk_basin_save_series = QCheckBox("Basin time series: area-weighted values for each boundary")
         self.chk_basin_save_series.setChecked(True)
         self.chk_basin_save_stats = QCheckBox("Trend, amplitude, and residual products: basin statistics and spatial maps")
@@ -1414,7 +1429,7 @@ class BasinPage(ScrollPage):
         self.lbl_series_tool_status = QLabel("Status: ready for time series extraction.")
         self.lbl_series_tool_status.setWordWrap(True)
         self.lbl_series_tool_note = QLabel(
-            "Tools use the selected grid stack and boundary, then write series and harmonic-fit outputs under output/local/tools."
+            "Tools use the selected grid stack and boundary, then write series and harmonic-fit outputs under outputs/local/tools."
         )
         self.lbl_series_tool_note.setWordWrap(True)
         tool_row = QWidget()

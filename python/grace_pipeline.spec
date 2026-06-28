@@ -86,7 +86,11 @@ if SPLASH_IMAGE.exists():
 
 datas += collect_data_files("matplotlib", includes=["mpl-data/*"])
 
-hiddenimports = sorted(set(collect_submodules("grace_pipeline") + collect_submodules("netCDF4") + collect_submodules("h5py") + [
+hiddenimports = sorted(set(
+    collect_submodules("grace_pipeline")
+    + collect_submodules("netCDF4")
+    + collect_submodules("h5py")
+    + [
     "numpy",
     "scipy",
     "scipy.io",
@@ -97,6 +101,7 @@ hiddenimports = sorted(set(collect_submodules("grace_pipeline") + collect_submod
     "click",
     "tqdm",
     "h5py",
+    "joblib",
     "netCDF4",
     "matplotlib",
     "matplotlib.pyplot",

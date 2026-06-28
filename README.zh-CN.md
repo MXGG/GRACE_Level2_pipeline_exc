@@ -208,6 +208,15 @@ cd python
 .\build.ps1
 ```
 
+可执行文件生成后，Windows 安装包构建：
+
+```powershell
+cd installer
+ISCC.exe .\grace-l2.iss
+```
+
+请使用 `installer/grace-l2.iss` 作为当前 Inno Setup 入口。根目录 `grace-l2.iss` 只是防误用的废弃提示文件。
+
 Linux 可执行文件构建：
 
 ```bash

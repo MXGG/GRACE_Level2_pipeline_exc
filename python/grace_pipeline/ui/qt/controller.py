@@ -1333,6 +1333,8 @@ class MainWindowController:
         hsaf_active = str(getattr(page, "_selected_filter_panel", "") or "") == "hsaf"
         hsaf_visible = bool(hsaf_enabled and hsaf_active)
         variant = self._hsaf_variant_from_ui(self._combo_value(page.cmb_hsaf_variant)) if hasattr(page, "cmb_hsaf_variant") else "global"
+        if hasattr(page, "hsaf_summary_note"):
+            page.hsaf_summary_note.setVisible(hsaf_visible)
         page.hsaf_detail_panel.setVisible(hsaf_visible)
         page.hsaf_detail_panel.setEnabled(hsaf_enabled)
         page.hsaf_global_panel.setVisible(hsaf_visible and variant != "adaptive")
@@ -1742,7 +1744,11 @@ class MainWindowController:
             import shapefile
 
             sf = shapefile.Reader(boundary_path)
-            fields = [str(f[0]) for f in sf.fields[1:]]
+            try:
+                fields = [str(f[0]) for f in sf.fields[1:]]
+            finally:
+                with contextlib.suppress(Exception):
+                    sf.close()
         except Exception:
             return current
         resolved = current
@@ -2745,6 +2751,8 @@ class MainWindowController:
         output_root = self._native_path(getattr(cfg.path, "OUTPUT", ""), base_dir=ROOT_DIR)
         dashboard.lbl_output_root.setText(output_root)
         dashboard.lbl_output_hint.setText("Local execution | Output directories resolved from active config.")
+        if hasattr(dashboard, "lbl_output_route"):
+            dashboard.lbl_output_route.setText("Local runs: outputs/local/... | HPC pulls: outputs/remote/<jobid>/...")
         time_entries = self._detect_time_entries_for_ui()
         count = len(time_entries)
         dashboard.lbl_data_count.setText(str(count))
@@ -4796,8 +4804,8 @@ class MainWindowController:
             self.window.page_dashboard.badge_summary_state.setProperty("variant", "success")
             self.window.page_dashboard.badge_summary_state.style().unpolish(self.window.page_dashboard.badge_summary_state)
             self.window.page_dashboard.badge_summary_state.style().polish(self.window.page_dashboard.badge_summary_state)
-            self.window.page_monitor.lbl_last_artifact.setText("Latest Artifact: pipeline finished, inspect output/local for generated files.")
-            self.window.page_dashboard.lbl_preview_artifact.setText("Latest Artifact: pipeline finished, inspect output/local for generated files.")
+            self.window.page_monitor.lbl_last_artifact.setText("Latest Artifact: pipeline finished, inspect outputs/local for generated files.")
+            self.window.page_dashboard.lbl_preview_artifact.setText("Latest Artifact: pipeline finished, inspect outputs/local for generated files.")
             QTimer.singleShot(1200, lambda: self.window.set_run_active(False, text="Idle"))
         elif text == "ERROR":
             self.window.set_run_progress(-1.0, detail=self._last_overall_detail or "0/0", stage="Failed")

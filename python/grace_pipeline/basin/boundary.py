@@ -3,6 +3,7 @@ Basin boundary reading and processing.
 """
 
 import os
+import contextlib
 from pathlib import Path
 from dataclasses import dataclass, field
 from typing import List, Optional
@@ -73,7 +74,11 @@ def resolve_shapefile_name_field(file_path: str, name_field: str = "Name") -> st
     if shapefile is None:
         raise ImportError("pyshp is required to read shapefiles. Install with: pip install pyshp")
     sf = shapefile.Reader(file_path)
-    fields = [f[0] for f in sf.fields[1:]]
+    try:
+        fields = [f[0] for f in sf.fields[1:]]
+    finally:
+        with contextlib.suppress(Exception):
+            sf.close()
     requested = str(name_field or "").strip()
     if requested:
         for field in fields:
@@ -169,73 +174,77 @@ def read_shapefile(file_path: str, name_field: str) -> List[BasinBoundary]:
         raise ImportError("pyshp is required to read shapefiles. Install with: pip install pyshp")
         
     sf = shapefile.Reader(file_path)
-    boundaries = []
-    
-    # Check fields
-    fields = [f[0] for f in sf.fields[1:]] # Skip DeletionFlag
-    name_idx = -1
-    resolved_name_field = resolve_shapefile_name_field(file_path, name_field)
-    
-    # Try to find name field (case insensitive)
-    for i, f in enumerate(fields):
-        if f.lower() == resolved_name_field.lower():
-            name_idx = i
-            break
-    
-    for i, shape in enumerate(sf.shapes()):
-        rec = sf.record(i)
-        
-        name = _record_display_name(rec, fields, name_idx, f"poly_{i+1}")
-            
-        # Extract coordinates
-        # shape.points is list of (x, y)
-        if not shape.points:
-            continue
+    try:
+        boundaries = []
 
-        points = np.asarray(shape.points, dtype=float)
-        if points.ndim != 2 or points.shape[1] < 2:
-            continue
-        lon_all = wrap_lon(points[:, 0])
-        lat_all = points[:, 1]
+        # Check fields
+        fields = [f[0] for f in sf.fields[1:]] # Skip DeletionFlag
+        name_idx = -1
+        resolved_name_field = resolve_shapefile_name_field(file_path, name_field)
 
-        # Keep one basin per shape-record. Multipart polygons are retained as
-        # one logical basin (fixes 112-basin shapefile being split to 124).
-        part_starts = list(shape.parts) if shape.parts is not None else [0]
-        if not part_starts:
-            part_starts = [0]
-        part_starts.append(len(points))
+        # Try to find name field (case insensitive)
+        for i, f in enumerate(fields):
+            if f.lower() == resolved_name_field.lower():
+                name_idx = i
+                break
 
-        part_polys: List[np.ndarray] = []
-        lon_cat: List[float] = []
-        lat_cat: List[float] = []
-        for k in range(len(part_starts) - 1):
-            start = int(part_starts[k])
-            end = int(part_starts[k + 1])
-            if end - start < 3:
+        for i, shape in enumerate(sf.shapes()):
+            rec = sf.record(i)
+
+            name = _record_display_name(rec, fields, name_idx, f"poly_{i+1}")
+
+            # Extract coordinates
+            # shape.points is list of (x, y)
+            if not shape.points:
                 continue
-            sub_lon = lon_all[start:end]
-            sub_lat = lat_all[start:end]
-            poly = np.column_stack((sub_lon, sub_lat))
-            part_polys.append(poly)
-            if lon_cat:
-                lon_cat.append(np.nan)
-                lat_cat.append(np.nan)
-            lon_cat.extend(sub_lon.tolist())
-            lat_cat.extend(sub_lat.tolist())
 
-        if not part_polys:
-            continue
+            points = np.asarray(shape.points, dtype=float)
+            if points.ndim != 2 or points.shape[1] < 2:
+                continue
+            lon_all = wrap_lon(points[:, 0])
+            lat_all = points[:, 1]
 
-        boundaries.append(
-            BasinBoundary(
-                name=name,
-                lon=np.asarray(lon_cat, dtype=float),
-                lat=np.asarray(lat_cat, dtype=float),
-                parts=part_polys,
+            # Keep one basin per shape-record. Multipart polygons are retained as
+            # one logical basin (fixes 112-basin shapefile being split to 124).
+            part_starts = list(shape.parts) if shape.parts is not None else [0]
+            if not part_starts:
+                part_starts = [0]
+            part_starts.append(len(points))
+
+            part_polys: List[np.ndarray] = []
+            lon_cat: List[float] = []
+            lat_cat: List[float] = []
+            for k in range(len(part_starts) - 1):
+                start = int(part_starts[k])
+                end = int(part_starts[k + 1])
+                if end - start < 3:
+                    continue
+                sub_lon = lon_all[start:end]
+                sub_lat = lat_all[start:end]
+                poly = np.column_stack((sub_lon, sub_lat))
+                part_polys.append(poly)
+                if lon_cat:
+                    lon_cat.append(np.nan)
+                    lat_cat.append(np.nan)
+                lon_cat.extend(sub_lon.tolist())
+                lat_cat.extend(sub_lat.tolist())
+
+            if not part_polys:
+                continue
+
+            boundaries.append(
+                BasinBoundary(
+                    name=name,
+                    lon=np.asarray(lon_cat, dtype=float),
+                    lat=np.asarray(lat_cat, dtype=float),
+                    parts=part_polys,
+                )
             )
-        )
-                
-    return boundaries
+
+        return boundaries
+    finally:
+        with contextlib.suppress(Exception):
+            sf.close()
 
 def read_txt_poly(file_path: str) -> List[BasinBoundary]:
     """Read polygon from text file (lon lat columns)."""
