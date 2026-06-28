@@ -1,4 +1,4 @@
-"""PySide6 application bootstrap for the first-stage desktop shell."""
+﻿"""PySide6 application bootstrap for the first-stage desktop shell."""
 
 from __future__ import annotations
 
@@ -25,20 +25,7 @@ def start_gui(argv: list[str] | None = None):
     from PySide6.QtGui import QFont, QFontDatabase
     from PySide6.QtWidgets import QApplication
 
-    from grace_pipeline.ui.qt import leakage_wizard_stable
-    from grace_pipeline.ui.qt.global_monitor import configure_global_run_monitor
-    from grace_pipeline.ui.qt.help_docs import bind_help_docs
-    from grace_pipeline.ui.qt.main_window import MainWindow
-    from grace_pipeline.ui.qt.preview_enhancements import install_preview_enhancements
-    from grace_pipeline.ui.qt.preview_export_quality import install_preview_export_quality
-    from grace_pipeline.ui.qt.preview_layer_options import install_preview_layer_options
-    from grace_pipeline.ui.qt.preview_stable_rendering import install_preview_stable_rendering
-    from grace_pipeline.ui.qt.preview_title_status import install_preview_title_status
-    from grace_pipeline.ui.qt.preview_view_polish import install_preview_view_polish
-    from grace_pipeline.ui.qt.shell_enhancements import install_shell_enhancements
-    from grace_pipeline.ui.qt.splash import create_splash_screen
-    from grace_pipeline.ui.qt.theme import app_stylesheet
-    from grace_pipeline.ui.qt.ui_compact_polish import install_compact_polish
+    from grace_pipeline.ui.qt.runtime_refinements import apply_window_refinements, install_runtime_patches
 
     os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
     os.environ.setdefault("MKL_NUM_THREADS", "1")
@@ -53,6 +40,23 @@ def start_gui(argv: list[str] | None = None):
     app.setOrganizationName("GRACE-L2")
     app.setApplicationName("GRACE Level-2 Pipeline")
     app.setQuitOnLastWindowClosed(False)
+
+    install_runtime_patches()
+
+    from grace_pipeline.ui.qt import leakage_wizard_stable
+    from grace_pipeline.ui.qt.global_monitor import configure_global_run_monitor
+    from grace_pipeline.ui.qt.help_docs import bind_help_docs
+    from grace_pipeline.ui.qt.main_window import MainWindow
+    from grace_pipeline.ui.qt.preview_enhancements import install_preview_enhancements
+    from grace_pipeline.ui.qt.preview_export_quality import install_preview_export_quality
+    from grace_pipeline.ui.qt.preview_layer_options import install_preview_layer_options
+    from grace_pipeline.ui.qt.preview_stable_rendering import install_preview_stable_rendering
+    from grace_pipeline.ui.qt.preview_title_status import install_preview_title_status
+    from grace_pipeline.ui.qt.preview_view_polish import install_preview_view_polish
+    from grace_pipeline.ui.qt.shell_enhancements import install_shell_enhancements
+    from grace_pipeline.ui.qt.splash import create_splash_screen
+    from grace_pipeline.ui.qt.theme import app_stylesheet
+    from grace_pipeline.ui.qt.ui_compact_polish import install_compact_polish
 
     splash = create_splash_screen()
     if splash is not None:
@@ -87,6 +91,7 @@ def start_gui(argv: list[str] | None = None):
     install_preview_layer_options(window)
     install_preview_stable_rendering(window)
     install_preview_export_quality(window)
+    apply_window_refinements(window, app=app)
     if splash is not None:
         splash.set_progress(84, "Binding run monitor and workflow controls...")
 
