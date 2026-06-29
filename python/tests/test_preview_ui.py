@@ -20,6 +20,7 @@ if str(PYTHON_ROOT) not in sys.path:
     sys.path.insert(0, str(PYTHON_ROOT))
 
 from grace_pipeline.ui.qt.main_window import MainWindow
+from grace_pipeline.ui.qt.preferences import UIPreferences
 
 
 class PreviewUiTest(unittest.TestCase):
@@ -92,6 +93,17 @@ class PreviewUiTest(unittest.TestCase):
         self.app.processEvents()
         self.assertFalse(self.page.plot_toolbar_host.isVisible())
         self.assertEqual(self.page.btn_toggle_tools.text(), "Tools")
+
+    def test_render_button_keeps_label_after_language_refresh(self):
+        self.assertEqual(self.page.btn_plot.text(), "Render Preview")
+
+        self.window.apply_ui_preferences(UIPreferences(theme="light", language="zh"), persist=False)
+        self.app.processEvents()
+        self.assertEqual(self.page.btn_plot.text(), "渲染预览")
+
+        self.window.apply_ui_preferences(UIPreferences(theme="blue", language="en"), persist=False)
+        self.app.processEvents()
+        self.assertEqual(self.page.btn_plot.text(), "Render Preview")
 
     def test_preview_render_survives_layout_toggles(self):
         sample_stack = self._create_sample_stack()

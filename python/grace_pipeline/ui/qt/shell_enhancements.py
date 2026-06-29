@@ -8,7 +8,6 @@ import os
 import platform
 import sys
 from datetime import datetime
-from pathlib import Path
 from types import MethodType
 
 from PySide6.QtCore import QTimer, Qt
@@ -28,6 +27,13 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+try:
+    from shiboken6 import isValid as _shiboken_is_valid
+except Exception:  # pragma: no cover - PySide6 always ships shiboken6.
+    def _shiboken_is_valid(_obj) -> bool:
+        return True
+
+from grace_pipeline.ui.qt.app_icon import app_icon_path, install_app_icon
 from grace_pipeline.ui.qt.pages import _make_compact_field_grid, _make_field_row
 from grace_pipeline.ui.qt.widgets import CardFrame
 
@@ -100,24 +106,11 @@ def _tr(window, en: str, zh: str) -> str:
     return zh if getattr(getattr(window, "ui_preferences", None), "language", "en") == "zh" else en
 
 
-def _repo_root() -> Path:
-    return Path(__file__).resolve().parents[4]
-
-
-def _icon_path() -> Path | None:
-    root = _repo_root()
-    candidates = [
-        root / "installer" / "grace-l2.ico",
-        root / "resources" / "grace-l2.ico",
-        root / "grace-l2.ico",
-    ]
-    if getattr(sys, "frozen", False):
-        exe_dir = Path(sys.executable).resolve().parent
-        candidates.extend([exe_dir / "resources" / "grace-l2.ico", exe_dir / "grace-l2.ico"])
-    for path in candidates:
-        if path.exists():
-            return path
-    return None
+def _qt_object_is_alive(obj) -> bool:
+    try:
+        return obj is not None and _shiboken_is_valid(obj)
+    except RuntimeError:
+        return False
 
 
 def _memory_text() -> str:
@@ -325,26 +318,28 @@ def install_nav_footer_identity(window) -> None:
         labels[2].setText(f"v{APP_VERSION} · {getpass.getuser()}")
 
 
-def install_app_icon(window) -> QIcon | None:
-    path = _icon_path()
+def install_shell_app_icon(window) -> QIcon | None:
+    path = app_icon_path()
     if path is None:
         return None
-    icon = QIcon(str(path))
+    icon = install_app_icon(window)
     if icon.isNull():
         return None
-    window.setWindowIcon(icon)
-    app = QApplication.instance()
-    if app is not None:
-        app.setWindowIcon(icon)
     return icon
 
 
 def install_tray(window, icon: QIcon | None = None) -> None:
+    existing = getattr(window, "tray_icon", None)
+    if _qt_object_is_alive(existing):
+        if icon is not None and not icon.isNull():
+            existing.setIcon(icon)
+        window._tray_installed = True
+        return
     if getattr(window, "_tray_installed", False):
         return
     if not QSystemTrayIcon.isSystemTrayAvailable():
         return
-    icon = icon or install_app_icon(window) or window.windowIcon()
+    icon = icon or install_shell_app_icon(window) or window.windowIcon()
     tray = QSystemTrayIcon(icon, window)
     tray.setToolTip("GRACE Level-2 Pipeline")
     menu = QMenu()
@@ -380,7 +375,7 @@ def install_tray(window, icon: QIcon | None = None) -> None:
             return
         event.ignore()
         self.hide()
-        if getattr(self, "tray_icon", None) is not None:
+        if _qt_object_is_alive(getattr(self, "tray_icon", None)):
             self.tray_icon.showMessage(
                 "GRACE-L2",
                 _tr(self, "The program is still running in the system tray. Right-click the tray icon to open or exit.", "程序已最小化到系统托盘。右键托盘图标可打开或退出。"),
@@ -417,7 +412,7 @@ def install_taskbar_progress(window) -> None:
 
 
 def install_shell_enhancements(window) -> None:
-    icon = install_app_icon(window)
+    icon = install_shell_app_icon(window)
     install_dashboard_overview(window)
     install_nav_footer_identity(window)
     install_tray(window, icon)

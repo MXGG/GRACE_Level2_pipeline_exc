@@ -1635,8 +1635,10 @@ class PreviewPage(QWidget):
         footer_layout.setContentsMargins(20, 12, 20, 16)
         footer_layout.setSpacing(10)
         self.btn_plot = QPushButton("Render Preview")
+        self.btn_plot._tr_base_text = "Render Preview"
         self.btn_plot.setObjectName("GhostButton")
         self.btn_export_figure = QPushButton("Export Figure")
+        self.btn_export_figure._tr_base_text = "Export Figure"
         self.btn_export_figure.setObjectName("PrimaryButton")
         self.btn_export_figure.setStyleSheet(
             "background: #005db5; color: white; border: 1px solid #005db5; border-radius: 3px; font-weight: 600;"

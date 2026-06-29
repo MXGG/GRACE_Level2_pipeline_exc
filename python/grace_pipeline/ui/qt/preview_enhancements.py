@@ -236,7 +236,7 @@ def _apply_preview_labels(window) -> None:
         "Color Min": _tr(window, "Minimum", "色标最小值"),
         "Color Max": _tr(window, "Maximum", "色标最大值"),
         "Use Detected Extent": _tr(window, "Use Data Extent", "使用数据范围"),
-        "Render Preview": _tr(window, "Render", "渲染预览"),
+        "Render Preview": _tr(window, "Render Preview", "渲染预览"),
         "Export Figure": _tr(window, "Export", "导出图像"),
         "Hide Controls": _tr(window, "Hide Controls", "隐藏控制"),
         "Hide Status": _tr(window, "Hide Status", "隐藏状态"),
@@ -258,7 +258,10 @@ def _apply_preview_labels(window) -> None:
                     widget.setText(replacements[text])
     with contextlib.suppress(Exception):
         page.btn_load_stack.setText(_tr(window, "Read Data", "读取数据"))
-        page.btn_plot.setText(_tr(window, "Render", "渲染预览"))
+        page.btn_plot._tr_base_text = "Render Preview"
+        page.btn_plot.setText(_tr(window, "Render Preview", "渲染预览"))
+        if not page.btn_plot.text().strip():
+            page.btn_plot.setText(_tr(window, "Render Preview", "渲染预览"))
         page.btn_export_figure.setText(_tr(window, "Export", "导出图像"))
         page.canvas_preview_title.setText("")
         page.canvas_preview_title.setVisible(False)

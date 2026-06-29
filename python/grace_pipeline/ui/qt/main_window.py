@@ -32,6 +32,13 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+try:
+    from shiboken6 import isValid as _shiboken_is_valid
+except Exception:  # pragma: no cover - PySide6 always ships shiboken6.
+    def _shiboken_is_valid(_obj) -> bool:
+        return True
+
+from grace_pipeline.ui.qt.app_icon import install_app_icon, load_app_icon
 from grace_pipeline.ui.qt.mock_data import CONSOLE_LINES, NAV_ITEMS, PAGE_TITLES
 from grace_pipeline.ui.qt.i18n import canonical_text, translate_text
 from grace_pipeline.ui.qt.pages import (
@@ -48,6 +55,17 @@ from grace_pipeline.ui.qt.theme import app_stylesheet, resolve_theme_mode
 from grace_pipeline.ui.qt.widgets import ElidedLabel, NavigationButton, build_badge
 
 
+def _qt_object_is_alive(obj) -> bool:
+    try:
+        return obj is not None and _shiboken_is_valid(obj)
+    except RuntimeError:
+        return False
+
+
+def _is_deleted_qt_object_error(exc: RuntimeError) -> bool:
+    return "already deleted" in str(exc).lower()
+
+
 class MainWindow(QMainWindow):
     """Stitch-inspired desktop shell with left rail, top bar, pages, and console."""
 
@@ -58,6 +76,7 @@ class MainWindow(QMainWindow):
         self.ui_preferences = load_ui_preferences(settings_store) if load_persisted else UIPreferences()
         self._resolved_theme = resolve_theme_mode(self.ui_preferences.theme)
         self._style_hints_bound = False
+        self._app_icon = install_app_icon(self)
         self.setWindowTitle(self.translate_text(self._window_title_base))
         self.resize(1600, 980)
         self.setMinimumSize(1320, 820)
@@ -523,7 +542,13 @@ class MainWindow(QMainWindow):
         app.setQuitOnLastWindowClosed(False)
         if not QSystemTrayIcon.isSystemTrayAvailable():
             return
-        icon = self.windowIcon()
+        icon = self._app_icon if not self._app_icon.isNull() else self.windowIcon()
+        if icon.isNull():
+            icon = load_app_icon()
+            if not icon.isNull():
+                self._app_icon = icon
+                self.setWindowIcon(icon)
+                app.setWindowIcon(icon)
         if icon.isNull():
             icon = app.style().standardIcon(QStyle.StandardPixmap.SP_ComputerIcon)
         self.tray_menu = QMenu(self)
@@ -540,11 +565,13 @@ class MainWindow(QMainWindow):
         self.tray_icon.show()
 
     def _refresh_tray_text(self) -> None:
-        if self.tray_icon is None:
+        if not _qt_object_is_alive(self.tray_icon):
             return
         self.tray_icon.setToolTip(self.translate_text(self._window_title_base))
-        self.tray_open_action.setText(self.translate_text("Open GRACE-L2"))
-        self.tray_exit_action.setText(self.translate_text("Exit"))
+        if _qt_object_is_alive(getattr(self, "tray_open_action", None)):
+            self.tray_open_action.setText(self.translate_text("Open GRACE-L2"))
+        if _qt_object_is_alive(getattr(self, "tray_exit_action", None)):
+            self.tray_exit_action.setText(self.translate_text("Exit"))
 
     def _on_tray_activated(self, reason) -> None:
         if reason in (QSystemTrayIcon.ActivationReason.Trigger, QSystemTrayIcon.ActivationReason.DoubleClick):
@@ -557,14 +584,14 @@ class MainWindow(QMainWindow):
 
     def exit_application(self) -> None:
         self._force_exit = True
-        if self.tray_icon is not None:
+        if _qt_object_is_alive(self.tray_icon):
             self.tray_icon.hide()
         app = QApplication.instance()
         if app is not None:
             app.quit()
 
     def closeEvent(self, event):  # noqa: N802
-        if self.tray_icon is not None and not self._force_exit:
+        if _qt_object_is_alive(self.tray_icon) and not self._force_exit:
             event.ignore()
             self.hide()
             return
@@ -645,18 +672,25 @@ QRadioButton::indicator {{
         self.setWindowTitle(self.translate_text(self._window_title_base))
         widgets = [self] + self.findChildren(QWidget)
         for widget in widgets:
-            if isinstance(widget, NavigationButton):
-                widget.apply_language(self.translate_text)
+            if not _qt_object_is_alive(widget):
                 continue
-            self._translate_widget_text(widget)
-            self._translate_widget_placeholder(widget)
-            if isinstance(widget, QComboBox):
-                self._translate_combo_items(widget)
-            if isinstance(widget, QTabWidget):
-                self._translate_tab_widget(widget)
-            if isinstance(widget, QTableWidget):
-                self._translate_table_headers(widget)
-                self._translate_table_items(widget)
+            try:
+                if isinstance(widget, NavigationButton):
+                    widget.apply_language(self.translate_text)
+                    continue
+                self._translate_widget_text(widget)
+                self._translate_widget_placeholder(widget)
+                if isinstance(widget, QComboBox):
+                    self._translate_combo_items(widget)
+                if isinstance(widget, QTabWidget):
+                    self._translate_tab_widget(widget)
+                if isinstance(widget, QTableWidget):
+                    self._translate_table_headers(widget)
+                    self._translate_table_items(widget)
+            except RuntimeError as exc:
+                if _is_deleted_qt_object_error(exc):
+                    continue
+                raise
         self._apply_button_roles()
         self._refresh_tray_text()
 
@@ -665,6 +699,8 @@ QRadioButton::indicator {{
         danger_terms = ("stop", "abort", "delete", "clear", "exit", "remove")
         neutral_terms = ("browse", "folder", "file", "open", "help", "log", "console", "appearance", "settings", "load")
         for button in self.findChildren(QPushButton):
+            if not _qt_object_is_alive(button):
+                continue
             if isinstance(button, NavigationButton) or button.objectName() in {"IconButton", "NavButton"}:
                 continue
             role_text = canonical_text(button.text()).lower()
@@ -682,6 +718,8 @@ QRadioButton::indicator {{
             button.style().polish(button)
 
     def _translate_widget_text(self, widget: QWidget):
+        if not _qt_object_is_alive(widget):
+            return
         if bool(widget.property("skipTextTranslation")):
             return
         if not isinstance(widget, (QLabel, QPushButton, QCheckBox, QRadioButton, QToolButton)):
@@ -702,6 +740,8 @@ QRadioButton::indicator {{
         widget._tr_last_text = translated
 
     def _translate_widget_placeholder(self, widget: QWidget):
+        if not _qt_object_is_alive(widget):
+            return
         if not isinstance(widget, QLineEdit):
             return
         current = widget.placeholderText()
@@ -720,6 +760,8 @@ QRadioButton::indicator {{
         widget._tr_last_placeholder = translated
 
     def _translate_combo_items(self, widget: QComboBox):
+        if not _qt_object_is_alive(widget):
+            return
         current_items = [widget.itemText(index) for index in range(widget.count())]
         base_items = getattr(widget, "_tr_base_items", None)
         last_items = getattr(widget, "_tr_last_items", None)
@@ -739,6 +781,8 @@ QRadioButton::indicator {{
         widget._tr_last_items = translated_items
 
     def _translate_tab_widget(self, widget: QTabWidget):
+        if not _qt_object_is_alive(widget):
+            return
         current_tabs = [widget.tabText(index) for index in range(widget.count())]
         base_tabs = getattr(widget, "_tr_base_tabs", None)
         last_tabs = getattr(widget, "_tr_last_tabs", None)
@@ -754,6 +798,8 @@ QRadioButton::indicator {{
         widget._tr_last_tabs = translated_tabs
 
     def _translate_table_headers(self, widget: QTableWidget):
+        if not _qt_object_is_alive(widget):
+            return
         current_headers = []
         for index in range(widget.columnCount()):
             item = widget.horizontalHeaderItem(index)
@@ -773,6 +819,8 @@ QRadioButton::indicator {{
         widget._tr_last_headers = translated_headers
 
     def _translate_table_items(self, widget: QTableWidget):
+        if not _qt_object_is_alive(widget):
+            return
         for row in range(widget.rowCount()):
             for col in range(widget.columnCount()):
                 item = widget.item(row, col)

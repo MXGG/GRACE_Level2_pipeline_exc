@@ -83,6 +83,8 @@ datas = [
 ]
 if SPLASH_IMAGE.exists():
     datas.append((str(SPLASH_IMAGE), "grace_pipeline/ui/qt/assets"))
+if APP_ICON.exists():
+    datas.append((str(APP_ICON), "resources"))
 
 datas += collect_data_files("matplotlib", includes=["mpl-data/*"])
 

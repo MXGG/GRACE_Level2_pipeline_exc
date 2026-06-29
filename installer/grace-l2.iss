@@ -83,6 +83,7 @@ Source: "..\configs\*"; DestDir: "{app}\configs"; Flags: ignoreversion recursesu
 Source: "..\README.md"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
 Source: "..\README.zh-CN.md"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
 Source: "..\LICENSE"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
+Source: "grace-l2.ico"; DestDir: "{app}\resources"; Flags: ignoreversion
 
 ; 小型必要辅助数据。大型 GRACE/GSM、GLDAS、Mascon 等数据不建议打入安装包。
 Source: "..\data\Boundary\*"; DestDir: "{app}\data\Boundary"; Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
