@@ -67,6 +67,7 @@ from grace_pipeline.inversion.sh_synthesis import ewh_analysis, ewh_synthesis
 from grace_pipeline.infra.stack.loader import load_stack_any, load_stack_slice_any
 from grace_pipeline.infra.stack.probe import probe_stack_any
 from grace_pipeline.services.gfc_download import (
+    EarthdataAuthRequired,
     clear_earthdata_token,
     clear_earthdata_credentials,
     download_gfc_range,
@@ -116,7 +117,7 @@ from grace_pipeline.ui.plotting.projections import (
     wrap_delta_lon,
 )
 from grace_pipeline.ui.qt.path_defaults import DEFAULT_DATA_PATHS
-from grace_pipeline.ui.qt.preferences import UIPreferences
+from grace_pipeline.ui.qt.preferences import THEME_ITEMS, UIPreferences
 from grace_pipeline.ui.qt.theme import COLOR
 from grace_pipeline.ui.qt.widgets import populate_table
 
@@ -148,9 +149,8 @@ class UiSettingsDialog(QDialog):
         form.setVerticalSpacing(12)
 
         self.cmb_theme = QComboBox()
-        self.cmb_theme.addItem(window.translate_text("System"), "system")
-        self.cmb_theme.addItem(window.translate_text("Light"), "light")
-        self.cmb_theme.addItem(window.translate_text("Dark"), "dark")
+        for label, value in THEME_ITEMS:
+            self.cmb_theme.addItem(window.translate_text(label), value)
         self.cmb_theme.setCurrentIndex(max(0, self.cmb_theme.findData(preferences.theme)))
 
         self.cmb_language = QComboBox()
@@ -1456,6 +1456,10 @@ class MainWindowController:
         url = self._download_source_url()
         webbrowser.open(url)
         self.on_log(f"[GFC] Opened data source page: {url}", "stdout")
+        self.window.page_data_paths.lbl_gfc_download_status.setText(
+            f"Opened data source page for {self._configured_gfc_center()} {self._download_product_type()}. "
+            "If the browser reports 404 or no permission, use the download confirmation dialog and re-authorize Earthdata."
+        )
 
     def _ensure_earthdata_auth_for_download(self, product_type: str, center: str) -> bool:
         if not self._download_needs_earthdata(product_type, center):
@@ -1463,6 +1467,62 @@ class MainWindowController:
         if has_earthdata_credentials():
             return True
         return self.on_earthdata_auth(require_credentials=True)
+
+    def _confirm_download_request(
+        self,
+        *,
+        product_type: str,
+        center: str,
+        start_ym: str,
+        end_ym: str,
+        download_dir: str,
+        needs_auth: bool,
+    ) -> str:
+        box = QMessageBox(self.window)
+        box.setIcon(QMessageBox.Icon.Question)
+        box.setWindowTitle(self.window.translate_text("Download Confirmation"))
+        box.setText(self.window.translate_text("Confirm the dataset before downloading."))
+        earthdata_state = current_earthdata_login() if needs_auth else self.window.translate_text("not required")
+        info = (
+            f"Dataset: {center} {product_type}\n"
+            f"Range: {start_ym} -> {end_ym}\n"
+            f"Output: {download_dir}\n"
+            f"Earthdata: {earthdata_state or 'missing'}\n"
+            f"Source: {self._download_source_url(product_type, center)}"
+        )
+        box.setInformativeText(info)
+        box.setDetailedText(info)
+        start_button = box.addButton(self.window.translate_text("Start Download"), QMessageBox.ButtonRole.AcceptRole)
+        auth_button = None
+        if needs_auth:
+            auth_button = box.addButton(self.window.translate_text("Re-authorize Earthdata"), QMessageBox.ButtonRole.ActionRole)
+        site_button = box.addButton(self.window.translate_text("Open Data Website"), QMessageBox.ButtonRole.ActionRole)
+        box.addButton(QMessageBox.StandardButton.Cancel)
+        box.exec()
+        clicked = box.clickedButton()
+        if clicked is start_button:
+            return "start"
+        if auth_button is not None and clicked is auth_button:
+            return "auth"
+        if clicked is site_button:
+            return "site"
+        return "cancel"
+
+    def _show_download_auth_error(self, text: str) -> None:
+        box = QMessageBox(self.window)
+        box.setIcon(QMessageBox.Icon.Warning)
+        box.setWindowTitle(self.window.translate_text("Earthdata Authorization"))
+        box.setText(self.window.translate_text("Earthdata authorization is required or has expired."))
+        box.setInformativeText(str(text or ""))
+        auth_button = box.addButton(self.window.translate_text("Re-authorize Earthdata"), QMessageBox.ButtonRole.AcceptRole)
+        site_button = box.addButton(self.window.translate_text("Open Data Website"), QMessageBox.ButtonRole.ActionRole)
+        box.addButton(QMessageBox.StandardButton.Cancel)
+        box.exec()
+        clicked = box.clickedButton()
+        if clicked is auth_button:
+            self.on_earthdata_auth(require_credentials=True)
+        elif clicked is site_button:
+            self.on_open_download_site()
 
     def _low_degree_dir(self) -> Path:
         current = self.window.page_data_paths.edit_low_degree_path.text().strip()
@@ -1531,7 +1591,26 @@ class MainWindowController:
         if product_type == "MASCON_NC" and center not in {"CSR", "JPL", "GSFC"}:
             self._show_warning("下载 Mascon", "Mascon NC 下载目前支持 CSR、JPL 和 GSFC。")
             return
-        if not self._ensure_earthdata_auth_for_download(product_type, center):
+        needs_auth = self._download_needs_earthdata(product_type, center)
+        while True:
+            action = self._confirm_download_request(
+                product_type=product_type,
+                center=center,
+                start_ym=start_ym,
+                end_ym=end_ym,
+                download_dir=download_dir,
+                needs_auth=needs_auth,
+            )
+            if action == "cancel":
+                return
+            if action == "site":
+                self.on_open_download_site()
+                continue
+            if action == "auth":
+                self.on_earthdata_auth(require_credentials=True)
+                continue
+            break
+        if needs_auth and not self._ensure_earthdata_auth_for_download(product_type, center):
             return
         low_degree_dir = self._low_degree_dir()
         page.lbl_gfc_download_status.setText(f"正在下载 {center} {product_type}：{start_ym} 到 {end_ym}...")
@@ -1543,27 +1622,39 @@ class MainWindowController:
             self.signals.progress.emit("download", pct, text)
 
         def task() -> None:
-            if product_type == "MASCON_NC":
-                result = download_mascon_nc(
-                    out_dir=download_dir,
-                    source=center,
-                    start_ym=start_ym,
-                    end_ym=end_ym,
-                    resolution=self._configured_mascon_resolution(),
-                    progress=progress,
-                    progress_pct=progress_pct,
-                )
-            else:
-                result = download_gfc_range(
-                    gfc_dir=download_dir,
-                    start_ym=start_ym,
-                    end_ym=end_ym,
-                    center=center,
-                    low_degree_dir=low_degree_dir,
-                    progress=progress,
-                    progress_pct=progress_pct,
-                )
-            self.signals.gfc_download_done.emit(result)
+            try:
+                if product_type == "MASCON_NC":
+                    result = download_mascon_nc(
+                        out_dir=download_dir,
+                        source=center,
+                        start_ym=start_ym,
+                        end_ym=end_ym,
+                        resolution=self._configured_mascon_resolution(),
+                        progress=progress,
+                        progress_pct=progress_pct,
+                    )
+                else:
+                    result = download_gfc_range(
+                        gfc_dir=download_dir,
+                        start_ym=start_ym,
+                        end_ym=end_ym,
+                        center=center,
+                        low_degree_dir=low_degree_dir,
+                        progress=progress,
+                        progress_pct=progress_pct,
+                    )
+                self.signals.gfc_download_done.emit(result)
+            except EarthdataAuthRequired:
+                raise
+            except Exception as exc:
+                message = str(exc)
+                if "HTTP Error 404" in message or "No GSM GFC granules found" in message:
+                    message = (
+                        f"{message}\n\nThe selected dataset may not expose direct browser/download access for "
+                        f"{center} {product_type} {start_ym} -> {end_ym}. Open the data website from the "
+                        "confirmation dialog, confirm account permissions, then retry."
+                    )
+                raise RuntimeError(message) from exc
 
         self._run_in_thread("download", task, "DOWNLOADING DATA")
 
@@ -2127,15 +2218,28 @@ class MainWindowController:
     def on_open_settings(self):
         dialog = UiSettingsDialog(self.window, self.window.ui_preferences)
 
-        def apply_preferences():
-            self.window.apply_ui_preferences(dialog.current_preferences(), persist=True)
-            self.refresh_dashboard()
-            self._sync_monitor_context()
-            self._sync_data_path_badges()
-            self.window.refresh_translations()
+        def apply_preferences(close: bool = False):
+            dialog.buttons.setEnabled(False)
 
-        dialog.buttons.button(QDialogButtonBox.Apply).clicked.connect(apply_preferences)
-        dialog.buttons.accepted.connect(lambda: (apply_preferences(), dialog.accept()))
+            def apply_now() -> None:
+                try:
+                    self.window.apply_ui_preferences(dialog.current_preferences(), persist=True)
+                    self.refresh_dashboard()
+                    self._sync_monitor_context()
+                    self._sync_data_path_badges()
+                    self.window.refresh_translations()
+                    if close:
+                        dialog.accept()
+                    else:
+                        dialog.buttons.setEnabled(True)
+                except Exception as exc:
+                    dialog.buttons.setEnabled(True)
+                    self._show_warning("Settings", str(exc))
+
+            QTimer.singleShot(0, apply_now)
+
+        dialog.buttons.button(QDialogButtonBox.Apply).clicked.connect(lambda: apply_preferences(False))
+        dialog.buttons.button(QDialogButtonBox.Ok).clicked.connect(lambda: apply_preferences(True))
         dialog.buttons.rejected.connect(dialog.reject)
         dialog.exec()
 
@@ -4560,6 +4664,8 @@ class MainWindowController:
             sys.stderr = SignalLogWriter(self.signals, "stderr")
             try:
                 target()
+            except EarthdataAuthRequired as exc:
+                err = exc
             except Exception as exc:
                 err = exc
             finally:
@@ -4576,7 +4682,10 @@ class MainWindowController:
                 if err is not None:
                     self._pending_terminal_status = ("ERROR", "danger")
                     self.signals.status.emit("ERROR", "danger")
-                    self.signals.message.emit("error", scope.title(), str(err))
+                    if isinstance(err, EarthdataAuthRequired):
+                        self.signals.message.emit("earthdata_auth", "Earthdata Authorization", str(err))
+                    else:
+                        self.signals.message.emit("error", scope.title(), str(err))
                 else:
                     self._pending_terminal_status = ("READY", "success")
                     self.signals.status.emit("READY", "success")
@@ -4735,7 +4844,9 @@ class MainWindowController:
 
     def on_message(self, level: str, title: str, text: str):
         self.on_log(f"[{str(level).upper()}] {title}: {text}", "stderr" if level == "error" else "stdout")
-        if level == "error":
+        if level == "earthdata_auth":
+            self._show_download_auth_error(text)
+        elif level == "error":
             self._show_error(title, text)
         elif level == "warning":
             self._show_warning(title, text)

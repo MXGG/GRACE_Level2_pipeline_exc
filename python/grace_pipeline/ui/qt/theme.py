@@ -155,14 +155,89 @@ def resolve_theme_mode(theme_mode: str = "system", app=None) -> str:
     theme_mode = str(theme_mode or "system").strip().lower()
     if theme_mode == "system":
         return resolve_system_theme(app=app)
-    if theme_mode in {"light", "dark"}:
-        return theme_mode
+    if theme_mode in {"light", "blue", "green", "sepia", "violet"}:
+        return "light"
+    if theme_mode in {"dark", "graphite"}:
+        return "dark"
     return "light"
 
 
 def palette_for_theme(theme_mode: str = "system", app=None) -> dict[str, str]:
+    theme_mode = str(theme_mode or "system").strip().lower()
     resolved = resolve_theme_mode(theme_mode=theme_mode, app=app)
-    return dict(DARK_COLOR if resolved == "dark" else LIGHT_COLOR)
+    colors = dict(DARK_COLOR if resolved == "dark" else LIGHT_COLOR)
+    if theme_mode == "blue":
+        colors.update(
+            {
+                "background": "#f3f8ff",
+                "surface_low": "#eaf3fc",
+                "nav_surface": "#e8f1fb",
+                "nav_footer": "#e2edf8",
+                "top_surface": "#f8fbff",
+                "primary": "#0068b7",
+                "primary_dim": "#005799",
+                "primary_soft": "#d7eaff",
+            }
+        )
+    elif theme_mode == "green":
+        colors.update(
+            {
+                "background": "#f4faf6",
+                "surface_low": "#eaf5ee",
+                "nav_surface": "#e7f3ec",
+                "nav_footer": "#e0eee7",
+                "top_surface": "#f9fcfa",
+                "primary": "#217a4a",
+                "primary_dim": "#19663d",
+                "primary_soft": "#d9f0e2",
+            }
+        )
+    elif theme_mode == "sepia":
+        colors.update(
+            {
+                "background": "#faf6ef",
+                "surface_low": "#f3eadf",
+                "surface_mid": "#eadcc9",
+                "nav_surface": "#f1e6d8",
+                "nav_footer": "#eadcc9",
+                "top_surface": "#fffaf2",
+                "border": "#d9c6ad",
+                "primary": "#8a5a24",
+                "primary_dim": "#744819",
+                "primary_soft": "#f1dfc4",
+            }
+        )
+    elif theme_mode == "violet":
+        colors.update(
+            {
+                "background": "#f8f6ff",
+                "surface_low": "#f0ebfb",
+                "nav_surface": "#eee8fa",
+                "nav_footer": "#e7dff5",
+                "top_surface": "#fbfaff",
+                "primary": "#6d4db8",
+                "primary_dim": "#583b9b",
+                "primary_soft": "#e5dcff",
+            }
+        )
+    elif theme_mode == "graphite":
+        colors.update(
+            {
+                "background": "#101214",
+                "surface": "#1a1f24",
+                "surface_low": "#22282e",
+                "surface_mid": "#2b333a",
+                "surface_high": "#36404a",
+                "nav_surface": "#15191d",
+                "nav_footer": "#12161a",
+                "top_surface": "#171b20",
+                "border": "#333c45",
+                "primary": "#8fb8ff",
+                "primary_dim": "#72a2ef",
+                "primary_soft": "#24364f",
+            }
+        )
+    return colors
 
 
 def set_active_palette(colors: dict[str, str]) -> None:

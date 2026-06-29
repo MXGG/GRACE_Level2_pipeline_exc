@@ -6,11 +6,11 @@ look like real processing results.
 """
 
 NAV_ITEMS = [
-    ("dashboard", "Dashboard"),
-    ("processing", "Filter Processing"),
-    ("leakage", "Leakage Correction"),
-    ("basin", "Basin Analysis"),
-    ("preview", "Preview"),
+    ("dashboard", "Dashboard", "⌂"),
+    ("processing", "Filter Processing", "◎"),
+    ("leakage", "Leakage Correction", "◈"),
+    ("basin", "Basin Analysis", "▣"),
+    ("preview", "Preview", "◐"),
 ]
 
 

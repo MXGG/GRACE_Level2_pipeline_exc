@@ -76,7 +76,7 @@ class ConfigPathRemapTest(unittest.TestCase):
     def test_frozen_runtime_uses_install_env_and_bundle_fallbacks(self):
         names = ["frozen", "_MEIPASS", "executable"]
         old_attrs = {name: getattr(sys, name, None) for name in names}
-        env_names = ["GRACE_L2_HOME", "GRACE_L2_DATA", "GRACE_L2_OUTPUT"]
+        env_names = ["GRACE_L2_HOME", "GRACE_L2_DATA", "GRACE_L2_OUTPUT", "GRACE_L2_CONFIG"]
         old_env = {name: os.environ.get(name) for name in env_names}
         try:
             with tempfile.TemporaryDirectory() as td:
@@ -99,6 +99,7 @@ class ConfigPathRemapTest(unittest.TestCase):
                 os.environ["GRACE_L2_HOME"] = str(install_root)
                 os.environ["GRACE_L2_DATA"] = str(env_data)
                 os.environ["GRACE_L2_OUTPUT"] = str(env_output)
+                os.environ.pop("GRACE_L2_CONFIG", None)
 
                 self.assertEqual(config_mod.get_root_dir(), install_root.resolve())
                 self.assertEqual(config_mod.get_data_dir(), env_data.resolve())
@@ -111,7 +112,7 @@ class ConfigPathRemapTest(unittest.TestCase):
     def test_frozen_runtime_can_use_grace_l2_ini_without_env(self):
         names = ["frozen", "_MEIPASS", "executable"]
         old_attrs = {name: getattr(sys, name, None) for name in names}
-        env_names = ["GRACE_L2_HOME", "GRACE_L2_DATA", "GRACE_L2_OUTPUT"]
+        env_names = ["GRACE_L2_HOME", "GRACE_L2_DATA", "GRACE_L2_OUTPUT", "GRACE_L2_CONFIG"]
         old_env = {name: os.environ.get(name) for name in env_names}
         try:
             for name in env_names:

@@ -721,6 +721,7 @@ def _patch_run_thread_behavior(window, controller) -> None:
 
     def run_in_thread(self, scope: str, target, status_text: str):
         from grace_pipeline.ui.qt.controller import SignalLogWriter
+        from grace_pipeline.services.gfc_download import EarthdataAuthRequired
 
         if self.host._active_scope:
             self._show_warning("Run", f"Another task is already running: {self.host._active_scope}")
@@ -768,7 +769,10 @@ def _patch_run_thread_behavior(window, controller) -> None:
                 if err is not None:
                     self._pending_terminal_status = ("ERROR", "danger")
                     self.signals.status.emit("ERROR", "danger")
-                    self.signals.message.emit("error", scope.title(), str(err))
+                    if isinstance(err, EarthdataAuthRequired):
+                        self.signals.message.emit("earthdata_auth", "Earthdata Authorization", str(err))
+                    else:
+                        self.signals.message.emit("error", scope.title(), str(err))
                 else:
                     self._pending_terminal_status = ("READY", "success")
                     self.signals.status.emit("READY", "success")
@@ -803,7 +807,6 @@ def configure_global_run_monitor(window) -> None:
     controller = getattr(window, "controller", None)
     if controller is not None:
         _patch_filter_path_scanning(controller)
-        _patch_download_controls(window, controller)
         _patch_filter_run_validation(window, controller)
         _patch_persistent_logs(window, controller)
         _patch_open_logs(window, controller)

@@ -30,7 +30,8 @@ TRANSLATIONS = {
         "Project Configuration Summary": "项目配置摘要",
         "Project Name": "项目名称",
         "Last Edited": "最近更新",
-        "UID": "配置指纹",
+        "UID": "配置编号",
+        "Configuration ID": "配置编号",
         "Workflow Map": "工作流",
         "Data": "数据",
         "Pipeline Controls": "\u6d41\u7a0b\u63a7\u5236",
@@ -68,6 +69,30 @@ TRANSLATIONS = {
         "Help": "帮助",
         "Settings": "设置",
         "Appearance": "外观",
+        "System": "跟随系统",
+        "Light": "浅色",
+        "Dark": "深色",
+        "Blue": "蓝色",
+        "Green": "绿色",
+        "Graphite": "石墨",
+        "Sepia": "暖色",
+        "Violet": "紫色",
+        "Theme": "主题",
+        "Language": "语言",
+        "English": "英语",
+        "Chinese": "中文",
+        "Apply": "应用",
+        "Cancel": "取消",
+        "Open GRACE-L2": "打开 GRACE-L2",
+        "Exit": "退出程序",
+        "Download Confirmation": "下载确认",
+        "Confirm the dataset before downloading.": "下载前请确认数据集、时间范围和保存路径。",
+        "Start Download": "开始下载",
+        "Re-authorize Earthdata": "重新授权 Earthdata",
+        "Open Data Website": "打开数据网页",
+        "Earthdata Authorization": "Earthdata 授权",
+        "Earthdata authorization is required or has expired.": "需要 Earthdata 授权，或现有授权已失效。",
+        "not required": "不需要",
         "Custom Range": "自定义范围",
         "PnMl": "PnMl",
         "Gaussian+PnMl": "Gaussian+PnMl",
@@ -120,7 +145,7 @@ TRANSLATIONS = {
         "Latest Artifact: waiting for pipeline outputs.": "最新产物：等待流程输出。",
         "Output Root: not resolved yet.": "输出根目录：尚未解析。",
         "Local Output: not resolved yet.": "本地输出：尚未解析。",
-        "Stacks: not resolved yet.": "栈文件：尚未解析。",
+        "Stacks: not resolved yet.": "数据栈：尚未解析。",
         "Monthly MAT: not resolved yet.": "月度 MAT：尚未解析。",
         "Plots: not resolved yet.": "图件：尚未解析。",
         "Logs: not resolved yet.": "日志：尚未解析。",
@@ -318,7 +343,7 @@ TRANSLATIONS = {
         "Basin Definition": "流域定义",
         "Load Basin Info": "读取流域信息",
         "Input not loaded.": "输入未读取。",
-        "Source Stack File": "源栈文件",
+        "Source Stack File": "源数据栈文件",
         "Boundary File": "边界文件",
         "Basin Selection Mode": "流域选择模式",
         "Output Options": "输出选项",
@@ -398,7 +423,7 @@ TRANSLATIONS = {
         "Not configured": "\u672a\u914d\u7f6e",
         "Not resolved": "\u672a\u89e3\u6790",
         "None": "\u65e0",
-        "In-Memory Config": "\u5185\u5b58\u914d\u7f6e",
+        "In-Memory Config": "当前临时配置",
         "Active variable": "\u5f53\u524d\u53d8\u91cf",
         "Load failed": "\u52a0\u8f7d\u5931\u8d25",
         "Active": "\u542f\u7528",
@@ -424,7 +449,7 @@ TRANSLATIONS = {
         "Workflow Scope": "\u5de5\u4f5c\u6d41\u8303\u56f4",
         "Use this module for GRACE gridded mass anomalies, basin masks, area-weighted series, trend, and seasonal amplitude.": "\u7528\u4e8e GRACE \u7f51\u683c\u8d28\u91cf\u5f02\u5e38\u3001\u6d41\u57df\u63a9\u819c\u3001\u9762\u79ef\u52a0\u6743\u65f6\u95f4\u5e8f\u5217\u3001\u8d8b\u52bf\u548c\u5b63\u8282\u632f\u5e45\u5206\u6790\u3002",
         "Grid Data": "\u7f51\u683c\u6570\u636e",
-        "Grid Stack": "\u7f51\u683c\u6808\u6587\u4ef6",
+        "Grid Stack": "网格数据栈",
         "Read Grid Metadata": "\u8bfb\u53d6\u7f51\u683c\u5143\u6570\u636e",
         "Grid Shape": "\u7f51\u683c\u5c3a\u5bf8",
         "Time Coverage": "\u65f6\u95f4\u8303\u56f4",
@@ -528,7 +553,7 @@ PREFIX_TRANSLATIONS = {
         "I/O: ": "输入/输出：",
         "Output Root: ": "输出根目录：",
         "Local Output: ": "本地输出：",
-        "Stacks: ": "栈文件：",
+        "Stacks: ": "数据栈：",
         "Monthly MAT: ": "月度 MAT：",
         "Plots: ": "图件：",
         "Logs: ": "日志：",
@@ -558,8 +583,36 @@ PREFIX_TRANSLATIONS = {
 }
 
 
-def translate_text(text: str, language: str = "en") -> str:
+def canonical_text(text: str) -> str:
+    """Return the English source text for a translated UI string when known."""
+
     value = str(text or "")
+    if not value:
+        return value
+    reverse = getattr(canonical_text, "_reverse", None)
+    if reverse is None:
+        reverse = {}
+        for table in TRANSLATIONS.values():
+            for source, translated in table.items():
+                reverse[str(translated)] = str(source)
+        canonical_text._reverse = reverse
+    if value in reverse:
+        return reverse[value]
+    prefix_reverse = getattr(canonical_text, "_prefix_reverse", None)
+    if prefix_reverse is None:
+        prefix_reverse = {}
+        for table in PREFIX_TRANSLATIONS.values():
+            for source, translated in table.items():
+                prefix_reverse[str(translated)] = str(source)
+        canonical_text._prefix_reverse = prefix_reverse
+    for translated_prefix, source_prefix in prefix_reverse.items():
+        if translated_prefix and value.startswith(translated_prefix):
+            return source_prefix + canonical_text(value[len(translated_prefix) :])
+    return value
+
+
+def translate_text(text: str, language: str = "en") -> str:
+    value = canonical_text(str(text or ""))
     if not value or language == "en":
         return value
     month_range = re.match(r"^(\d{4}-\d{2}) -> (\d{4}-\d{2}) \((\d+) months\)$", value)

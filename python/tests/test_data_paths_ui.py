@@ -446,6 +446,7 @@ class DataPathsUiTest(unittest.TestCase):
             original_download = qt_controller.download_gfc_range
             original_run = self.window.controller._run_in_thread
             original_has_auth = qt_controller.has_earthdata_credentials
+            original_confirm = self.window.controller._confirm_download_request
 
             def fake_download_gfc_range(**kwargs):
                 calls.append(kwargs)
@@ -462,10 +463,12 @@ class DataPathsUiTest(unittest.TestCase):
 
             qt_controller.download_gfc_range = fake_download_gfc_range
             self.window.controller._run_in_thread = inline_run
+            self.window.controller._confirm_download_request = lambda **_kwargs: "start"
             qt_controller.has_earthdata_credentials = lambda: True
             self.addCleanup(setattr, qt_controller, "download_gfc_range", original_download)
             self.addCleanup(setattr, self.window.controller, "_run_in_thread", original_run)
             self.addCleanup(setattr, qt_controller, "has_earthdata_credentials", original_has_auth)
+            self.addCleanup(setattr, self.window.controller, "_confirm_download_request", original_confirm)
 
             self.page.edit_gfc_input_dir.setText(str(gfc_dir))
             self.page.edit_download_dir.setText(str(gfc_dir))
@@ -517,6 +520,7 @@ class DataPathsUiTest(unittest.TestCase):
             calls = []
             original_download = qt_controller.download_mascon_nc
             original_run = self.window.controller._run_in_thread
+            original_confirm = self.window.controller._confirm_download_request
 
             def fake_download_mascon_nc(**kwargs):
                 calls.append(kwargs)
@@ -534,8 +538,10 @@ class DataPathsUiTest(unittest.TestCase):
 
             qt_controller.download_mascon_nc = fake_download_mascon_nc
             self.window.controller._run_in_thread = inline_run
+            self.window.controller._confirm_download_request = lambda **_kwargs: "start"
             self.addCleanup(setattr, qt_controller, "download_mascon_nc", original_download)
             self.addCleanup(setattr, self.window.controller, "_run_in_thread", original_run)
+            self.addCleanup(setattr, self.window.controller, "_confirm_download_request", original_confirm)
 
             self.page.cmb_download_product.setCurrentText("Mascon NC")
             self.window.controller._sync_download_source_controls(update_options=True)
@@ -627,6 +633,16 @@ class DataPathsUiTest(unittest.TestCase):
         self.assertNotEqual(self.window.console_tabs.tabText(0), "Console")
         self.assertNotEqual(self.page.btn_toggle_reference_roots.text(), "Show Root Paths")
         self.assertNotEqual(self.page.btn_validate_paths.text(), "Validate All Paths")
+        self.assertIn("总览", self.window._nav_buttons["dashboard"].text())
+
+        self.window.apply_ui_preferences(UIPreferences(theme="blue", language="en"), persist=False)
+        self.app.processEvents()
+
+        self.assertEqual(self.window.ui_preferences.theme, "blue")
+        self.assertIn("#f3f8ff", self.app.styleSheet())
+        self.assertIn("Dashboard", self.window._nav_buttons["dashboard"].text())
+        self.assertEqual(self.window.btn_settings.text(), "Appearance")
+        self.assertEqual(self.window.console_tabs.tabText(0), "Console")
 
     def test_preferences_persist_across_windows(self):
         settings_file = Path(tempfile.mkdtemp()) / "ui_settings.ini"
@@ -638,7 +654,7 @@ class DataPathsUiTest(unittest.TestCase):
         first._current_screen_metrics = lambda: (1920, 1040, 1.0)
         first.resize(1600, 980)
         first.show()
-        first.apply_ui_preferences(UIPreferences(theme="dark", language="zh"), persist=True)
+        first.apply_ui_preferences(UIPreferences(theme="graphite", language="zh"), persist=True)
         self.app.processEvents()
         first.close()
         self.app.processEvents()
@@ -652,12 +668,12 @@ class DataPathsUiTest(unittest.TestCase):
         self.app.processEvents()
         self.addCleanup(second.close)
 
-        self.assertEqual(second.ui_preferences.theme, "dark")
+        self.assertEqual(second.ui_preferences.theme, "graphite")
         self.assertEqual(second.ui_preferences.language, "zh")
         self.assertEqual(second._resolved_theme, "dark")
         self.assertNotIn("data_paths", second._nav_buttons)
         self.assertNotEqual(second.breadcrumb.text(), "Data Paths")
-        self.assertIn("#0d1726", self.app.styleSheet())
+        self.assertIn("#101214", self.app.styleSheet())
 
 
 if __name__ == "__main__":

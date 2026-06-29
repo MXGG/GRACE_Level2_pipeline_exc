@@ -27,11 +27,19 @@ from grace_pipeline.ui.qt.theme import COLOR
 class NavigationButton(QPushButton):
     """Left-rail navigation button with a stable object name for styling."""
 
-    def __init__(self, label: str, parent: QWidget | None = None):
-        super().__init__(label, parent)
+    def __init__(self, label: str, icon_text: str = "", parent: QWidget | None = None):
+        super().__init__(parent)
+        self._nav_label = str(label or "")
+        self._nav_icon = str(icon_text or "")
         self.setCheckable(True)
         self.setCursor(Qt.PointingHandCursor)
         self.setObjectName("NavButton")
+        self.setProperty("skipTextTranslation", True)
+        self.apply_language(lambda value: value)
+
+    def apply_language(self, translator) -> None:
+        label = translator(self._nav_label)
+        self.setText(f"{self._nav_icon}  {label}" if self._nav_icon else label)
 
 
 class ElidedLabel(QLabel):

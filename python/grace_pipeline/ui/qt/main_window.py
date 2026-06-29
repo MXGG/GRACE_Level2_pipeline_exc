@@ -5,7 +5,7 @@ from __future__ import annotations
 import contextlib
 
 from PySide6.QtCore import Qt, QSignalBlocker, QTimer
-from PySide6.QtGui import QFont, QGuiApplication
+from PySide6.QtGui import QAction, QFont, QGuiApplication
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -19,8 +19,11 @@ from PySide6.QtWidgets import (
     QPushButton,
     QRadioButton,
     QSizePolicy,
+    QMenu,
     QSplitter,
     QStackedWidget,
+    QStyle,
+    QSystemTrayIcon,
     QTabWidget,
     QTableWidget,
     QTextEdit,
@@ -30,7 +33,7 @@ from PySide6.QtWidgets import (
 )
 
 from grace_pipeline.ui.qt.mock_data import CONSOLE_LINES, NAV_ITEMS, PAGE_TITLES
-from grace_pipeline.ui.qt.i18n import translate_text
+from grace_pipeline.ui.qt.i18n import canonical_text, translate_text
 from grace_pipeline.ui.qt.pages import (
     BasinPage,
     DashboardPage,
@@ -67,9 +70,12 @@ class MainWindow(QMainWindow):
         self._last_console_height = 220
         self._nav_collapsed = False
         self._font_scale_delta = 1
+        self._force_exit = False
+        self.tray_icon: QSystemTrayIcon | None = None
 
         self._build_shell()
         self._bind_system_theme_changes()
+        self._install_tray_icon()
         self.apply_ui_preferences(self.ui_preferences, persist=False)
         self.set_active_page("dashboard")
 
@@ -155,8 +161,9 @@ class MainWindow(QMainWindow):
         nav_layout = QVBoxLayout(nav_wrap)
         nav_layout.setContentsMargins(0, 12, 0, 12)
         nav_layout.setSpacing(2)
-        for key, label in NAV_ITEMS:
-            btn = NavigationButton(label)
+        for item in NAV_ITEMS:
+            key, label, icon = (item + ("",))[:3] if len(item) == 2 else item
+            btn = NavigationButton(label, icon)
             btn.clicked.connect(lambda checked=False, page_key=key: self.set_active_page(page_key))
             nav_layout.addWidget(btn)
             self._nav_buttons[key] = btn
@@ -490,7 +497,7 @@ class MainWindow(QMainWindow):
     def apply_ui_preferences(self, preferences: UIPreferences, persist: bool = True):
         theme = str(preferences.theme or "system").strip().lower()
         language = str(preferences.language or "en").strip().lower()
-        if theme not in {"system", "light", "dark"}:
+        if theme not in {"system", "light", "dark", "blue", "green", "graphite", "sepia", "violet"}:
             theme = "system"
         if language not in {"en", "zh"}:
             language = "en"
@@ -507,6 +514,61 @@ class MainWindow(QMainWindow):
         self.refresh_translations()
         if getattr(self, "controller", None) is not None:
             self.controller.refresh_plot_theme()
+        QTimer.singleShot(0, lambda: self._apply_responsive_layout(force=True))
+
+    def _install_tray_icon(self) -> None:
+        app = QApplication.instance()
+        if app is None or self.tray_icon is not None:
+            return
+        app.setQuitOnLastWindowClosed(False)
+        if not QSystemTrayIcon.isSystemTrayAvailable():
+            return
+        icon = self.windowIcon()
+        if icon.isNull():
+            icon = app.style().standardIcon(QStyle.StandardPixmap.SP_ComputerIcon)
+        self.tray_menu = QMenu(self)
+        self.tray_open_action = QAction("Open GRACE-L2", self.tray_menu)
+        self.tray_exit_action = QAction("Exit", self.tray_menu)
+        self.tray_menu.addAction(self.tray_open_action)
+        self.tray_menu.addSeparator()
+        self.tray_menu.addAction(self.tray_exit_action)
+        self.tray_open_action.triggered.connect(self.show_from_tray)
+        self.tray_exit_action.triggered.connect(self.exit_application)
+        self.tray_icon = QSystemTrayIcon(icon, self)
+        self.tray_icon.setContextMenu(self.tray_menu)
+        self.tray_icon.activated.connect(self._on_tray_activated)
+        self.tray_icon.show()
+
+    def _refresh_tray_text(self) -> None:
+        if self.tray_icon is None:
+            return
+        self.tray_icon.setToolTip(self.translate_text(self._window_title_base))
+        self.tray_open_action.setText(self.translate_text("Open GRACE-L2"))
+        self.tray_exit_action.setText(self.translate_text("Exit"))
+
+    def _on_tray_activated(self, reason) -> None:
+        if reason in (QSystemTrayIcon.ActivationReason.Trigger, QSystemTrayIcon.ActivationReason.DoubleClick):
+            self.show_from_tray()
+
+    def show_from_tray(self) -> None:
+        self.showNormal()
+        self.raise_()
+        self.activateWindow()
+
+    def exit_application(self) -> None:
+        self._force_exit = True
+        if self.tray_icon is not None:
+            self.tray_icon.hide()
+        app = QApplication.instance()
+        if app is not None:
+            app.quit()
+
+    def closeEvent(self, event):  # noqa: N802
+        if self.tray_icon is not None and not self._force_exit:
+            event.ignore()
+            self.hide()
+            return
+        super().closeEvent(event)
 
     def _apply_font_scale_to_app(self, app) -> None:
         font = QFont(app.font())
@@ -583,6 +645,9 @@ QRadioButton::indicator {{
         self.setWindowTitle(self.translate_text(self._window_title_base))
         widgets = [self] + self.findChildren(QWidget)
         for widget in widgets:
+            if isinstance(widget, NavigationButton):
+                widget.apply_language(self.translate_text)
+                continue
             self._translate_widget_text(widget)
             self._translate_widget_placeholder(widget)
             if isinstance(widget, QComboBox):
@@ -592,6 +657,29 @@ QRadioButton::indicator {{
             if isinstance(widget, QTableWidget):
                 self._translate_table_headers(widget)
                 self._translate_table_items(widget)
+        self._apply_button_roles()
+        self._refresh_tray_text()
+
+    def _apply_button_roles(self) -> None:
+        primary_terms = ("run", "download", "validate", "render", "export", "save", "generate", "apply", "ok")
+        danger_terms = ("stop", "abort", "delete", "clear", "exit", "remove")
+        neutral_terms = ("browse", "folder", "file", "open", "help", "log", "console", "appearance", "settings", "load")
+        for button in self.findChildren(QPushButton):
+            if isinstance(button, NavigationButton) or button.objectName() in {"IconButton", "NavButton"}:
+                continue
+            role_text = canonical_text(button.text()).lower()
+            if any(term in role_text for term in danger_terms):
+                object_name = "DangerGhostButton"
+            elif any(term in role_text for term in primary_terms):
+                object_name = "PrimaryButton"
+            elif any(term in role_text for term in neutral_terms):
+                object_name = "GhostButton"
+            else:
+                continue
+            if button.objectName() != object_name:
+                button.setObjectName(object_name)
+            button.style().unpolish(button)
+            button.style().polish(button)
 
     def _translate_widget_text(self, widget: QWidget):
         if bool(widget.property("skipTextTranslation")):

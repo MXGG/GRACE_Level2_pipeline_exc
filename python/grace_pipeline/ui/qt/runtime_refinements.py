@@ -8,17 +8,11 @@ def install_runtime_patches() -> None:
     global _PATCHED
     if _PATCHED:
         return
-    from grace_pipeline.ui.qt import runtime_terms_min, runtime_theme_simple, runtime_apply_theme
-    from grace_pipeline.ui.qt import runtime_settings_min, runtime_download_patch
-    runtime_terms_min.install()
-    runtime_theme_simple.install()
-    runtime_apply_theme.install()
-    runtime_settings_min.install()
-    runtime_download_patch.install()
+    # Kept as a compatibility hook for older entrypoints. Theme, language,
+    # settings, download confirmation, and tray behavior now live in the main
+    # PySide6 modules so source and packaged builds follow the same path.
     _PATCHED = True
 
 
 def apply_window_refinements(window, app=None) -> None:
-    from grace_pipeline.ui.qt import runtime_layout_only, runtime_tray_only
-    runtime_layout_only.apply(window)
-    runtime_tray_only.apply(window, app)
+    return None

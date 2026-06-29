@@ -9,7 +9,17 @@ from PySide6.QtCore import QSettings
 
 ORG_NAME = "GRACE-L2"
 APP_NAME = "GRACE Level-2 Pipeline"
-THEME_MODES = {"system", "light", "dark"}
+THEME_ITEMS = [
+    ("System", "system"),
+    ("Light", "light"),
+    ("Dark", "dark"),
+    ("Blue", "blue"),
+    ("Green", "green"),
+    ("Graphite", "graphite"),
+    ("Sepia", "sepia"),
+    ("Violet", "violet"),
+]
+THEME_MODES = {value for _label, value in THEME_ITEMS}
 LANGUAGE_MODES = {"en", "zh"}
 
 
