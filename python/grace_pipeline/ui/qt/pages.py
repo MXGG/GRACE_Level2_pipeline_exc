@@ -419,7 +419,7 @@ class DataPathsPage(ScrollPage):
         self.edit_download_dir = _make_line_edit(str(DEFAULT_DATA_PATHS["GFC"]))
         self.btn_download_dir_browse = QPushButton("选择文件夹...")
         self.btn_download_dir_browse.setObjectName("GhostButton")
-        self.btn_download_gfc_range = QPushButton("下载")
+        self.btn_download_gfc_range = QPushButton("Download")
         self.btn_download_gfc_range.setObjectName("PrimaryButton")
         self.btn_download_gfc_range.setMinimumWidth(148)
         self.btn_open_download_site = QPushButton("访问数据网页")
@@ -439,7 +439,7 @@ class DataPathsPage(ScrollPage):
         gfc_action_layout.addWidget(self.btn_open_download_site, 0)
         self.lbl_gfc_download_status = QLabel("GFC download: idle.")
         self.lbl_gfc_download_status.setWordWrap(True)
-        self.card_input_dirs.body.addWidget(_make_field_row("数据下载", gfc_action_row, label_width=PATH_FIELD_LABEL_WIDTH))
+        self.card_input_dirs.body.addWidget(_make_field_row("Data Download", gfc_action_row, label_width=PATH_FIELD_LABEL_WIDTH))
 
         self.edit_gfc_input_dir = _make_line_edit(str(DEFAULT_DATA_PATHS["GFC"]))
         self.btn_gfc_browse = QPushButton("Folder...")

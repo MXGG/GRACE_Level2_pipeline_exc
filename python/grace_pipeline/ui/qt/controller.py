@@ -1398,19 +1398,27 @@ class MainWindowController:
         center = self._configured_gfc_center()
         if hasattr(page, "cmb_mascon_resolution"):
             page.cmb_mascon_resolution.setVisible(product_type == "MASCON_NC")
-        page.btn_download_gfc_range.setText("下载 Mascon" if product_type == "MASCON_NC" else "下载 GFC")
+        page.btn_download_gfc_range.setText(self.window.translate_text("Download Mascon" if product_type == "MASCON_NC" else "Download GFC"))
         page.btn_download_gfc_range.setToolTip(page.lbl_gfc_download_status.text())
         if product_type == "GSM" and center in {"CSR", "JPL", "GFZ"}:
             self._apply_low_degree_files_for_center(center)
             login = current_earthdata_login()
             if login:
-                page.lbl_gfc_download_status.setText(f"{center} GSM 使用 PO.DAAC；Earthdata 登录态：{login}。")
+                page.lbl_gfc_download_status.setText(
+                    self.window.translate_text(f"{center} GSM uses PO.DAAC; Earthdata login: {login}.")
+                )
             else:
-                page.lbl_gfc_download_status.setText(f"{center} GSM 使用 PO.DAAC；下载前会请求 Earthdata 登录。")
+                page.lbl_gfc_download_status.setText(
+                    self.window.translate_text(f"{center} GSM uses PO.DAAC; Earthdata login will be requested before downloading.")
+                )
         elif product_type == "GSM" and center in {"HUST", "ITSG"}:
-            page.lbl_gfc_download_status.setText(f"{center} GSM 使用 ICGEM 下载，无需 Earthdata 登录。")
+            page.lbl_gfc_download_status.setText(
+                self.window.translate_text(f"{center} GSM uses ICGEM; Earthdata login is not required.")
+            )
         elif product_type == "MASCON_NC":
-            page.lbl_gfc_download_status.setText("Mascon NC 支持 CSR、JPL、GSFC；分辨率需与机构发布产品匹配。")
+            page.lbl_gfc_download_status.setText(
+                self.window.translate_text("Mascon NC downloads support CSR, JPL, and GSFC; resolution must match the published product.")
+            )
         page.btn_open_download_site.setToolTip(self._download_source_url(product_type, center))
         page.btn_download_gfc_range.setToolTip(page.lbl_gfc_download_status.text())
 
@@ -1585,13 +1593,16 @@ class MainWindowController:
         page = self.window.page_data_paths
         download_dir = self._native_path(page.edit_download_dir.text(), base_dir=ROOT_DIR)
         if not download_dir:
-            self._show_warning("下载数据", "请先设置下载文件夹。")
+            self._show_warning(self.window.translate_text("Download Data"), self.window.translate_text("Set a download folder first."))
             return
         start_ym, end_ym = self._gfc_download_range()
         center = self._configured_gfc_center()
         product_type = self._download_product_type()
         if product_type == "MASCON_NC" and center not in {"CSR", "JPL", "GSFC"}:
-            self._show_warning("下载 Mascon", "Mascon NC 下载目前支持 CSR、JPL 和 GSFC。")
+            self._show_warning(
+                self.window.translate_text("Download Mascon"),
+                self.window.translate_text("Mascon NC downloads currently support CSR, JPL, and GSFC."),
+            )
             return
         needs_auth = self._download_needs_earthdata(product_type, center)
         while True:
@@ -1615,7 +1626,9 @@ class MainWindowController:
         if needs_auth and not self._ensure_earthdata_auth_for_download(product_type, center):
             return
         low_degree_dir = self._low_degree_dir()
-        page.lbl_gfc_download_status.setText(f"正在下载 {center} {product_type}：{start_ym} 到 {end_ym}...")
+        page.lbl_gfc_download_status.setText(
+            self.window.translate_text(f"Downloading {center} {product_type}: {start_ym} to {end_ym}...")
+        )
 
         def progress(text: str) -> None:
             self.signals.log.emit(f"[GFC] {text}", "stdout")
@@ -1670,7 +1683,10 @@ class MainWindowController:
             self._set_edit_text(page.edit_mascon_reference, self._native_path(result.files[0]), block_signals=True)
         self._refresh_detected_time_range()
         page.lbl_gfc_download_status.setText(
-            f"{getattr(result, 'product_type', 'GSM')} 下载完成：新增 {len(result.files)} 个，已存在 {len(result.skipped)} 个；机构={result.center}。"
+            self.window.translate_text(
+                f"{getattr(result, 'product_type', 'GSM')} download complete: "
+                f"{len(result.files)} new, {len(result.skipped)} existing; center={result.center}."
+            )
         )
         self.on_log(
             f"[GFC] Download complete type={getattr(result, 'product_type', 'GSM')} center={result.center} downloaded={len(result.files)} skipped={len(result.skipped)}",
@@ -4760,24 +4776,24 @@ class MainWindowController:
         self.window.page_basin.chk_basin_enable.setChecked(True)
         self.pull_ui_to_host()
         if not self.host.var_basin_data.get():
-            self._show_warning("流域分析", "请先选择输入栈文件。")
+            self._show_warning(self.window.translate_text("Basin Analysis"), self.window.translate_text("Please select an input stack file first."))
             return
         if not self.host.var_basin_file.get():
-            self._show_warning("流域分析", "请先选择流域边界文件。")
+            self._show_warning(self.window.translate_text("Basin Analysis"), self.window.translate_text("Please select a basin boundary file first."))
             return
         self._run_in_thread("basin", self.host.run_basin_analysis, "RUNNING BASIN")
 
     def on_run_leakage(self):
         self.pull_ui_to_host()
         if not self.host.var_lrc_input.get():
-            self._show_warning("泄漏校正", "请先选择输入栈文件。")
+            self._show_warning(self.window.translate_text("Leakage Correction"), self.window.translate_text("Please select an input stack file first."))
             return
         family = self._combo_value(self.window.page_leakage.cmb_strategy_family).lower()
         if family == "regional" and not self.window.page_leakage.edit_regional_boundary.text().strip():
             self._set_combo_value(self.window.page_leakage.cmb_strategy_family, "global_regularized")
             self.on_leakage_strategy_changed()
             self.pull_ui_to_host()
-            self.on_log("[LEAKAGE] 区域模式缺少边界文件，已自动切换为全球恢复模式。", "stderr")
+            self.on_log("[LEAKAGE] Regional mode has no boundary file; switched to global recovery automatically.", "stderr")
         self._run_in_thread("leakage", self.host.run_leakage_correction, "RUNNING LEAKAGE")
 
     def on_pause_active(self):

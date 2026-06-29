@@ -582,6 +582,124 @@ PREFIX_TRANSLATIONS = {
     }
 }
 
+LANGUAGE_SYSTEM_TERMS_ZH = {
+    # Dashboard overview installed by shell_enhancements.py. Keep English
+    # source strings as canonical keys so language switching can normalize both
+    # construction-time and dynamically patched labels.
+    "System and project status": "系统与项目状态",
+    "Data and outputs": "数据与输出",
+    "Output structure": "输出结构",
+    "Current run": "当前运行",
+    "Correction method": "校正方法",
+    "2. Correction method": "2. 选择校正方法",
+    "Configuration": "配置名称",
+    "Last updated": "最近更新",
+    "Last Edited": "最近更新",
+    "Configuration fingerprint": "配置指纹",
+    "State": "状态",
+    "User": "当前用户",
+    "Version": "程序版本",
+    "Time": "系统时间",
+    "Memory": "内存占用",
+    "Filter chain": "滤波链",
+    "Available months": "可用月份",
+    "Output root": "输出根目录",
+    "Latest artifact": "最近产物",
+    "Root": "根目录",
+    "Local": "本地输出",
+    "Stacks": "数据栈",
+    "Monthly": "月度产品",
+    "Figures": "图件",
+    "Runtime": "运行环境",
+    "Running environment": "运行环境",
+    "In-Memory Config": "当前临时配置",
+    "Current temporary configuration": "当前临时配置",
+    "Python / MATLAB": "Python / MATLAB",
+    "Version / User": "版本 / 用户",
+
+    # Filter/download workflow.
+    "Filter Processing": "滤波处理",
+    "Filter Input Paths": "滤波输入路径",
+    "Filter Output Paths": "滤波输出路径",
+    "Auxiliary Filter Files": "辅助滤波文件",
+    "GFC Input Directory": "GFC 输入目录",
+    "DDK Data Directory": "DDK 数据目录",
+    "Detected Range": "检测范围",
+    "Remote Sync": "远程同步",
+    "Main Output Root": "主输出根目录",
+    "Open Logs": "打开日志",
+    "Data Download": "数据下载",
+    "Download": "下载",
+    "Download GFC": "下载 GFC",
+    "Download Mascon": "下载 Mascon",
+    "Select download folder...": "选择下载文件夹...",
+    "Choose download folder...": "选择下载文件夹...",
+    "Downloading data": "下载数据",
+    "Download Data": "下载数据",
+    "Set a download folder first.": "请先设置下载文件夹。",
+    "Mascon NC downloads currently support CSR, JPL, and GSFC.": "Mascon NC 下载目前支持 CSR、JPL 和 GSFC。",
+    "Mascon NC downloads support CSR, JPL, and GSFC; resolution must match the published product.": "Mascon NC 支持 CSR、JPL、GSFC；分辨率需与机构发布产品匹配。",
+    "Download in progress": "正在下载",
+    "Download complete": "下载完成",
+    "new": "新增",
+    "existing": "已存在",
+    "center": "机构",
+    "Auto": "自动",
+    "GSM files": "GSM 文件",
+    "Download folder": "下载文件夹",
+
+    # Leakage correction terminology. These are UI workflow labels, while file
+    # formats, product names, and algorithm abbreviations remain unchanged.
+    "Correction Dataset": "待校正数据",
+    "1. Correction dataset": "1. 待校正数据",
+    "Official scale/gain factor": "官方尺度/增益因子",
+    "Official scale/gain factor grid": "官方尺度/增益因子网格",
+    "Scale/Gain Factor Grid": "尺度/增益因子网格",
+    "Forward modelling": "正演建模",
+    "Forward-modeling": "正演建模",
+    "Forward-modelling iteration settings": "正演建模迭代设置",
+    "Filter method": "滤波方法",
+    "Reference Model or Synthetic Field": "参考模型或合成场",
+    "Reference or Trend Field": "参考场或趋势场",
+    "Developer / experimental options": "开发者 / 实验选项",
+    "Read Reference": "读取参考数据",
+    "Read Input Metadata": "读取输入信息",
+    "Run Leakage Correction": "运行泄漏校正",
+    "Regional scale factor": "区域尺度因子",
+    "3. Output and run": "3. 输出与运行",
+    "Output files: corrected_stack, difference_stack, summary.json, diagnostics, and preview_manifest.json.": "输出文件：corrected_stack、difference_stack、summary.json、diagnostics 和 preview_manifest.json。",
+
+    # Common status fragments that previously leaked across language modes.
+    "Input loaded": "输入已读取",
+    "Read failed": "读取失败",
+    "Reference file is not set.": "尚未设置参考文件。",
+    "Reference file does not exist.": "参考文件不存在。",
+    "Boundary file is not set.": "尚未设置边界文件。",
+    "Boundary read failed": "边界读取失败",
+    "Time range": "时间范围",
+    "Grid Extent": "经纬度范围",
+    "Please select an input stack file first.": "请先选择输入栈文件。",
+    "Please select a basin boundary file first.": "请先选择流域边界文件。",
+    "Regional mode has no boundary file; switched to global recovery automatically.": "区域模式缺少边界文件，已自动切换为全球恢复模式。",
+    "Input loading failed. Check the file path and stack structure.": "输入读取失败，请检查文件路径和栈数据结构。",
+    "Read the correction dataset first. This step reports dimensions, variable name, time coverage, and grid extent.": "请先读取待校正数据。本步骤用于确认数据维度、变量名称、时间范围和经纬度范围。",
+}
+
+LANGUAGE_SYSTEM_PREFIX_ZH = {
+    "Latest artifact: ": "最近产物：",
+    "Latest Artifact: ": "最新产物：",
+    "Root: ": "根目录：",
+    "Local: ": "本地输出：",
+    "Monthly: ": "月度产品：",
+    "Figures: ": "图件：",
+    "Runtime: ": "运行环境：",
+    "Downloading ": "正在下载 ",
+    "Download complete: ": "下载完成：",
+}
+
+TRANSLATIONS.setdefault("zh", {}).update(LANGUAGE_SYSTEM_TERMS_ZH)
+PREFIX_TRANSLATIONS.setdefault("zh", {}).update(LANGUAGE_SYSTEM_PREFIX_ZH)
+
 
 def canonical_text(text: str) -> str:
     """Return the English source text for a translated UI string when known."""
@@ -598,6 +716,17 @@ def canonical_text(text: str) -> str:
         canonical_text._reverse = reverse
     if value in reverse:
         return reverse[value]
+    source_casefold = getattr(canonical_text, "_source_casefold", None)
+    if source_casefold is None:
+        source_casefold = {}
+        for table in TRANSLATIONS.values():
+            for source in table:
+                source_text = str(source)
+                source_casefold.setdefault(source_text.casefold(), source_text)
+        canonical_text._source_casefold = source_casefold
+    folded = value.casefold()
+    if folded in source_casefold:
+        return source_casefold[folded]
     prefix_reverse = getattr(canonical_text, "_prefix_reverse", None)
     if prefix_reverse is None:
         prefix_reverse = {}
@@ -608,6 +737,24 @@ def canonical_text(text: str) -> str:
     for translated_prefix, source_prefix in prefix_reverse.items():
         if translated_prefix and value.startswith(translated_prefix):
             return source_prefix + canonical_text(value[len(translated_prefix) :])
+    podaac_login_zh = re.match(r"^([A-Z0-9_.-]+) GSM 使用 PO\.DAAC；Earthdata 登录态：(.+)。$", value)
+    if podaac_login_zh:
+        center, login = podaac_login_zh.groups()
+        return f"{center} GSM uses PO.DAAC; Earthdata login: {login}."
+    podaac_required_zh = re.match(r"^([A-Z0-9_.-]+) GSM 使用 PO\.DAAC；下载前(?:会请求|可能需要) Earthdata 登录。$", value)
+    if podaac_required_zh:
+        return f"{podaac_required_zh.group(1)} GSM uses PO.DAAC; Earthdata login will be requested before downloading."
+    icgem_download_zh = re.match(r"^([A-Z0-9_.-]+) GSM 使用 ICGEM 下载，无需 Earthdata 登录。$", value)
+    if icgem_download_zh:
+        return f"{icgem_download_zh.group(1)} GSM uses ICGEM; Earthdata login is not required."
+    download_running_zh = re.match(r"^正在下载 ([A-Z0-9_.-]+) ([A-Z0-9_.-]+)：(\d{4}-\d{2}) 到 (\d{4}-\d{2})\.\.\.$", value)
+    if download_running_zh:
+        center, product, start, end = download_running_zh.groups()
+        return f"Downloading {center} {product}: {start} to {end}..."
+    download_done_zh = re.match(r"^([A-Z0-9_.-]+) 下载完成：新增 (\d+) 个，已存在 (\d+) 个；机构=([A-Z0-9_.-]+)。$", value)
+    if download_done_zh:
+        product, new_count, existing_count, center = download_done_zh.groups()
+        return f"{product} download complete: {new_count} new, {existing_count} existing; center={center}."
     return value
 
 
@@ -615,6 +762,24 @@ def translate_text(text: str, language: str = "en") -> str:
     value = canonical_text(str(text or ""))
     if not value or language == "en":
         return value
+    podaac_login = re.match(r"^([A-Z0-9_.-]+) GSM uses PO\.DAAC; Earthdata login: (.+)\.$", value)
+    if language == "zh" and podaac_login:
+        center, login = podaac_login.groups()
+        return f"{center} GSM 使用 PO.DAAC；Earthdata 登录态：{login}。"
+    podaac_required = re.match(r"^([A-Z0-9_.-]+) GSM uses PO\.DAAC; Earthdata login (?:will be requested|may be required) before downloading\.$", value)
+    if language == "zh" and podaac_required:
+        return f"{podaac_required.group(1)} GSM 使用 PO.DAAC；下载前会请求 Earthdata 登录。"
+    icgem_download = re.match(r"^([A-Z0-9_.-]+) GSM uses ICGEM; Earthdata login is not required\.$", value)
+    if language == "zh" and icgem_download:
+        return f"{icgem_download.group(1)} GSM 使用 ICGEM 下载，无需 Earthdata 登录。"
+    download_running = re.match(r"^Downloading ([A-Z0-9_.-]+) ([A-Z0-9_.-]+): (\d{4}-\d{2}) to (\d{4}-\d{2})\.\.\.$", value)
+    if language == "zh" and download_running:
+        center, product, start, end = download_running.groups()
+        return f"正在下载 {center} {product}：{start} 到 {end}..."
+    download_done = re.match(r"^([A-Z0-9_.-]+) download complete: (\d+) new, (\d+) existing; center=([A-Z0-9_.-]+)\.$", value)
+    if language == "zh" and download_done:
+        product, new_count, existing_count, center = download_done.groups()
+        return f"{product} 下载完成：新增 {new_count} 个，已存在 {existing_count} 个；机构={center}。"
     month_range = re.match(r"^(\d{4}-\d{2}) -> (\d{4}-\d{2}) \((\d+) months\)$", value)
     if language == "zh" and month_range:
         start, end, count = month_range.groups()
@@ -623,6 +788,10 @@ def translate_text(text: str, language: str = "en") -> str:
     if language == "zh" and gfc_summary:
         count, start, end, missing, grace_missing = gfc_summary.groups()
         return f"{count} \u4e2a GFC \u6587\u4ef6 | {start} // {end} | \u7f3a\u6d4b={missing}\uff08GRACE={grace_missing}\uff09"
+    gfc_summary_simple = re.match(r"^(\d+) GFC files \| (\d{4}-\d{2}) -> (\d{4}-\d{2}) \| missing=(\d+)$", value)
+    if language == "zh" and gfc_summary_simple:
+        count, start, end, missing = gfc_summary_simple.groups()
+        return f"{count} 个 GFC 文件 | {start} -> {end} | 缺测={missing}"
     preview_target = re.match(r"^Preview target: (.+)\. Click Preview Selected Basin to render\.$", value)
     if language == "zh" and preview_target:
         return f"\u9884\u89c8\u76ee\u6807\uff1a{preview_target.group(1)}\u3002\u70b9\u51fb\u201c\u9884\u89c8\u5f53\u524d\u6d41\u57df\u201d\u6e32\u67d3\u3002"

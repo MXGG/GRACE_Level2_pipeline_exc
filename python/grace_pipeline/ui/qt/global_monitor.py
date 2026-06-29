@@ -339,8 +339,8 @@ def _move_filter_paths_to_processing(window) -> None:
 
     _install_processing_action_bar(window)
 
-    data_page.btn_download_dir_browse.setText("选择下载文件夹...")
-    data_page.btn_download_gfc_range.setText("下载")
+    data_page.btn_download_dir_browse.setText(window.translate_text("Select download folder..."))
+    data_page.btn_download_gfc_range.setText(window.translate_text("Download"))
     _move_field_row_to_layout(data_page.edit_gfc_input_dir, data_page.card_input_dirs.body, insert_index=0)
     _move_field_row_to_layout(data_page.lbl_gfc_detected_range, data_page.card_input_dirs.body, insert_index=1)
     _move_field_row_to_layout(data_page.edit_download_dir, data_page.card_input_dirs.body, insert_index=2)
@@ -505,7 +505,7 @@ def _patch_download_controls(window, controller) -> None:
         product_type = self._download_product_type()
         if update_options:
             current = self._combo_value(page.cmb_gfc_center)
-            values = ["CSR", "JPL", "GSFC"] if product_type == "MASCON_NC" else ["自动", "CSR", "JPL", "GFZ", "HUST", "ITSG"]
+            values = ["CSR", "JPL", "GSFC"] if product_type == "MASCON_NC" else ["Auto", "CSR", "JPL", "GFZ", "HUST", "ITSG"]
             from PySide6.QtCore import QSignalBlocker
 
             with QSignalBlocker(page.cmb_gfc_center):
@@ -515,16 +515,22 @@ def _patch_download_controls(window, controller) -> None:
                 page.cmb_gfc_center.setCurrentText(current if current in values else values[0])
         if hasattr(page, "cmb_mascon_resolution"):
             page.cmb_mascon_resolution.setVisible(product_type == "MASCON_NC")
-        page.btn_download_gfc_range.setText("下载")
-        page.btn_download_dir_browse.setText("选择下载文件夹...")
+        page.btn_download_gfc_range.setText(self.window.translate_text("Download"))
+        page.btn_download_dir_browse.setText(self.window.translate_text("Select download folder..."))
         center = self._configured_gfc_center()
         if product_type == "GSM" and center in {"CSR", "JPL", "GFZ"}:
             self._apply_low_degree_files_for_center(center)
-            page.lbl_gfc_download_status.setText(f"{center} GSM 使用 PO.DAAC；下载前可能需要 Earthdata 登录。")
+            page.lbl_gfc_download_status.setText(
+                self.window.translate_text(f"{center} GSM uses PO.DAAC; Earthdata login may be required before downloading.")
+            )
         elif product_type == "GSM" and center in {"HUST", "ITSG"}:
-            page.lbl_gfc_download_status.setText(f"{center} GSM 使用 ICGEM 下载，无需 Earthdata 登录。")
+            page.lbl_gfc_download_status.setText(
+                self.window.translate_text(f"{center} GSM uses ICGEM; Earthdata login is not required.")
+            )
         elif product_type == "MASCON_NC":
-            page.lbl_gfc_download_status.setText("Mascon NC 支持 CSR、JPL、GSFC；分辨率需与机构发布产品匹配。")
+            page.lbl_gfc_download_status.setText(
+                self.window.translate_text("Mascon NC downloads support CSR, JPL, and GSFC; resolution must match the published product.")
+            )
         if hasattr(page, "btn_open_download_site"):
             page.btn_open_download_site.setToolTip(self._download_source_url(product_type, center))
         page.btn_download_gfc_range.setToolTip(page.lbl_gfc_download_status.text())
@@ -556,18 +562,23 @@ def _patch_download_controls(window, controller) -> None:
         page = self.window.page_data_paths
         download_dir = self._native_path(page.edit_download_dir.text(), base_dir=ROOT_DIR)
         if not download_dir:
-            self._show_warning("下载数据", "请先设置下载文件夹。")
+            self._show_warning(self.window.translate_text("Download Data"), self.window.translate_text("Set a download folder first."))
             return
         start_ym, end_ym = self._gfc_download_range()
         center = self._configured_gfc_center()
         product_type = self._download_product_type()
         if product_type == "MASCON_NC" and center not in {"CSR", "JPL", "GSFC"}:
-            self._show_warning("下载数据", "Mascon NC 下载目前支持 CSR、JPL 和 GSFC。")
+            self._show_warning(
+                self.window.translate_text("Download Data"),
+                self.window.translate_text("Mascon NC downloads currently support CSR, JPL, and GSFC."),
+            )
             return
         if not self._ensure_earthdata_auth_for_download(product_type, center):
             return
         low_degree_dir = self._low_degree_dir()
-        page.lbl_gfc_download_status.setText(f"正在下载 {center} {product_type}：{start_ym} 到 {end_ym}...")
+        page.lbl_gfc_download_status.setText(
+            self.window.translate_text(f"Downloading {center} {product_type}: {start_ym} to {end_ym}...")
+        )
         pause_event, stop_event = self.host._get_scope_events("download")
 
         def check_pause_stop() -> None:

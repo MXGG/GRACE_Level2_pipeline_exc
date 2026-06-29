@@ -11,7 +11,7 @@ import numpy as np
 import scipy.io as sio
 from PySide6.QtCore import Qt
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QWidget
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -22,6 +22,7 @@ if str(PYTHON_ROOT) not in sys.path:
 from grace_pipeline.ui.qt.main_window import MainWindow
 from grace_pipeline.ui.qt.preferences import UIPreferences
 from grace_pipeline.ui.qt.app import start_gui
+from grace_pipeline.ui.qt.i18n import translate_text
 
 
 class PreviewUiTest(unittest.TestCase):
@@ -119,6 +120,86 @@ class PreviewUiTest(unittest.TestCase):
 
         self.assertEqual(window.page_preview.btn_plot.text(), "渲染预览")
         self.assertEqual(window.page_preview.btn_export_figure.text(), "导出图像")
+
+    def test_full_gui_language_modes_do_not_mix_core_ui_terms(self):
+        window = start_gui([])
+        self.addCleanup(lambda: window.exit_application())
+        self.app.processEvents()
+
+        def visible_texts_for(page_key: str) -> list[str]:
+            window.set_active_page(page_key)
+            window.refresh_translations()
+            self.app.processEvents()
+            texts: list[str] = []
+            for widget in window.findChildren(QWidget):
+                if not hasattr(widget, "text") or not hasattr(widget, "isVisibleTo"):
+                    continue
+                try:
+                    if widget.isVisibleTo(window):
+                        text = str(widget.text()).strip()
+                        if text:
+                            texts.append(text)
+                except RuntimeError:
+                    continue
+            return texts
+
+        window.apply_ui_preferences(UIPreferences(theme="violet", language="en"), persist=False)
+        english_texts: list[str] = []
+        for page in ("dashboard", "processing", "leakage"):
+            english_texts.extend(visible_texts_for(page))
+        english_visible = "\n".join(english_texts)
+        for forbidden in (
+            "系统与项目状态",
+            "数据与输出",
+            "输出结构",
+            "配置名称",
+            "数据下载",
+            "选择下载文件夹",
+            "待校正数据",
+            "官方尺度/增益因子",
+            "正演建模",
+        ):
+            self.assertNotIn(forbidden, english_visible)
+
+        window.apply_ui_preferences(UIPreferences(theme="green", language="zh"), persist=False)
+        chinese_texts: list[str] = []
+        for page in ("dashboard", "processing", "leakage"):
+            chinese_texts.extend(visible_texts_for(page))
+        chinese_visible = "\n".join(chinese_texts)
+        for forbidden in (
+            "Dashboard",
+            "Filter Processing",
+            "Leakage Correction",
+            "Appearance",
+            "CONFIG READY",
+            "System and project status",
+            "Current run",
+            "Load Config",
+            "Save Config",
+            "Validate Paths",
+            "Run Filters",
+            "FILTER INPUT PATHS",
+            "GFC INPUT DIRECTORY",
+            "DETECTED RANGE",
+            "AUXILIARY FILTER FILES",
+            "C20 REPLACEMENT FILE",
+            "DEGREE-1 FILE",
+            "GIA MODEL PATH",
+            "FILTER OUTPUT PATHS",
+            "REMOTE SYNC",
+            "MAIN OUTPUT ROOT",
+            "Open Logs",
+            "Browse",
+            "Folder...",
+            "File...",
+            "Ready to Process",
+            "Input not loaded",
+            "Basin scale factor",
+        ):
+            self.assertNotIn(forbidden, chinese_visible)
+
+        self.assertEqual(translate_text("下载 GFC", "en"), "Download GFC")
+        self.assertEqual(translate_text("系统与项目状态", "en"), "System and project status")
 
     def test_preview_render_survives_layout_toggles(self):
         sample_stack = self._create_sample_stack()
