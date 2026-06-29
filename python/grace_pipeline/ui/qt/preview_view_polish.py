@@ -25,6 +25,7 @@ from grace_pipeline.ui.plotting.projections import (
 )
 from grace_pipeline.ui.qt import preview_enhancements as pe
 from grace_pipeline.ui.qt.preview_title_status import restore_preview_header
+from grace_pipeline.ui.qt.qt_safe import is_deleted_qt_object_error
 
 
 _GRID_COLOR = "#6f8fa3"
@@ -394,8 +395,13 @@ def install_preview_view_polish(window) -> None:
     original_refresh = window.refresh_translations
 
     def refresh_with_display_labels(self):
-        result = original_refresh()
-        _sync_display_option_labels(self)
+        try:
+            result = original_refresh()
+            _sync_display_option_labels(self)
+        except RuntimeError as exc:
+            if not is_deleted_qt_object_error(exc):
+                raise
+            result = None
         return result
 
     window.refresh_translations = MethodType(refresh_with_display_labels, window)

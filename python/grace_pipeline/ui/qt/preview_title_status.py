@@ -12,6 +12,8 @@ import contextlib
 from pathlib import Path
 from types import MethodType
 
+from grace_pipeline.ui.qt.qt_safe import is_deleted_qt_object_error, qt_object_is_alive
+
 
 def _is_zh(window) -> bool:
     return getattr(getattr(window, "ui_preferences", None), "language", "en") == "zh"
@@ -66,6 +68,8 @@ def _dataset_text(window) -> str:
 
 def restore_preview_header(window) -> None:
     page = window.page_preview
+    if not qt_object_is_alive(getattr(page, "canvas_preview_title", None)):
+        return
     parts = [_projection_title(window)]
     time_label = _time_text(window)
     variable = _variable_text(window)
@@ -109,8 +113,13 @@ def install_preview_title_status(window) -> None:
     original_refresh = window.refresh_translations
 
     def refresh_with_header(self):
-        result = original_refresh()
-        restore_preview_header(self)
+        try:
+            result = original_refresh()
+            restore_preview_header(self)
+        except RuntimeError as exc:
+            if not is_deleted_qt_object_error(exc):
+                raise
+            result = None
         return result
 
     window.refresh_translations = MethodType(refresh_with_header, window)

@@ -12,6 +12,7 @@ import sys
 import threading
 import time
 import webbrowser
+import traceback
 from datetime import datetime, timedelta
 from calendar import monthrange
 from pathlib import Path
@@ -118,6 +119,7 @@ from grace_pipeline.ui.plotting.projections import (
 )
 from grace_pipeline.ui.qt.path_defaults import DEFAULT_DATA_PATHS
 from grace_pipeline.ui.qt.preferences import THEME_ITEMS, UIPreferences
+from grace_pipeline.ui.qt.qt_safe import is_deleted_qt_object_error, qt_object_is_alive, safe_set_text
 from grace_pipeline.ui.qt.theme import COLOR
 from grace_pipeline.ui.qt.widgets import populate_table
 
@@ -1972,15 +1974,15 @@ class MainWindowController:
         dashboard = self.window.page_dashboard
         output_root = self._native_path(getattr(self.host.cfg.path, "OUTPUT", ""), base_dir=ROOT_DIR) or self.window.page_data_paths.edit_main_output_root.text().strip()
         filters = ", ".join(self._enabled_filter_names()) or "None"
-        dashboard.lbl_active_filters.setText(f"Filters: {filters}")
-        dashboard.lbl_active_io.setText(f"I/O: {output_root}")
+        safe_set_text(getattr(dashboard, "lbl_active_filters", None), f"Filters: {filters}")
+        safe_set_text(getattr(dashboard, "lbl_active_io", None), f"I/O: {output_root}")
         if not self.host._active_scope:
-            dashboard.lbl_dashboard_status.setText("Idle")
-            dashboard.lbl_dashboard_counts.setText("0 / 0")
-            dashboard.lbl_dashboard_stage.setText("Ready to run with the current configuration.")
-            dashboard.lbl_active_run_name.setText("Ready")
-            dashboard.lbl_active_task.setText("No pipeline activity yet.")
-            dashboard.lbl_active_counts.setText("0 / 0")
+            safe_set_text(getattr(dashboard, "lbl_dashboard_status", None), "Idle")
+            safe_set_text(getattr(dashboard, "lbl_dashboard_counts", None), "0 / 0")
+            safe_set_text(getattr(dashboard, "lbl_dashboard_stage", None), "Ready to run with the current configuration.")
+            safe_set_text(getattr(dashboard, "lbl_active_run_name", None), "Ready")
+            safe_set_text(getattr(dashboard, "lbl_active_task", None), "No pipeline activity yet.")
+            safe_set_text(getattr(dashboard, "lbl_active_counts", None), "0 / 0")
             dashboard.bar_active_run.setValue(0)
             self._set_progress_active(dashboard.bar_active_run, False)
         self.window.refresh_translations()
@@ -2228,13 +2230,29 @@ class MainWindowController:
                     self._sync_monitor_context()
                     self._sync_data_path_badges()
                     self.window.refresh_translations()
+                except RuntimeError as exc:
+                    if not is_deleted_qt_object_error(exc):
+                        if qt_object_is_alive(dialog.buttons):
+                            dialog.buttons.setEnabled(True)
+                        self._show_warning("Settings", str(exc))
+                        return
+                    self.on_log("[UI] Ignored stale Qt widget during settings refresh.", "stderr")
+                    self.on_log(traceback.format_exc(), "stderr")
+                    QTimer.singleShot(0, self.window.refresh_translations)
+                except Exception as exc:
+                    if qt_object_is_alive(dialog.buttons):
+                        dialog.buttons.setEnabled(True)
+                    self._show_warning("Settings", str(exc))
+                    return
+                try:
                     if close:
                         dialog.accept()
                     else:
-                        dialog.buttons.setEnabled(True)
-                except Exception as exc:
-                    dialog.buttons.setEnabled(True)
-                    self._show_warning("Settings", str(exc))
+                        if qt_object_is_alive(dialog.buttons):
+                            dialog.buttons.setEnabled(True)
+                except RuntimeError as exc:
+                    if not is_deleted_qt_object_error(exc):
+                        raise
 
             QTimer.singleShot(0, apply_now)
 
@@ -2849,35 +2867,36 @@ class MainWindowController:
     def refresh_dashboard(self):
         cfg = self.host.cfg
         dashboard = self.window.page_dashboard
-        dashboard.lbl_project_name.setText(self.host.current_cfg_path.name if self.host.current_cfg_path else "In-Memory Config")
-        dashboard.lbl_last_edited.setText(datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
-        dashboard.lbl_uid.setText(hashlib.sha1(json.dumps(getattr(cfg, "_raw", {}), sort_keys=True, default=str).encode("utf-8")).hexdigest()[:12])
+        safe_set_text(getattr(dashboard, "lbl_project_name", None), self.host.current_cfg_path.name if self.host.current_cfg_path else "In-Memory Config")
+        safe_set_text(getattr(dashboard, "lbl_last_edited", None), datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+        safe_set_text(getattr(dashboard, "lbl_uid", None), hashlib.sha1(json.dumps(getattr(cfg, "_raw", {}), sort_keys=True, default=str).encode("utf-8")).hexdigest()[:12])
         output_root = self._native_path(getattr(cfg.path, "OUTPUT", ""), base_dir=ROOT_DIR)
-        dashboard.lbl_output_root.setText(output_root)
-        dashboard.lbl_output_hint.setText("Local execution | Output directories resolved from active config.")
-        if hasattr(dashboard, "lbl_output_route"):
-            dashboard.lbl_output_route.setText("Local runs: outputs/local/... | HPC pulls: outputs/remote/<jobid>/...")
+        safe_set_text(getattr(dashboard, "lbl_output_root", None), output_root)
+        safe_set_text(getattr(dashboard, "lbl_output_hint", None), "Local execution | Output directories resolved from active config.")
+        safe_set_text(getattr(dashboard, "lbl_output_route", None), "Local runs: outputs/local/... | HPC pulls: outputs/remote/<jobid>/...")
         time_entries = self._detect_time_entries_for_ui()
         count = len(time_entries)
-        dashboard.lbl_data_count.setText(str(count))
+        safe_set_text(getattr(dashboard, "lbl_data_count", None), str(count))
         if time_entries:
             cov = summarize_time_coverage(time_entries)
-            dashboard.lbl_time_span.setText(
+            safe_set_text(
+                getattr(dashboard, "lbl_time_span", None),
                 f"{int(cov.get('available_month_count', count))} GFC files | "
                 f"{time_entries[0].ym} // {time_entries[-1].ym} | "
                 f"missing={int(cov.get('missing_month_count', 0))} "
                 f"(GRACE={int(cov.get('grace_missing_count', 0))})"
             )
         else:
-            dashboard.lbl_time_span.setText("GFC data files | not detected")
+            safe_set_text(getattr(dashboard, "lbl_time_span", None), "GFC data files | not detected")
         basin_enabled = bool(getattr(cfg, "basin", {}).get("analysis_enable", False))
         leak_enabled = bool(getattr(cfg, "leakage", {}).get("enable", False))
-        dashboard.badge_summary_state.setText("Ready to Process")
-        dashboard.badge_summary_state.setProperty("variant", "success")
-        dashboard.badge_summary_state.style().unpolish(dashboard.badge_summary_state)
-        dashboard.badge_summary_state.style().polish(dashboard.badge_summary_state)
-        dashboard.lbl_active_run_name.setText("Configured")
-        dashboard.lbl_active_task.setText(f"Basin={'ON' if basin_enabled else 'OFF'} | Leakage={'ON' if leak_enabled else 'OFF'}")
+        safe_set_text(getattr(dashboard, "badge_summary_state", None), "Ready to Process")
+        if qt_object_is_alive(getattr(dashboard, "badge_summary_state", None)):
+            dashboard.badge_summary_state.setProperty("variant", "success")
+            dashboard.badge_summary_state.style().unpolish(dashboard.badge_summary_state)
+            dashboard.badge_summary_state.style().polish(dashboard.badge_summary_state)
+        safe_set_text(getattr(dashboard, "lbl_active_run_name", None), "Configured")
+        safe_set_text(getattr(dashboard, "lbl_active_task", None), f"Basin={'ON' if basin_enabled else 'OFF'} | Leakage={'ON' if leak_enabled else 'OFF'}")
         self._sync_dashboard_run_summary()
         self._sync_monitor_context()
 

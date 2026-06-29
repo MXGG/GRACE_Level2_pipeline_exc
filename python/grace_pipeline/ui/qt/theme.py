@@ -737,6 +737,34 @@ QScrollArea {{
     background: transparent;
 }}
 
+QFrame#PreviewSidebarFooter QPushButton#PrimaryButton {{
+    background: {colors["primary"]};
+    color: white;
+    border: 1px solid {colors["primary"]};
+    border-radius: 3px;
+    padding: 8px 16px;
+    font-weight: 600;
+}}
+
+QFrame#PreviewSidebarFooter QPushButton#PrimaryButton:hover {{
+    background: {colors["primary_dim"]};
+    color: white;
+}}
+
+QFrame#PreviewSidebarFooter QPushButton#GhostButton {{
+    background: transparent;
+    color: {colors["text_muted"]};
+    border: 1px solid {colors["border"]};
+    border-radius: 3px;
+    padding: 8px 14px;
+    font-weight: 600;
+}}
+
+QFrame#PreviewSidebarFooter QPushButton#GhostButton:hover {{
+    background: {colors["surface_low"]};
+    color: {colors["text"]};
+}}
+
 QFrame#PreviewSidebar QCheckBox {{
     background: transparent;
     spacing: 8px;

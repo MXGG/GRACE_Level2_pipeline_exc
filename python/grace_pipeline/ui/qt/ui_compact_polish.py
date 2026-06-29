@@ -12,6 +12,7 @@ import contextlib
 from PySide6.QtWidgets import QLabel, QWidget
 
 from grace_pipeline.ui.qt.pages import _make_field_row
+from grace_pipeline.ui.qt.qt_safe import qt_object_is_alive
 
 
 def _is_zh(window) -> bool:
@@ -33,6 +34,8 @@ def _hide_long_explanatory_labels(page, *, min_len: int = 38) -> None:
 
     keep_object_names = {"CardTitle", "PageTitle", "LabelCaps", "MonoText", "StatusBadge"}
     for label in page.findChildren(QLabel):
+        if not qt_object_is_alive(label):
+            continue
         text = (label.text() or "").strip()
         if not text:
             continue
@@ -47,6 +50,8 @@ def _hide_long_explanatory_labels(page, *, min_len: int = 38) -> None:
 def _hide_page_subtitles(window) -> None:
     for page in getattr(window, "_pages", {}).values():
         for label in page.findChildren(QLabel):
+            if not qt_object_is_alive(label):
+                continue
             if label.objectName() == "PageSubtitle":
                 _hide(label)
 
@@ -169,10 +174,14 @@ def _localize_visible_top_controls(window) -> None:
     }
     for page in getattr(window, "_pages", {}).values():
         for label in page.findChildren(QLabel):
+            if not qt_object_is_alive(label):
+                continue
             text = label.text()
             if text in replacements:
                 label.setText(replacements[text])
         for widget in page.findChildren(QWidget):
+            if not qt_object_is_alive(widget):
+                continue
             if hasattr(widget, "text") and hasattr(widget, "setText"):
                 with contextlib.suppress(Exception):
                     text = widget.text()

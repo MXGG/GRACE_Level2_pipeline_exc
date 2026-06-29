@@ -7,6 +7,7 @@ import contextlib
 from PySide6.QtWidgets import QLabel, QToolButton
 
 from grace_pipeline.ui.qt import leakage_wizard as base
+from grace_pipeline.ui.qt.qt_safe import qt_object_is_alive
 
 EXTRA_REUSED_WIDGET_ATTRS = (
     "edit_coastal_buffer_cells",
@@ -71,10 +72,14 @@ def _tr(window, en: str, zh: str) -> str:
 def _replace_widget_texts(page, window) -> None:
     replacements = _TEXT_REPLACEMENTS_ZH if _is_zh(window) else _TEXT_REPLACEMENTS_EN
     for label in page.findChildren(QLabel):
+        if not qt_object_is_alive(label):
+            continue
         text = label.text()
         if text in replacements:
             label.setText(replacements[text])
     for tool in page.findChildren(QToolButton):
+        if not qt_object_is_alive(tool):
+            continue
         text = tool.text()
         if text in replacements:
             tool.setText(replacements[text])
@@ -144,6 +149,8 @@ def _set_filter_parameter_visibility(page, window) -> None:
     show_ddk = method.startswith("DDK")
 
     for label in page.findChildren(QLabel):
+        if not qt_object_is_alive(label):
+            continue
         text = label.text().strip().lower()
         if text in {"gaussian 半径 / km", "gaussian radius / km"}:
             label.setVisible(show_gaussian)

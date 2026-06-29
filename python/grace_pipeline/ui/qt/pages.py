@@ -1640,9 +1640,6 @@ class PreviewPage(QWidget):
         self.btn_export_figure = QPushButton("Export Figure")
         self.btn_export_figure._tr_base_text = "Export Figure"
         self.btn_export_figure.setObjectName("PrimaryButton")
-        self.btn_export_figure.setStyleSheet(
-            "background: #005db5; color: white; border: 1px solid #005db5; border-radius: 3px; font-weight: 600;"
-        )
         self.btn_plot.setMinimumHeight(38)
         self.btn_export_figure.setMinimumHeight(38)
         footer_layout.addWidget(self.btn_plot)

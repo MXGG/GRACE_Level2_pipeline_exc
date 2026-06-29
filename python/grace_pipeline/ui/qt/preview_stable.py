@@ -15,6 +15,7 @@ from types import MethodType
 from PySide6.QtWidgets import QLabel, QWidget
 
 from grace_pipeline.ui.qt import preview_enhancements as base
+from grace_pipeline.ui.qt.qt_safe import is_deleted_qt_object_error, qt_object_is_alive
 
 
 def _is_zh(window) -> bool:
@@ -63,10 +64,14 @@ def _apply_preview_labels(window) -> None:
         "Latency": _tr(window, "Latency", "延迟"),
     }
     for label in page.findChildren(QLabel):
+        if not qt_object_is_alive(label):
+            continue
         text = label.text()
         if text in replacements:
             label.setText(replacements[text])
     for widget in page.findChildren(QWidget):
+        if not qt_object_is_alive(widget):
+            continue
         if hasattr(widget, "text") and hasattr(widget, "setText"):
             with contextlib.suppress(Exception):
                 text = widget.text()
@@ -110,8 +115,13 @@ def _patch_refresh_translations(window) -> None:
     original = window.refresh_translations
 
     def patched_refresh_translations(self):
-        result = original()
-        _apply_preview_labels(self)
+        try:
+            result = original()
+            _apply_preview_labels(self)
+        except RuntimeError as exc:
+            if not is_deleted_qt_object_error(exc):
+                raise
+            result = None
         return result
 
     window.refresh_translations = MethodType(patched_refresh_translations, window)

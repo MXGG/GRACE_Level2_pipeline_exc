@@ -21,6 +21,7 @@ if str(PYTHON_ROOT) not in sys.path:
 
 from grace_pipeline.ui.qt.main_window import MainWindow
 from grace_pipeline.ui.qt.preferences import UIPreferences
+from grace_pipeline.ui.qt.app import start_gui
 
 
 class PreviewUiTest(unittest.TestCase):
@@ -104,6 +105,20 @@ class PreviewUiTest(unittest.TestCase):
         self.window.apply_ui_preferences(UIPreferences(theme="blue", language="en"), persist=False)
         self.app.processEvents()
         self.assertEqual(self.page.btn_plot.text(), "Render Preview")
+
+    def test_full_gui_refresh_survives_enhancement_patches(self):
+        window = start_gui([])
+        self.addCleanup(lambda: window.exit_application())
+        self.app.processEvents()
+
+        window.apply_ui_preferences(UIPreferences(theme="green", language="zh"), persist=False)
+        self.app.processEvents()
+        window.controller.refresh_dashboard()
+        window.refresh_translations()
+        self.app.processEvents()
+
+        self.assertEqual(window.page_preview.btn_plot.text(), "渲染预览")
+        self.assertEqual(window.page_preview.btn_export_figure.text(), "导出图像")
 
     def test_preview_render_survives_layout_toggles(self):
         sample_stack = self._create_sample_stack()

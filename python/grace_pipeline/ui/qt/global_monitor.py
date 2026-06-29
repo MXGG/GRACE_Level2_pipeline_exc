@@ -21,6 +21,8 @@ from PySide6.QtCore import QUrl
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import QLabel, QLineEdit, QPushButton, QHBoxLayout, QWidget
 
+from grace_pipeline.ui.qt.qt_safe import qt_object_is_alive
+
 
 _CONFIGURED_ATTR = "_global_run_monitor_configured"
 
@@ -185,6 +187,8 @@ def _retitle_processing_page(window) -> None:
         pass
 
     for label in window.page_processing.findChildren(QLabel):
+        if not qt_object_is_alive(label):
+            continue
         if label.text() in {"Processing Setup", "处理设置"}:
             label.setText("Filter Processing")
         elif label.text() == "Configure time coverage, grid geometry, inversion setup, and filters.":
