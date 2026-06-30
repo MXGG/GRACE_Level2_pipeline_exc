@@ -115,6 +115,20 @@ class DataPathsUiTest(unittest.TestCase):
             1,
         )
 
+    def test_processing_export_formats_update_io_config(self):
+        page = self.window.page_processing
+        page.chk_export_mat.setChecked(True)
+        page.chk_export_txt.setChecked(True)
+        page.chk_export_nc.setChecked(True)
+        page.chk_export_hdf5.setChecked(True)
+
+        cfg_dict = self.window.controller.collect_config_dict({})
+        self.assertEqual(cfg_dict["io"]["output_formats"], ["mat", "txt", "nc", "hdf5"])
+        self.assertTrue(cfg_dict["io"]["save_monthly_mat"])
+        self.assertTrue(cfg_dict["io"]["save_stack_mat"])
+        self.assertTrue(cfg_dict["io"]["export_txt"])
+        self.assertTrue(cfg_dict["io"]["save_stack_hdf5"])
+
     def test_push_config_to_ui_repairs_stale_paths(self):
         stale = copy.deepcopy(getattr(self.window.controller.host.cfg, "_raw", {}))
         stale.setdefault("path", {})
@@ -295,7 +309,7 @@ class DataPathsUiTest(unittest.TestCase):
         self.assertFalse(self.window.btn_run.isEnabled())
         self.assertTrue(self.window.btn_pause.isEnabled())
         self.assertTrue(self.window.btn_stop.isEnabled())
-        self.assertEqual(self.window.pipeline_status.text(), "RUNNING PIPELINE")
+        self.assertEqual(self.window.pipeline_status.text(), "Running Pipeline")
         self.assertEqual(self.window.top_progress_label.full_text(), "Running monthly loop")
         self.assertEqual(self.window.top_progress_detail.text(), "1 / 4")
         self.assertEqual(self.window.top_progress_percent.text(), "25%")
@@ -490,7 +504,7 @@ class DataPathsUiTest(unittest.TestCase):
             self.assertEqual(calls[0]["center"], "CSR")
             self.assertEqual(calls[0]["low_degree_dir"], low_dir)
             self.assertEqual(self.page.edit_degree1_path.text(), self._native(deg_csr))
-            self.assertIn("新增 1 个", self.page.lbl_gfc_download_status.text())
+            self.assertIn("1 new", self.page.lbl_gfc_download_status.text())
 
     def test_mascon_download_sources_include_gsfc_and_resolution(self):
         self.page.cmb_download_product.setCurrentText("Mascon NC")
@@ -505,10 +519,10 @@ class DataPathsUiTest(unittest.TestCase):
             ["0.25°", "0.5°", "1°"],
         )
 
-        self.page.cmb_download_product.setCurrentText("GSM 文件")
+        self.page.cmb_download_product.setCurrentText("GSM files")
         self.window.controller._sync_download_source_controls(update_options=True)
         centers = [self.page.cmb_gfc_center.itemText(i) for i in range(self.page.cmb_gfc_center.count())]
-        self.assertEqual(centers, ["自动", "CSR", "JPL", "GFZ", "HUST", "ITSG"])
+        self.assertEqual(centers, ["Auto", "CSR", "JPL", "GFZ", "HUST", "ITSG"])
         self.assertFalse(self.page.cmb_mascon_resolution.isVisible())
 
     def test_mascon_download_passes_selected_resolution(self):
@@ -571,7 +585,7 @@ class DataPathsUiTest(unittest.TestCase):
         self.assertTrue(opened)
         self.assertIn("gsfc", opened[-1].lower())
 
-        self.page.cmb_download_product.setCurrentText("GSM 文件")
+        self.page.cmb_download_product.setCurrentText("GSM files")
         self.window.controller._sync_download_source_controls(update_options=True)
         self.page.cmb_gfc_center.setCurrentText("HUST")
         self.window.controller.on_open_download_site()

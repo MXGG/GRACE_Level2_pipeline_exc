@@ -27,10 +27,10 @@ from PySide6.QtWidgets import (
 
 from grace_pipeline.ui.qt.mock_data import BASIN_ROWS, PAGE_SUBTITLES
 from grace_pipeline.ui.qt.path_defaults import DEFAULT_DATA_PATHS
-from grace_pipeline.ui.qt.widgets import CardFrame, CollapsibleSection, PlaceholderCanvas, build_badge, build_page_header, populate_table
+from grace_pipeline.ui.qt.widgets import CardFrame, CollapsibleSection, PlaceholderCanvas, YearMonthEdit, build_badge, build_page_header, populate_table
 
 
-PATH_FIELD_LABEL_WIDTH = 220
+PATH_FIELD_LABEL_WIDTH = 180
 
 
 def _make_row_label(text: str, width: int | None = None) -> QLabel:
@@ -46,6 +46,10 @@ def _make_line_edit(value: str = "", placeholder: str = "") -> QLineEdit:
     if placeholder:
         edit.setPlaceholderText(placeholder)
     return edit
+
+
+def _make_month_edit(value: str = "", *, allow_when_readonly: bool = True) -> YearMonthEdit:
+    return YearMonthEdit(value, "YYYY-MM", allow_when_readonly=allow_when_readonly)
 
 
 def _make_combo(values: list[str], current: str | None = None) -> QComboBox:
@@ -74,7 +78,10 @@ def _make_field_row(label: str, widget: QWidget, status: QLabel | None = None, l
     layout = QHBoxLayout(row)
     layout.setContentsMargins(0, 0, 0, 0)
     layout.setSpacing(10)
-    layout.addWidget(_make_row_label(label, label_width))
+    label_widget = _make_row_label(label, label_width)
+    if label_width is not None:
+        label_widget.setFixedWidth(label_width)
+    layout.addWidget(label_widget)
     layout.addWidget(widget, 1)
     if status is not None:
         layout.addWidget(status, 0, alignment=Qt.AlignRight | Qt.AlignVCenter)
@@ -407,39 +414,60 @@ class DataPathsPage(ScrollPage):
         self.btn_validate_paths = QPushButton("Validate All Paths")
         self.btn_validate_paths.setObjectName("PrimaryButton")
 
-        self.card_input_dirs = CardFrame("Input Directories")
+        self.card_input_dirs = CardFrame("Filter Path Configuration")
         self.card_output_dirs = CardFrame("Output Directories")
         self.card_reference_paths = CardFrame("Reference Paths")
 
-        self.cmb_download_product = _make_combo(["GSM 文件", "Mascon NC"], "GSM 文件")
-        self.cmb_gfc_center = _make_combo(["自动", "CSR", "JPL", "GFZ", "HUST", "ITSG"], "自动")
+        self.cmb_download_product = _make_combo(["GSM files", "Mascon NC"], "GSM files")
+        self.cmb_gfc_center = _make_combo(["Auto", "CSR", "JPL", "GFZ", "HUST", "ITSG"], "Auto")
         self.cmb_mascon_resolution = _make_combo(["0.25°", "0.5°", "1°"], "0.5°")
-        self.edit_download_start_ym = _make_line_edit("", "YYYY-MM")
-        self.edit_download_end_ym = _make_line_edit("", "YYYY-MM")
+        self.edit_download_start_ym = _make_month_edit("")
+        self.edit_download_end_ym = _make_month_edit("")
         self.edit_download_dir = _make_line_edit(str(DEFAULT_DATA_PATHS["GFC"]))
-        self.btn_download_dir_browse = QPushButton("选择文件夹...")
-        self.btn_download_dir_browse.setObjectName("GhostButton")
+        self.btn_download_dir_browse = QPushButton("Choose Folder...")
+        self.btn_download_dir_browse.setObjectName("PathButton")
+        self.btn_download_dir_browse.setToolTip("Choose download folder")
         self.btn_download_gfc_range = QPushButton("Download")
         self.btn_download_gfc_range.setObjectName("PrimaryButton")
-        self.btn_download_gfc_range.setMinimumWidth(148)
-        self.btn_open_download_site = QPushButton("访问数据网页")
+        self.btn_download_gfc_range.setMinimumWidth(110)
+        self.btn_open_download_site = QPushButton("Web")
         self.btn_open_download_site.setObjectName("GhostButton")
+        self.btn_open_download_site.setToolTip("Visit Data Page")
         gfc_action_row = QWidget()
-        gfc_action_layout = QHBoxLayout(gfc_action_row)
+        gfc_action_row.setMinimumWidth(0)
+        gfc_action_row.setObjectName("DownloadControlStrip")
+        gfc_action_layout = QGridLayout(gfc_action_row)
         gfc_action_layout.setContentsMargins(0, 0, 0, 0)
-        gfc_action_layout.setSpacing(8)
-        gfc_action_layout.addWidget(self.cmb_download_product, 0)
-        gfc_action_layout.addWidget(self.cmb_gfc_center, 0)
-        gfc_action_layout.addWidget(self.cmb_mascon_resolution, 0)
-        gfc_action_layout.addWidget(self.edit_download_start_ym, 0)
-        gfc_action_layout.addWidget(self.edit_download_end_ym, 0)
-        gfc_action_layout.addWidget(self.edit_download_dir, 1)
-        gfc_action_layout.addWidget(self.btn_download_dir_browse, 0)
-        gfc_action_layout.addWidget(self.btn_download_gfc_range, 0)
-        gfc_action_layout.addWidget(self.btn_open_download_site, 0)
+        gfc_action_layout.setHorizontalSpacing(14)
+        gfc_action_layout.setVerticalSpacing(8)
+        for edit in (self.edit_download_start_ym, self.edit_download_end_ym):
+            edit.setMinimumWidth(92)
+            edit.setMaximumWidth(120)
+        self.cmb_download_product.setMinimumWidth(118)
+        self.cmb_download_product.setMaximumWidth(150)
+        self.cmb_gfc_center.setMinimumWidth(72)
+        self.cmb_gfc_center.setMaximumWidth(88)
+        self.cmb_mascon_resolution.setMinimumWidth(72)
+        self.cmb_mascon_resolution.setMaximumWidth(88)
+        self.edit_download_dir.setMinimumWidth(260)
+        self.btn_download_dir_browse.setMinimumWidth(118)
+        self.btn_download_dir_browse.setMaximumWidth(148)
+        self.btn_download_gfc_range.setMinimumWidth(110)
+        self.btn_download_gfc_range.setMaximumWidth(132)
+        self.btn_open_download_site.setMinimumWidth(56)
+        self.btn_open_download_site.setMaximumWidth(68)
+        self.btn_open_download_site.setVisible(False)
+        gfc_action_layout.addWidget(self.cmb_download_product, 0, 0)
+        gfc_action_layout.addWidget(self.cmb_gfc_center, 0, 1)
+        gfc_action_layout.addWidget(self.cmb_mascon_resolution, 0, 2)
+        gfc_action_layout.addWidget(self.edit_download_start_ym, 0, 3)
+        gfc_action_layout.addWidget(self.edit_download_end_ym, 0, 4)
+        gfc_action_layout.addWidget(self.edit_download_dir, 0, 5)
+        gfc_action_layout.addWidget(self.btn_download_dir_browse, 0, 6)
+        gfc_action_layout.addWidget(self.btn_download_gfc_range, 0, 7)
+        gfc_action_layout.setColumnStretch(5, 1)
         self.lbl_gfc_download_status = QLabel("GFC download: idle.")
         self.lbl_gfc_download_status.setWordWrap(True)
-        self.card_input_dirs.body.addWidget(_make_field_row("Data Download", gfc_action_row, label_width=PATH_FIELD_LABEL_WIDTH))
 
         self.edit_gfc_input_dir = _make_line_edit(str(DEFAULT_DATA_PATHS["GFC"]))
         self.btn_gfc_browse = QPushButton("Folder...")
@@ -447,7 +475,7 @@ class DataPathsPage(ScrollPage):
         self.badge_gfc_input = build_badge("Pending", "primary")
         self.card_input_dirs.body.addWidget(
             _make_field_row(
-                "GFC 输入目录",
+                "GFC Input Directory",
                 _make_edit_browse_widget(self.edit_gfc_input_dir, self.btn_gfc_browse),
                 self.badge_gfc_input,
                 label_width=PATH_FIELD_LABEL_WIDTH,
@@ -457,18 +485,19 @@ class DataPathsPage(ScrollPage):
         self.lbl_gfc_detected_range.setWordWrap(True)
         self.card_input_dirs.body.addWidget(
             _make_field_row(
-                "检测范围",
+                "Detected Range",
                 self.lbl_gfc_detected_range,
                 label_width=PATH_FIELD_LABEL_WIDTH,
             )
         )
+        self.card_input_dirs.body.addWidget(_make_field_row("Data Download", gfc_action_row, label_width=PATH_FIELD_LABEL_WIDTH))
 
         self.edit_ddk_data_dir = _make_line_edit(str(DEFAULT_DATA_PATHS["DDK"]))
         self.btn_ddk_browse = QPushButton("Folder...")
         self.btn_ddk_browse.setObjectName("GhostButton")
         self.badge_ddk_data = build_badge("Pending", "primary")
         self.row_ddk_data_dir = _make_field_row(
-            "DDK 数据目录",
+            "DDK Data Directory",
             _make_edit_browse_widget(self.edit_ddk_data_dir, self.btn_ddk_browse),
             self.badge_ddk_data,
             label_width=PATH_FIELD_LABEL_WIDTH,
@@ -477,13 +506,13 @@ class DataPathsPage(ScrollPage):
         self.row_ddk_data_dir.hide()
 
         self.chk_remote_sync = QCheckBox("Enabled")
-        self.chk_remote_sync.setChecked(True)
-        self.card_output_dirs.body.addWidget(_make_field_row("Remote Sync", self.chk_remote_sync, label_width=PATH_FIELD_LABEL_WIDTH))
+        self.chk_remote_sync.setChecked(False)
+        self.chk_remote_sync.hide()
         self.edit_main_output_root = _make_line_edit(str(DEFAULT_DATA_PATHS["OUTPUT"]))
         self.btn_output_browse = QPushButton("Folder...")
         self.btn_output_browse.setObjectName("GhostButton")
         self.badge_output_root = build_badge("Pending", "primary")
-        self.card_output_dirs.body.addWidget(
+        self.card_input_dirs.body.addWidget(
             _make_field_row(
                 "Main Output Root",
                 _make_edit_browse_widget(self.edit_main_output_root, self.btn_output_browse),
@@ -623,8 +652,8 @@ class ProcessingSetupPage(ScrollPage):
         self.lbl_detected_time_range.setWordWrap(True)
         self.chk_manual_time_override = QCheckBox("Manual Override")
         self.chk_manual_time_override.setChecked(False)
-        self.edit_start_date = _make_line_edit("2002-04-01")
-        self.edit_end_date = _make_line_edit("2017-06-01")
+        self.edit_start_date = _make_month_edit("2002-04", allow_when_readonly=False)
+        self.edit_end_date = _make_month_edit("2017-06", allow_when_readonly=False)
         self.edit_start_date.setReadOnly(True)
         self.edit_end_date.setReadOnly(True)
         self.lbl_time_range_note = QLabel(
@@ -636,8 +665,8 @@ class ProcessingSetupPage(ScrollPage):
         self.card_time_range.body.addWidget(
             _make_compact_field_grid(
                 [
-                    ("Start Date", self.edit_start_date),
-                    ("End Date", self.edit_end_date),
+                    ("Start Month", self.edit_start_date),
+                    ("End Month", self.edit_end_date),
                 ],
                 columns=2,
             )
@@ -660,8 +689,8 @@ class ProcessingSetupPage(ScrollPage):
             ],
             "standard_2004_2009",
         )
-        self.edit_mean_start_ym = _make_line_edit("2004-01", "YYYY-MM")
-        self.edit_mean_end_ym = _make_line_edit("2009-12", "YYYY-MM")
+        self.edit_mean_start_ym = _make_month_edit("2004-01")
+        self.edit_mean_end_ym = _make_month_edit("2009-12")
         self.chk_lowdeg_enable = QCheckBox("Enable Low-Degree Corrections")
         self.chk_lowdeg_enable.setChecked(True)
         self.chk_replace_degree1 = QCheckBox("Degree-1 geocenter")
@@ -689,7 +718,7 @@ class ProcessingSetupPage(ScrollPage):
         self.card_inversion.body.addWidget(_make_field_row("Mean / Anomaly", self.chk_remove_mean))
         self.row_anomaly_baseline = _make_field_row("Anomaly Baseline", self.cmb_anomaly_baseline)
         self.card_inversion.body.addWidget(self.row_anomaly_baseline)
-        self.row_mean_baseline_range = _make_dual_field("Baseline Start", self.edit_mean_start_ym, "Baseline End", self.edit_mean_end_ym)
+        self.row_mean_baseline_range = _make_dual_field("Baseline Start Month", self.edit_mean_start_ym, "Baseline End Month", self.edit_mean_end_ym)
         self.card_inversion.body.addWidget(self.row_mean_baseline_range)
         self.card_inversion.body.addWidget(_make_field_row("Low-Degree", self.chk_lowdeg_enable))
         self.card_inversion.body.addWidget(self.lowdeg_panel)
@@ -736,7 +765,7 @@ class ProcessingSetupPage(ScrollPage):
         self.card_sh_tools.body.addWidget(_make_field_row("Tool Source", _make_edit_browse_widget(self.edit_sh_tool_source, self.btn_sh_tool_browse)))
         self.card_sh_tools.body.addWidget(sh_tool_row)
 
-        self.card_filters = CardFrame("滤波方法")
+        self.card_filters = CardFrame("Filter Method")
         self.btn_filter_gaussian = QCheckBox("Gaussian")
         self.btn_filter_p4m6 = QCheckBox("PnMl")
         self.btn_filter_gaussian_pnmn = QCheckBox("Gaussian+PnMl")
@@ -768,7 +797,7 @@ class ProcessingSetupPage(ScrollPage):
         method_list_layout = QVBoxLayout(method_list)
         method_list_layout.setContentsMargins(12, 10, 12, 10)
         method_list_layout.setSpacing(8)
-        method_list_layout.addWidget(_make_row_label("滤波方法"))
+        method_list_layout.addWidget(_make_row_label("Filter Method"))
         for btn in filter_buttons:
             btn.setProperty("filterMethod", True)
             method_list_layout.addWidget(btn)
@@ -781,7 +810,7 @@ class ProcessingSetupPage(ScrollPage):
         filter_parameter_layout = QVBoxLayout(self.filter_parameter_area)
         filter_parameter_layout.setContentsMargins(16, 14, 16, 14)
         filter_parameter_layout.setSpacing(10)
-        self.lbl_filter_parameter_title = QLabel("参数设置")
+        self.lbl_filter_parameter_title = QLabel("Parameter Settings")
         self.lbl_filter_parameter_title.setObjectName("FilterParameterTitle")
         filter_parameter_layout.addWidget(self.lbl_filter_parameter_title)
         filter_workspace_layout.addWidget(self.filter_parameter_area, 1)
@@ -797,7 +826,7 @@ class ProcessingSetupPage(ScrollPage):
         gaussian_layout = QVBoxLayout(self.panel_filter_gaussian)
         gaussian_layout.setContentsMargins(0, 0, 0, 0)
         gaussian_layout.setSpacing(8)
-        gaussian_layout.addWidget(_make_field_row("Gaussian 半径 (km)", self.edit_isotropic_radius_km))
+        gaussian_layout.addWidget(_make_field_row("Gaussian Radius (km)", self.edit_isotropic_radius_km))
 
         self.panel_filter_pnmn = QWidget()
         pnmn_layout = QVBoxLayout(self.panel_filter_pnmn)
@@ -812,7 +841,7 @@ class ProcessingSetupPage(ScrollPage):
         ddk_layout = QVBoxLayout(self.panel_filter_ddk)
         ddk_layout.setContentsMargins(0, 0, 0, 0)
         ddk_layout.setSpacing(8)
-        ddk_layout.addWidget(_make_field_row("DDK 类型", self.cmb_ddk_type))
+        ddk_layout.addWidget(_make_field_row("DDK Type", self.cmb_ddk_type))
 
         self.panel_filter_fan = QWidget()
         fan_layout = QVBoxLayout(self.panel_filter_fan)
@@ -823,7 +852,7 @@ class ProcessingSetupPage(ScrollPage):
         self.panel_filter_fan_pnmn = QWidget()
         QVBoxLayout(self.panel_filter_fan_pnmn).setContentsMargins(0, 0, 0, 0)
 
-        self.panel_filter_empty = QLabel("勾选一个滤波方法后显示参数。")
+        self.panel_filter_empty = QLabel("Select a filter method to show its parameters.")
         self.panel_filter_empty.setObjectName("PageSubtitle")
         self.panel_filter_empty.setWordWrap(True)
 
@@ -851,7 +880,7 @@ class ProcessingSetupPage(ScrollPage):
         hsaf_layout = self.hsaf_detail_panel.body
 
         self.cmb_hsaf_input = _make_combo(["P4M6", "RAW"], "P4M6")
-        self.cmb_hsaf_variant = _make_combo(["全局固定", "纬度自适应"], "全局固定")
+        self.cmb_hsaf_variant = _make_combo(["Global Fixed", "Latitude Adaptive"], "Global Fixed")
 
         self.edit_hsaf_iterations = _make_line_edit("")
         self.edit_hsaf_alpha = _make_line_edit("")
@@ -863,7 +892,7 @@ class ProcessingSetupPage(ScrollPage):
                 [
                     ("HSAF 输入", self.cmb_hsaf_input),
                     ("HSAF 策略", self.cmb_hsaf_variant),
-                    ("迭代次数", self.edit_hsaf_iterations),
+                    ("Iterations", self.edit_hsaf_iterations),
                 ],
                 columns=3,
             )
@@ -873,7 +902,7 @@ class ProcessingSetupPage(ScrollPage):
         hsaf_global_layout = QVBoxLayout(self.hsaf_global_panel)
         hsaf_global_layout.setContentsMargins(0, 0, 0, 0)
         hsaf_global_layout.setSpacing(10)
-        self.lbl_hsaf_global = QLabel("全局固定参数")
+        self.lbl_hsaf_global = QLabel("Global fixed parameters")
         self.lbl_hsaf_global.setObjectName("LabelCaps")
         hsaf_global_layout.addWidget(self.lbl_hsaf_global)
         self.edit_hsaf_global_n = _make_line_edit("")
@@ -883,10 +912,10 @@ class ProcessingSetupPage(ScrollPage):
         hsaf_global_layout.addWidget(
             _make_compact_field_grid(
                 [
-                    ("窗口 N", self.edit_hsaf_global_n),
-                    ("嵌入 P", self.edit_hsaf_global_p),
-                    ("模态 K", self.edit_hsaf_global_k),
-                    ("步长 J", self.edit_hsaf_global_j),
+                    ("Window N", self.edit_hsaf_global_n),
+                    ("Embedding P", self.edit_hsaf_global_p),
+                    ("Mode K", self.edit_hsaf_global_k),
+                    ("Step J", self.edit_hsaf_global_j),
                 ],
                 columns=4,
             )
@@ -899,9 +928,9 @@ class ProcessingSetupPage(ScrollPage):
         hsaf_adaptive_layout.setSpacing(10)
         self.hsaf_adaptive_zone_fields = []
         for zone_title, lat_min_default, lat_max_default in (
-            ("区域 1", "-90", "-30"),
-            ("区域 2", "-30", "30"),
-            ("区域 3", "30", "90"),
+            ("Zone 1", "-90", "-30"),
+            ("Zone 2", "-30", "30"),
+            ("Zone 3", "30", "90"),
         ):
             zone_frame = QFrame()
             zone_frame.setObjectName("FieldBlock")
@@ -920,12 +949,12 @@ class ProcessingSetupPage(ScrollPage):
             zone_layout.addWidget(
                 _make_compact_field_grid(
                     [
-                        ("纬度下限", edit_lat_min),
-                        ("纬度上限", edit_lat_max),
-                        ("窗口 N", edit_n),
-                        ("嵌入 P", edit_p),
-                        ("模态 K", edit_k),
-                        ("步长 J", edit_j),
+                        ("Lat Min", edit_lat_min),
+                        ("Lat Max", edit_lat_max),
+                        ("Window N", edit_n),
+                        ("Embedding P", edit_p),
+                        ("Mode K", edit_k),
+                        ("Step J", edit_j),
                     ],
                     columns=3,
                 )
@@ -945,7 +974,7 @@ class ProcessingSetupPage(ScrollPage):
         filter_parameter_layout.addWidget(self.hsaf_detail_panel)
         self.hsaf_detail_panel.setVisible(False)
         self.hsaf_adaptive_panel.setVisible(False)
-        filter_parameter_layout.addStretch(1)
+        filter_parameter_layout.addSpacing(4)
 
         self.btn_load_preset = QPushButton("Load Preset")
         self.btn_save_config = QPushButton("Save Config")
@@ -957,8 +986,26 @@ class ProcessingSetupPage(ScrollPage):
         self.card_time_range.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
         self.card_grid_settings.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
         self.card_inversion.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
-        self.card_filters.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.card_filters.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
         self.card_sh_tools.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
+
+        self.chk_export_mat = QCheckBox("MAT")
+        self.chk_export_mat.setChecked(True)
+        self.chk_export_txt = QCheckBox("TXT")
+        self.chk_export_nc = QCheckBox("NetCDF")
+        self.chk_export_hdf5 = QCheckBox("HDF5")
+        export_panel = QFrame()
+        export_panel.setObjectName("FilterExportPanel")
+        export_layout = QHBoxLayout(export_panel)
+        export_layout.setContentsMargins(12, 10, 12, 10)
+        export_layout.setSpacing(18)
+        export_title = _make_row_label("Output Formats")
+        export_layout.addWidget(export_title)
+        for checkbox in (self.chk_export_mat, self.chk_export_txt, self.chk_export_nc, self.chk_export_hdf5):
+            export_layout.addWidget(checkbox)
+        export_layout.addStretch(1)
+        self.card_filters.body.addWidget(export_panel)
+        self.card_export_formats = export_panel
 
         grid.addWidget(self.card_time_range, 0, 0)
         grid.addWidget(self.card_grid_settings, 0, 1)
@@ -968,6 +1015,7 @@ class ProcessingSetupPage(ScrollPage):
         grid.setRowStretch(0, 0)
         grid.setRowStretch(1, 1)
         grid.setRowStretch(2, 0)
+        grid.setRowStretch(3, 0)
         grid.setColumnStretch(0, 1)
         grid.setColumnStretch(1, 1)
 

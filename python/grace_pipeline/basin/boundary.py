@@ -4,6 +4,9 @@ Basin boundary reading and processing.
 
 import os
 import contextlib
+import math
+import re
+from collections import OrderedDict
 from pathlib import Path
 from dataclasses import dataclass, field
 from typing import List, Optional
@@ -116,6 +119,160 @@ def _is_number(val: str) -> bool:
     except Exception:
         return False
 
+
+def _generated_boundary_name(name: str) -> bool:
+    return str(name or "").strip().lower().startswith("poly_")
+
+
+def _merge_duplicate_named_boundaries(boundaries: List[BasinBoundary]) -> List[BasinBoundary]:
+    """Merge multipart shapefile records that share one basin name."""
+
+    groups: "OrderedDict[str, List[BasinBoundary]]" = OrderedDict()
+    generated: List[BasinBoundary] = []
+    for boundary in boundaries:
+        name = str(boundary.name or "").strip()
+        if not name or _generated_boundary_name(name):
+            generated.append(boundary)
+            continue
+        groups.setdefault(name, []).append(boundary)
+
+    named_count = sum(len(items) for items in groups.values())
+    has_duplicates = any(len(items) > 1 for items in groups.values())
+    if not groups or not has_duplicates:
+        return boundaries
+
+    merged: List[BasinBoundary] = []
+    for name, items in groups.items():
+        parts: List[np.ndarray] = []
+        lon_cat: List[float] = []
+        lat_cat: List[float] = []
+        for item in items:
+            item_parts = item.parts or [
+                np.column_stack(
+                    (
+                        np.asarray(item.lon, dtype=float),
+                        np.asarray(item.lat, dtype=float),
+                    )
+                )
+            ]
+            for part in item_parts:
+                arr = np.asarray(part, dtype=float)
+                if arr.ndim != 2 or arr.shape[0] < 3 or arr.shape[1] < 2:
+                    continue
+                clean = arr[:, :2]
+                parts.append(clean)
+                if lon_cat:
+                    lon_cat.append(np.nan)
+                    lat_cat.append(np.nan)
+                lon_cat.extend(clean[:, 0].tolist())
+                lat_cat.extend(clean[:, 1].tolist())
+        if parts:
+            merged.append(
+                BasinBoundary(
+                    name=name,
+                    lon=np.asarray(lon_cat, dtype=float),
+                    lat=np.asarray(lat_cat, dtype=float),
+                    parts=parts,
+                )
+            )
+
+    # Some regional boundary products store hundreds of unnamed fragments next
+    # to a small set of named basins. In that case the named field is the user's
+    # intended grouping key, so keeping generated poly_* rows makes the UI noisy.
+    if generated and len(generated) <= max(3, len(merged)) and named_count <= len(merged) * 3:
+        merged.extend(generated)
+    return merged or boundaries
+
+
+def _wkt_param(text: str, name: str, default: float) -> float:
+    match = re.search(rf'PARAMETER\["{re.escape(name)}",\s*([-+0-9.eE]+)\]', text or "")
+    return float(match.group(1)) if match else float(default)
+
+
+def _wkt_spheroid(text: str) -> tuple[float, float]:
+    match = re.search(r'SPHEROID\["[^"]+",\s*([-+0-9.eE]+),\s*([-+0-9.eE]+)\]', text or "")
+    if not match:
+        return 6378137.0, 298.257223563
+    return float(match.group(1)), float(match.group(2))
+
+
+def _albers_q(phi: np.ndarray | float, e: float, e2: float):
+    sin_phi = np.sin(phi)
+    if abs(e) < 1.0e-14:
+        return 2.0 * sin_phi
+    return (1.0 - e2) * (
+        sin_phi / (1.0 - e2 * sin_phi * sin_phi)
+        - (1.0 / (2.0 * e)) * np.log((1.0 - e * sin_phi) / (1.0 + e * sin_phi))
+    )
+
+
+def _inverse_albers_points(points: np.ndarray, prj_text: str) -> np.ndarray:
+    a, inv_f = _wkt_spheroid(prj_text)
+    f = 1.0 / inv_f if inv_f else 0.0
+    e2 = max(0.0, 2.0 * f - f * f)
+    e = math.sqrt(e2)
+    lon0 = math.radians(_wkt_param(prj_text, "Central_Meridian", 0.0))
+    lat0 = math.radians(_wkt_param(prj_text, "Latitude_Of_Origin", 0.0))
+    lat1 = math.radians(_wkt_param(prj_text, "Standard_Parallel_1", 0.0))
+    lat2 = math.radians(_wkt_param(prj_text, "Standard_Parallel_2", 0.0))
+    false_easting = _wkt_param(prj_text, "False_Easting", 0.0)
+    false_northing = _wkt_param(prj_text, "False_Northing", 0.0)
+
+    def m(phi):
+        return math.cos(phi) / math.sqrt(max(1.0e-30, 1.0 - e2 * math.sin(phi) ** 2))
+
+    q0 = float(_albers_q(lat0, e, e2))
+    q1 = float(_albers_q(lat1, e, e2))
+    q2 = float(_albers_q(lat2, e, e2))
+    m1 = m(lat1)
+    m2 = m(lat2)
+    if abs(lat1 - lat2) < 1.0e-12:
+        n = math.sin(lat1)
+    else:
+        n = (m1 * m1 - m2 * m2) / (q2 - q1)
+    c = m1 * m1 + n * q1
+    rho0 = a * math.sqrt(max(0.0, c - n * q0)) / n
+
+    x = np.asarray(points[:, 0], dtype=float) - false_easting
+    y = np.asarray(points[:, 1], dtype=float) - false_northing
+    rho = np.sign(n) * np.sqrt(x * x + (rho0 - y) * (rho0 - y))
+    theta = np.arctan2(x, rho0 - y)
+    q = (c - (rho * n / a) ** 2) / n
+
+    # Newton solve authalic latitude from q(phi).
+    phi = np.arcsin(np.clip(q / 2.0, -1.0, 1.0))
+    for _ in range(12):
+        current = _albers_q(phi, e, e2)
+        delta = 1.0e-7
+        deriv = (_albers_q(phi + delta, e, e2) - _albers_q(phi - delta, e, e2)) / (2.0 * delta)
+        step = np.where(np.abs(deriv) > 1.0e-12, (current - q) / deriv, 0.0)
+        phi = np.clip(phi - step, -math.pi / 2.0, math.pi / 2.0)
+        if float(np.nanmax(np.abs(step))) < 1.0e-12:
+            break
+
+    lon = np.degrees(lon0 + theta / n)
+    lat = np.degrees(phi)
+    return np.column_stack((lon, lat))
+
+
+def _shape_points_to_lonlat(file_path: str, points: np.ndarray) -> np.ndarray:
+    arr = np.asarray(points, dtype=float)
+    if arr.ndim != 2 or arr.shape[1] < 2:
+        return arr
+    if (
+        np.nanmin(arr[:, 0]) >= -180.0
+        and np.nanmax(arr[:, 0]) <= 360.0
+        and np.nanmin(arr[:, 1]) >= -90.0
+        and np.nanmax(arr[:, 1]) <= 90.0
+    ):
+        return np.column_stack((wrap_lon(arr[:, 0]), arr[:, 1]))
+    prj_path = Path(file_path).with_suffix(".prj")
+    prj_text = prj_path.read_text(encoding="utf-8", errors="ignore") if prj_path.exists() else ""
+    if 'PROJECTION["Albers"]' in prj_text or 'PROJECTION["Albers_Conic_Equal_Area"]' in prj_text:
+        projected = _inverse_albers_points(arr[:, :2], prj_text)
+        return np.column_stack((wrap_lon(projected[:, 0]), projected[:, 1]))
+    return np.column_stack((wrap_lon(arr[:, 0]), arr[:, 1]))
+
 def read_bln(file_path: str) -> List[BasinBoundary]:
     """Read Surfer BLN boundary file.
 
@@ -201,8 +358,9 @@ def read_shapefile(file_path: str, name_field: str) -> List[BasinBoundary]:
             points = np.asarray(shape.points, dtype=float)
             if points.ndim != 2 or points.shape[1] < 2:
                 continue
-            lon_all = wrap_lon(points[:, 0])
-            lat_all = points[:, 1]
+            lonlat = _shape_points_to_lonlat(file_path, points)
+            lon_all = lonlat[:, 0]
+            lat_all = lonlat[:, 1]
 
             # Keep one basin per shape-record. Multipart polygons are retained as
             # one logical basin (fixes 112-basin shapefile being split to 124).
@@ -241,7 +399,7 @@ def read_shapefile(file_path: str, name_field: str) -> List[BasinBoundary]:
                 )
             )
 
-        return boundaries
+        return _merge_duplicate_named_boundaries(boundaries)
     finally:
         with contextlib.suppress(Exception):
             sf.close()

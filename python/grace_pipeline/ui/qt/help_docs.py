@@ -67,6 +67,51 @@ def _strip_html(text: str) -> str:
 
 HELP_TOPICS: list[HelpTopic] = [
     _topic(
+        "About this software",
+        "关于本软件",
+        "about_software",
+        "ⓘ",
+        f"""
+        <h1>About this software</h1>
+        <p><b>GRACE Level-2 Pipeline</b> is a desktop workflow for GRACE/GRACE-FO Level-2 spherical-harmonic processing, gridded equivalent water height products, leakage correction, basin analysis, and preview/export diagnostics.</p>
+        <h2>Basic information</h2>
+        <ul>
+          <li><b>Application:</b> GRACE Level-2 Pipeline</li>
+          <li><b>Version:</b> {APP_VERSION}</li>
+          <li><b>Runtime:</b> Python {sys.version.split()[0]} / PySide {PYSIDE_VERSION}</li>
+          <li><b>Repository:</b> <a href="{REPOSITORY_URL}">{REPOSITORY_URL}</a></li>
+        </ul>
+        <h2>Developer information</h2>
+        <ul>
+          <li><b>Developer / maintainer:</b> MXGG</li>
+          <li><b>GitHub:</b> <a href="https://github.com/MXGG">https://github.com/MXGG</a></li>
+          <li><b>Project repository:</b> <a href="{REPOSITORY_URL}">MXGG/GRACE_Level2_pipeline_exc</a></li>
+        </ul>
+        <h2>Intended use</h2>
+        <p>The GUI is intended for local scientific processing, batch preparation, result inspection, and reproducible configuration of the GRACE Level-2 workflow.</p>
+        """,
+        f"""
+        <h1>关于本软件</h1>
+        <p><b>GRACE 二级处理流程</b> 是面向 GRACE/GRACE-FO Level-2 球谐数据处理的桌面工作流软件，支持格网等效水高产品生成、泄漏校正、流域分析以及预览与导出诊断。</p>
+        <h2>软件基本信息</h2>
+        <ul>
+          <li><b>软件名称：</b>GRACE Level-2 Pipeline</li>
+          <li><b>当前版本：</b>{APP_VERSION}</li>
+          <li><b>运行环境：</b>Python {sys.version.split()[0]} / PySide {PYSIDE_VERSION}</li>
+          <li><b>项目仓库：</b><a href="{REPOSITORY_URL}">{REPOSITORY_URL}</a></li>
+        </ul>
+        <h2>开发者信息</h2>
+        <ul>
+          <li><b>开发者 / 维护者：</b>MXGG</li>
+          <li><b>GitHub 主页：</b><a href="https://github.com/MXGG">https://github.com/MXGG</a></li>
+          <li><b>项目仓库：</b><a href="{REPOSITORY_URL}">MXGG/GRACE_Level2_pipeline_exc</a></li>
+        </ul>
+        <h2>使用定位</h2>
+        <p>本 GUI 主要用于本地科学处理、批处理准备、结果检查，以及 GRACE Level-2 流程配置的可复现管理。</p>
+        """,
+        ("about", "software", "version", "developer", "MXGG", "关于", "开发者"),
+    ),
+    _topic(
         "Getting started",
         "快速开始",
         "getting_started",

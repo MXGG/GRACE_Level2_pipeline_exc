@@ -50,6 +50,9 @@ LIGHT_COLOR = {
     "ghost_disabled_text": "#95a0a7",
     "ghost_disabled_border": "#dde5eb",
     "placeholder_bg": "#eef4f8",
+    "input_bg": "#FFFFFF",
+    "input_border": "#D5DEE0",
+    "text_disabled": "#9CA3AF",
 }
 
 
@@ -95,6 +98,9 @@ DARK_COLOR = {
     "ghost_disabled_text": "#71859e",
     "ghost_disabled_border": "#39516d",
     "placeholder_bg": "#1b2a40",
+    "input_bg": "#0F172A",
+    "input_border": "#334155",
+    "text_disabled": "#64748B",
 }
 
 
@@ -183,13 +189,14 @@ def palette_for_theme(theme_mode: str = "system", app=None) -> dict[str, str]:
         colors.update(
             {
                 "background": "#f4faf6",
-                "surface_low": "#eaf5ee",
-                "nav_surface": "#e7f3ec",
-                "nav_footer": "#e0eee7",
-                "top_surface": "#f9fcfa",
-                "primary": "#217a4a",
-                "primary_dim": "#19663d",
-                "primary_soft": "#d9f0e2",
+                "surface_low": "#EEF7F1",
+                "nav_surface": "#F0F7F2",
+                "nav_footer": "#E2F0E8",
+                "top_surface": "#FFFFFF",
+                "border": "#D6E5DC",
+                "primary": "#1F7A4D",
+                "primary_dim": "#16653F",
+                "primary_soft": "#DDF3E5",
             }
         )
     elif theme_mode == "sepia":
@@ -245,12 +252,34 @@ def set_active_palette(colors: dict[str, str]) -> None:
     COLOR.update(colors)
 
 
-def build_stylesheet(colors: dict[str, str]) -> str:
+def _font_stack(ui_font: str | None = None) -> str:
+    preferred = str(ui_font or "default").strip()
+    if not preferred or preferred == "default":
+        preferred = "Microsoft YaHei UI"
+    if preferred == "Microsoft YaHei UI":
+        return '"Microsoft YaHei UI", "Segoe UI", sans-serif'
+    if preferred == "Segoe UI":
+        return '"Segoe UI", "Microsoft YaHei UI", sans-serif'
+    return f'"{preferred}", "Microsoft YaHei UI", "Segoe UI", sans-serif'
+
+
+def _mono_stack(mono_font: str | None = None) -> str:
+    preferred = str(mono_font or "default").strip()
+    if not preferred or preferred == "default":
+        preferred = "Consolas"
+    if preferred == "Consolas":
+        return '"Consolas", "JetBrains Mono", monospace'
+    return f'"{preferred}", "Consolas", "JetBrains Mono", monospace'
+
+
+def build_stylesheet(colors: dict[str, str], ui_font: str | None = None, mono_font: str | None = None) -> str:
+    ui_stack = _font_stack(ui_font)
+    mono_stack = _mono_stack(mono_font)
     return f"""
 QWidget {{
     background: {colors["background"]};
     color: {colors["text"]};
-    font-family: "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", Arial, sans-serif;
+    font-family: {ui_stack};
     font-size: 13px;
 }}
 
@@ -329,12 +358,12 @@ QPushButton#NavButton {{
 }}
 
 QPushButton#NavButton:hover {{
-    background: rgba(0, 93, 181, 0.10);
+    background: {colors["placeholder_bg"]};
     color: {colors["text"]};
 }}
 
 QPushButton#NavButton:checked {{
-    background: rgba(0, 93, 181, 0.12);
+    background: {colors["primary_soft"]};
     border-left: 3px solid {colors["primary"]};
     color: {colors["primary"]};
     font-weight: 600;
@@ -346,18 +375,16 @@ QFrame#TopBar {{
 }}
 
 QLabel#AppTitle {{
-    font-size: 12px;
-    font-weight: 700;
-    letter-spacing: 1px;
-    text-transform: uppercase;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
 }}
 
 QLabel#Breadcrumb {{
     color: {colors["primary"]};
     font-size: 12px;
     font-weight: 600;
-    letter-spacing: 1px;
-    text-transform: uppercase;
+    letter-spacing: 0.5px;
 }}
 
 QPushButton#PrimaryButton {{
@@ -400,6 +427,40 @@ QPushButton#GhostButton:checked {{
 }}
 
 QPushButton#GhostButton:disabled {{
+    background: {colors["surface_low"]};
+    color: {colors["text_muted"]};
+    border-color: {colors["border"]};
+}}
+
+QPushButton#SoftButton {{
+    background: {colors["primary_soft"]};
+    color: {colors["primary"]};
+    border: 1px solid {colors["primary_soft"]};
+    border-radius: 3px;
+    padding: 8px 14px;
+    font-weight: 600;
+}}
+
+QPushButton#SoftButton:hover {{
+    background: {colors["placeholder_bg"]};
+    border-color: {colors["primary_soft"]};
+}}
+
+QPushButton#PathButton {{
+    background: {colors["surface"]};
+    color: {colors["text"]};
+    border: 1px solid {colors["border"]};
+    border-radius: 3px;
+    padding: 8px 13px;
+    font-weight: 600;
+}}
+
+QPushButton#PathButton:hover {{
+    background: {colors["surface_low"]};
+    border-color: {colors["border_strong"]};
+}}
+
+QPushButton#PathButton:disabled {{
     background: {colors["surface_low"]};
     color: {colors["text_muted"]};
     border-color: {colors["border"]};
@@ -512,16 +573,15 @@ QFrame#CardHeader {{
 }}
 
 QLabel#CardTitle {{
-    font-size: 11px;
-    font-weight: 700;
+    font-size: 13px;
+    font-weight: 600;
     color: {colors["text_muted"]};
-    letter-spacing: 1px;
-    text-transform: uppercase;
+    letter-spacing: 0;
 }}
 
 QLabel#PageTitle {{
-    font-size: 26px;
-    font-weight: 700;
+    font-size: 24px;
+    font-weight: 600;
 }}
 
 QLabel#PageSubtitle {{
@@ -537,7 +597,7 @@ QLabel#TopProgressLabel {{
 
 QLabel#TopProgressDetail {{
     color: {colors["text_muted"]};
-    font-family: "JetBrains Mono", Consolas, monospace;
+    font-family: {mono_stack};
     font-size: 11px;
 }}
 
@@ -559,9 +619,9 @@ QFrame#ActionZone QLabel {{
 QLabel#StatusBadge {{
     border-radius: 10px;
     padding: 4px 10px;
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 700;
-    letter-spacing: 1px;
+    letter-spacing: 0;
 }}
 
 QLabel#StatusBadge[variant="primary"] {{
@@ -586,10 +646,9 @@ QLabel#StatusBadge[variant="danger"] {{
 
 QLabel#LabelCaps {{
     color: {colors["text_muted"]};
-    font-size: 11px;
-    font-weight: 700;
-    letter-spacing: 1px;
-    text-transform: uppercase;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0;
 }}
 
 QLabel#ValueText {{
@@ -603,9 +662,9 @@ QLabel#PreviewStatusValue {{
 }}
 
 QLabel#MonoText {{
-    font-family: "JetBrains Mono", Consolas, monospace;
+    font-family: {mono_stack};
     color: {colors["text_muted"]};
-    font-size: 12px;
+    font-size: 13px;
 }}
 
 QLabel#MetricValue {{
@@ -666,8 +725,8 @@ QHeaderView::section {{
 }}
 
 QLineEdit, QComboBox, QPlainTextEdit, QTextEdit {{
-    background: {colors["surface"]};
-    border: 1px solid {colors["border"]};
+    background: {colors.get("input_bg", colors["surface"])};
+    border: 1px solid {colors.get("input_border", colors["border"])};
     border-radius: 3px;
     padding: 8px;
 }}
@@ -727,6 +786,43 @@ QFrame#PreviewToolbarHost QToolButton:hover {{
 QFrame#ConsolePanel {{
     background: {colors["console_bg"]};
     border-top: 1px solid {colors["border"]};
+}}
+
+QFrame#ConsoleHeader {{
+    background: {colors["console_bg"]};
+    border: 1px solid {colors["console_tab_bg"]};
+    border-radius: 4px;
+}}
+
+QLabel#ConsoleHeaderTitle {{
+    color: {colors["console_muted"]};
+    font-size: 13px;
+    font-weight: 600;
+}}
+
+QPushButton#ConsoleButton {{
+    background: {colors["console_tab_bg"]};
+    color: {colors["console_text"]};
+    border: 1px solid {colors["border_strong"]};
+    border-radius: 3px;
+    padding: 7px 14px;
+    font-weight: 600;
+}}
+
+QPushButton#ConsoleButton:hover {{
+    background: {colors["surface_mid"]};
+    color: {colors["console_text"]};
+}}
+
+QWidget#DownloadControlStrip {{
+    background: {colors["surface_low"]};
+    border-radius: 3px;
+}}
+
+QFrame#FilterExportPanel {{
+    background: {colors["surface_low"]};
+    border: 1px solid {colors["border"]};
+    border-radius: 3px;
 }}
 
 QFrame#PreviewSidebar QWidget,
@@ -792,7 +888,7 @@ QDockWidget::title {{
     color: {colors["console_text"]};
     padding: 10px;
     text-align: left;
-    font-family: "JetBrains Mono", Consolas, monospace;
+    font-family: {mono_stack};
     letter-spacing: 1px;
 }}
 
@@ -826,11 +922,11 @@ QTabBar::tab:selected {{
 """
 
 
-def app_stylesheet(theme_mode: str = "system", app=None) -> str:
+def app_stylesheet(theme_mode: str = "system", app=None, ui_font: str | None = None, mono_font: str | None = None) -> str:
     ensure_application_font(app=app)
     colors = palette_for_theme(theme_mode=theme_mode, app=app)
     set_active_palette(colors)
-    return build_stylesheet(colors)
+    return build_stylesheet(colors, ui_font=ui_font, mono_font=mono_font)
 
 
 APP_STYLESHEET = app_stylesheet("light")

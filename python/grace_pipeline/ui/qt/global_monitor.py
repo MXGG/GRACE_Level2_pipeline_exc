@@ -17,9 +17,9 @@ from datetime import datetime
 from pathlib import Path
 from types import MethodType
 
-from PySide6.QtCore import QUrl
+from PySide6.QtCore import Qt, QUrl
 from PySide6.QtGui import QDesktopServices
-from PySide6.QtWidgets import QLabel, QLineEdit, QPushButton, QHBoxLayout, QWidget
+from PySide6.QtWidgets import QApplication, QLabel, QLineEdit, QPushButton, QGridLayout, QHBoxLayout, QSizePolicy, QWidget
 
 from grace_pipeline.ui.qt.qt_safe import qt_object_is_alive
 
@@ -140,7 +140,7 @@ def _ym_from_any(text: str) -> str:
 
 def _date_from_ym(ym: str) -> str:
     ym = _ym_from_any(ym)
-    return f"{ym}-01" if ym else ""
+    return ym or ""
 
 
 def _parse_ym_dt(ym: str) -> datetime:
@@ -174,10 +174,12 @@ def _retitle_processing_page(window) -> None:
         zh["Filter Processing"] = "滤波处理"
         zh["Processing Setup"] = "滤波处理"
         zh["Configure input/output paths, time coverage, grid geometry, inversion setup, and filters."] = "配置输入输出路径、时间范围、网格、反演和滤波方法。"
+        zh["Filter Path Configuration"] = "滤波路径配置"
         zh["Filter Input Paths"] = "滤波输入路径"
         zh["Filter Output Paths"] = "滤波输出路径"
         zh["Auxiliary Filter Files"] = "辅助滤波文件"
         zh["Maximum Degree / Order"] = "最大阶次"
+        zh["Choose Folder..."] = "选择文件夹..."
         zh["Open Logs"] = "打开日志"
         zh["Run Filters"] = "运行滤波"
         zh["Load Config"] = "加载配置"
@@ -328,7 +330,7 @@ def _install_processing_action_bar(window) -> None:
 def _move_filter_paths_to_processing(window) -> None:
     data_page = window.page_data_paths
     proc = window.page_processing
-    _set_card_title(data_page.card_input_dirs, "Filter Input Paths")
+    _set_card_title(data_page.card_input_dirs, "Filter Path Configuration")
     _set_card_title(data_page.card_output_dirs, "Filter Output Paths")
     _set_card_title(data_page.card_reference_paths, "Auxiliary Filter Files")
 
@@ -339,18 +341,21 @@ def _move_filter_paths_to_processing(window) -> None:
 
     _install_processing_action_bar(window)
 
-    data_page.btn_download_dir_browse.setText(window.translate_text("Select download folder..."))
+    data_page.btn_download_dir_browse.setText(window.translate_text("Choose Folder..."))
     data_page.btn_download_gfc_range.setText(window.translate_text("Download"))
     _move_field_row_to_layout(data_page.edit_gfc_input_dir, data_page.card_input_dirs.body, insert_index=0)
     _move_field_row_to_layout(data_page.lbl_gfc_detected_range, data_page.card_input_dirs.body, insert_index=1)
     _move_field_row_to_layout(data_page.edit_download_dir, data_page.card_input_dirs.body, insert_index=2)
+    _move_field_row_to_layout(data_page.edit_main_output_root, data_page.card_input_dirs.body, insert_index=3)
+    if hasattr(data_page, "chk_remote_sync"):
+        data_page.chk_remote_sync.setChecked(False)
+        _hide_field_row_for_widget(data_page.chk_remote_sync)
 
     _hide_field_row_for_widget(data_page.edit_logs_dir)
     if not hasattr(data_page, "btn_open_logs"):
         data_page.btn_open_logs = QPushButton("Open Logs")
         data_page.btn_open_logs.setObjectName("GhostButton")
-        data_page.card_output_dirs.body.addWidget(data_page.btn_open_logs)
-    _safe_show(data_page.btn_open_logs)
+    _safe_hide(data_page.btn_open_logs)
 
     _move_field_row_to_layout(data_page.edit_ddk_data_dir, data_page.card_reference_paths.body, insert_index=0)
     for widget in (data_page.edit_low_degree_path, data_page.edit_degree1_path, data_page.edit_gia_path):
@@ -372,11 +377,61 @@ def _move_filter_paths_to_processing(window) -> None:
         _remove_widget_from_layout(data_page.card_reference_paths)
         proc.body.insertWidget(2, data_page.card_input_dirs)
         proc.body.insertWidget(3, data_page.card_reference_paths)
-        proc.body.insertWidget(4, data_page.card_output_dirs)
+        _safe_hide(data_page.card_output_dirs)
     except Exception:
         pass
 
     _install_degree_input(window)
+    _install_processing_workspace_grid(window)
+
+
+def _install_processing_workspace_grid(window) -> None:
+    proc = window.page_processing
+    if getattr(proc, "_processing_workspace_grid_installed", False):
+        return
+
+    host = QWidget()
+    host.setObjectName("ProcessingWorkspace")
+    grid = QGridLayout(host)
+    grid.setContentsMargins(0, 0, 0, 0)
+    grid.setHorizontalSpacing(18)
+    grid.setVerticalSpacing(18)
+
+    cards = [
+        getattr(window.page_data_paths, "card_input_dirs", None),
+        getattr(window.page_data_paths, "card_reference_paths", None),
+        getattr(window.page_data_paths, "card_output_dirs", None),
+        getattr(proc, "card_time_range", None),
+        getattr(proc, "card_grid_settings", None),
+        getattr(proc, "card_inversion", None),
+        getattr(proc, "card_filters", None),
+        getattr(proc, "card_sh_tools", None),
+    ]
+    old_wrapper = proc.card_inversion.parentWidget() if getattr(proc, "card_inversion", None) is not None else None
+    for card in cards:
+        if card is not None:
+            _remove_widget_from_layout(card)
+    if old_wrapper is not None:
+        _remove_widget_from_layout(old_wrapper)
+        _safe_hide(old_wrapper)
+
+    for card in cards:
+        if card is not None:
+            card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
+
+    _safe_hide(window.page_data_paths.card_output_dirs)
+    grid.addWidget(window.page_data_paths.card_input_dirs, 0, 0, 1, 2)
+    grid.addWidget(window.page_data_paths.card_reference_paths, 1, 0, 1, 2)
+    grid.addWidget(proc.card_grid_settings, 2, 0, alignment=Qt.AlignTop)
+    grid.addWidget(proc.card_inversion, 2, 1, alignment=Qt.AlignTop)
+    grid.addWidget(proc.card_filters, 3, 0, 1, 2)
+    grid.addWidget(proc.card_sh_tools, 4, 0, 1, 2)
+    grid.setColumnStretch(0, 1)
+    grid.setColumnStretch(1, 1)
+
+    proc.body.insertWidget(2, host)
+    proc.processing_workspace = host
+    proc._processing_workspace_grid_installed = True
 
 
 def _patch_filter_path_scanning(controller) -> None:
@@ -516,7 +571,7 @@ def _patch_download_controls(window, controller) -> None:
         if hasattr(page, "cmb_mascon_resolution"):
             page.cmb_mascon_resolution.setVisible(product_type == "MASCON_NC")
         page.btn_download_gfc_range.setText(self.window.translate_text("Download"))
-        page.btn_download_dir_browse.setText(self.window.translate_text("Select download folder..."))
+        page.btn_download_dir_browse.setText(self.window.translate_text("Choose Folder..."))
         center = self._configured_gfc_center()
         if product_type == "GSM" and center in {"CSR", "JPL", "GFZ"}:
             self._apply_low_degree_files_for_center(center)
@@ -690,12 +745,23 @@ def _patch_persistent_logs(window, controller) -> None:
         return
     controller._persistent_logs_patched = True
     original_on_log = controller.on_log
+    session_stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    session_file = _log_dir(window) / f"session_{session_stamp}.log"
+    window._log_session_file = session_file
+    with contextlib.suppress(Exception):
+        session_file.write_text(f"[{datetime.now().isoformat(timespec='seconds')}] [system] GUI session started.\n", encoding="utf-8")
+        if qt_object_is_alive(getattr(window, "lbl_console_session", None)):
+            window.lbl_console_session.setText(f"Session Log: {session_file.name}")
 
     def append_file(text: str, tag: str = "stdout") -> None:
         try:
-            log_file = _log_dir(window) / "current_run.log"
             ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            with log_file.open("a", encoding="utf-8") as handle:
+            log_dir = _log_dir(window)
+            current_file = log_dir / "current_run.log"
+            active_session = getattr(window, "_log_session_file", None) or session_file
+            with current_file.open("a", encoding="utf-8") as handle:
+                handle.write(f"[{ts}] [{tag}] {text}\n")
+            with Path(active_session).open("a", encoding="utf-8") as handle:
                 handle.write(f"[{ts}] [{tag}] {text}\n")
         except Exception:
             return
@@ -707,25 +773,33 @@ def _patch_persistent_logs(window, controller) -> None:
     controller.on_log = MethodType(on_log, controller)
     with contextlib.suppress(Exception):
         controller.signals.log.connect(lambda text, tag="stdout": append_file(str(text), str(tag or "stdout")))
+    app = QApplication.instance()
+    if app is not None:
+        with contextlib.suppress(Exception):
+            app.aboutToQuit.connect(lambda: append_file("GUI session closed.", "system"))
 
 
 def _patch_open_logs(window, controller) -> None:
     data_page = window.page_data_paths
-    if not hasattr(data_page, "btn_open_logs"):
+    buttons = [getattr(window, "btn_open_log_folder", None), getattr(data_page, "btn_open_logs", None)]
+    buttons = [button for button in buttons if button is not None]
+    if not buttons:
         return
 
     def open_logs() -> None:
         path = _log_dir(window)
         readme = path / "README.txt"
         if not readme.exists() and not any(path.iterdir()):
-            readme.write_text("Runtime logs are written to current_run.log after a task starts.\n", encoding="utf-8")
+            readme.write_text("Runtime logs are written per GUI session and mirrored to current_run.log.\n", encoding="utf-8")
         QDesktopServices.openUrl(QUrl.fromLocalFile(str(path)))
 
     previous_open_logs = getattr(data_page, "_open_logs_slot", None)
-    if previous_open_logs is not None:
+    for button in buttons:
+        if previous_open_logs is not None:
+            with contextlib.suppress(Exception):
+                button.clicked.disconnect(previous_open_logs)
         with contextlib.suppress(Exception):
-            data_page.btn_open_logs.clicked.disconnect(previous_open_logs)
-    data_page.btn_open_logs.clicked.connect(open_logs)
+            button.clicked.connect(open_logs)
     data_page._open_logs_slot = open_logs
 
 
@@ -782,15 +856,15 @@ def _patch_run_thread_behavior(window, controller) -> None:
                     events["pause"].clear()
                     events["stop"].clear()
                 if err is not None:
-                    self._pending_terminal_status = ("ERROR", "danger")
-                    self.signals.status.emit("ERROR", "danger")
+                    self._pending_terminal_status = ("Error", "danger")
+                    self.signals.status.emit("Error", "danger")
                     if isinstance(err, EarthdataAuthRequired):
                         self.signals.message.emit("earthdata_auth", "Earthdata Authorization", str(err))
                     else:
                         self.signals.message.emit("error", scope.title(), str(err))
                 else:
-                    self._pending_terminal_status = ("READY", "success")
-                    self.signals.status.emit("READY", "success")
+                    self._pending_terminal_status = ("Ready", "success")
+                    self.signals.status.emit("Ready", "success")
 
         t = threading.Thread(target=worker, daemon=True)
         self._threads[scope] = t

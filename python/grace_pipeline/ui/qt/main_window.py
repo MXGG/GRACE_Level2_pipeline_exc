@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import contextlib
 
-from PySide6.QtCore import Qt, QSignalBlocker, QTimer
+from PySide6.QtCore import QSize, Qt, QSignalBlocker, QTimer
 from PySide6.QtGui import QAction, QFont, QGuiApplication
 from PySide6.QtWidgets import (
     QApplication,
@@ -52,7 +52,8 @@ from grace_pipeline.ui.qt.pages import (
 )
 from grace_pipeline.ui.qt.preferences import UIPreferences, load_ui_preferences, save_ui_preferences
 from grace_pipeline.ui.qt.theme import app_stylesheet, resolve_theme_mode
-from grace_pipeline.ui.qt.widgets import ElidedLabel, NavigationButton, build_badge
+from grace_pipeline.ui.qt.theme import COLOR
+from grace_pipeline.ui.qt.widgets import ElidedLabel, NavigationButton, build_badge, build_line_icon
 
 
 def _qt_object_is_alive(obj) -> bool:
@@ -170,7 +171,7 @@ class MainWindow(QMainWindow):
 
         title = QLabel("GRACE-L2")
         title.setStyleSheet("font-size: 28px; font-weight: 700;")
-        subtitle = QLabel("PRECISION PIPELINE")
+        subtitle = QLabel("Precision Pipeline")
         subtitle.setObjectName("LabelCaps")
         brand_layout.addWidget(title)
         brand_layout.addWidget(subtitle)
@@ -217,12 +218,13 @@ class MainWindow(QMainWindow):
         left.setSpacing(12)
         self.btn_nav_toggle = QToolButton()
         self.btn_nav_toggle.setObjectName("IconButton")
-        self.btn_nav_toggle.setText("☰")
+        self.btn_nav_toggle.setIcon(build_line_icon("menu", COLOR["text_muted"]))
+        self.btn_nav_toggle.setIconSize(QSize(20, 20))
         self.btn_nav_toggle.setCheckable(True)
         self.btn_nav_toggle.setToolTip("Collapse or expand the left navigation")
         self.btn_nav_toggle.clicked.connect(self._toggle_nav_rail)
         left.addWidget(self.btn_nav_toggle)
-        self.app_title = QLabel("GRACE LEVEL-2 PIPELINE")
+        self.app_title = QLabel("GRACE Level-2 Pipeline")
         self.app_title.setObjectName("AppTitle")
         divider = QLabel("/")
         divider.setObjectName("LabelCaps")
@@ -234,7 +236,7 @@ class MainWindow(QMainWindow):
         left.addStretch(1)
         layout.addLayout(left, 1)
 
-        self.pipeline_status = build_badge("CONFIG READY", "success")
+        self.pipeline_status = build_badge("Config Ready", "success")
         self.pipeline_status.setToolTip("Pipeline configuration status")
         self.pipeline_status.setMinimumWidth(112)
         self.pipeline_status.setAlignment(Qt.AlignCenter)
@@ -293,7 +295,21 @@ class MainWindow(QMainWindow):
         layout = QVBoxLayout(panel)
         # Align console body with page cards (same horizontal gutter as content pages).
         layout.setContentsMargins(24, 8, 24, 8)
-        layout.setSpacing(0)
+        layout.setSpacing(8)
+
+        header = QFrame()
+        header.setObjectName("ConsoleHeader")
+        header_layout = QHBoxLayout(header)
+        header_layout.setContentsMargins(12, 8, 12, 8)
+        header_layout.setSpacing(8)
+        self.lbl_console_session = QLabel("Session Log")
+        self.lbl_console_session.setObjectName("ConsoleHeaderTitle")
+        self.btn_open_log_folder = QPushButton("Open Log")
+        self.btn_open_log_folder.setObjectName("ConsoleButton")
+        header_layout.addWidget(self.lbl_console_session)
+        header_layout.addStretch(1)
+        header_layout.addWidget(self.btn_open_log_folder)
+        layout.addWidget(header)
 
         tabs = QTabWidget()
         tabs.setObjectName("ConsoleTabs")
@@ -334,6 +350,7 @@ class MainWindow(QMainWindow):
         self.breadcrumb.setText(PAGE_TITLES[key])
         for btn_key, btn in self._nav_buttons.items():
             btn.setChecked(btn_key == key)
+            btn.refresh_icon()
         self._apply_responsive_layout(force=(key == "preview"))
         self.refresh_translations()
 
@@ -520,20 +537,35 @@ class MainWindow(QMainWindow):
             theme = "system"
         if language not in {"en", "zh"}:
             language = "en"
-        self.ui_preferences = UIPreferences(theme=theme, language=language)
+        ui_font = str(getattr(preferences, "ui_font", "default") or "default").strip()
+        mono_font = str(getattr(preferences, "mono_font", "default") or "default").strip()
+        self.ui_preferences = UIPreferences(theme=theme, language=language, ui_font=ui_font, mono_font=mono_font)
         if persist:
             save_ui_preferences(self.ui_preferences, settings=self._settings_store)
         app = QApplication.instance() or QGuiApplication.instance()
         if app is not None:
-            stylesheet = app_stylesheet(self.ui_preferences.theme, app=app)
+            stylesheet = app_stylesheet(
+                self.ui_preferences.theme,
+                app=app,
+                ui_font=self.ui_preferences.ui_font,
+                mono_font=self.ui_preferences.mono_font,
+            )
             self._apply_font_scale_to_app(app)
             app.setStyleSheet(stylesheet + self._font_scale_stylesheet())
         self._resolved_theme = resolve_theme_mode(self.ui_preferences.theme, app=app)
         self.setWindowTitle(self.translate_text(self._window_title_base))
+        self._refresh_shell_icons()
         self.refresh_translations()
         if getattr(self, "controller", None) is not None:
             self.controller.refresh_plot_theme()
         QTimer.singleShot(0, lambda: self._apply_responsive_layout(force=True))
+
+    def _refresh_shell_icons(self) -> None:
+        if hasattr(self, "btn_nav_toggle"):
+            self.btn_nav_toggle.setIcon(build_line_icon("menu", COLOR["text_muted"]))
+        for button in getattr(self, "_nav_buttons", {}).values():
+            if _qt_object_is_alive(button):
+                button.refresh_icon()
 
     def _install_tray_icon(self) -> None:
         app = QApplication.instance()
@@ -697,19 +729,22 @@ QRadioButton::indicator {{
     def _apply_button_roles(self) -> None:
         primary_terms = ("run", "download", "validate", "render", "export", "save", "generate", "apply", "ok")
         danger_terms = ("stop", "abort", "delete", "clear", "exit", "remove")
-        neutral_terms = ("browse", "folder", "file", "open", "help", "log", "console", "appearance", "settings", "load")
+        path_terms = ("browse", "folder", "file", "choose")
+        soft_terms = ("visit", "open", "help", "log", "console", "appearance", "settings", "load", "view", "tools")
         for button in self.findChildren(QPushButton):
             if not _qt_object_is_alive(button):
                 continue
-            if isinstance(button, NavigationButton) or button.objectName() in {"IconButton", "NavButton"}:
+            if isinstance(button, NavigationButton) or button.objectName() in {"IconButton", "NavButton", "ConsoleButton", "PathButton"}:
                 continue
             role_text = canonical_text(button.text()).lower()
             if any(term in role_text for term in danger_terms):
                 object_name = "DangerGhostButton"
+            elif any(term in role_text for term in path_terms):
+                object_name = "PathButton"
             elif any(term in role_text for term in primary_terms):
                 object_name = "PrimaryButton"
-            elif any(term in role_text for term in neutral_terms):
-                object_name = "GhostButton"
+            elif any(term in role_text for term in soft_terms):
+                object_name = "SoftButton"
             else:
                 continue
             if button.objectName() != object_name:

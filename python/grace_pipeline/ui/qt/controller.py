@@ -8,6 +8,7 @@ import hashlib
 import io
 import json
 import os
+import re
 import sys
 import threading
 import time
@@ -118,7 +119,7 @@ from grace_pipeline.ui.plotting.projections import (
     wrap_delta_lon,
 )
 from grace_pipeline.ui.qt.path_defaults import DEFAULT_DATA_PATHS
-from grace_pipeline.ui.qt.preferences import THEME_ITEMS, UIPreferences
+from grace_pipeline.ui.qt.preferences import MONO_FONT_ITEMS, THEME_ITEMS, UI_FONT_ITEMS, UIPreferences
 from grace_pipeline.ui.qt.qt_safe import is_deleted_qt_object_error, qt_object_is_alive, safe_set_text
 from grace_pipeline.ui.qt.theme import COLOR
 from grace_pipeline.ui.qt.widgets import populate_table
@@ -160,8 +161,20 @@ class UiSettingsDialog(QDialog):
         self.cmb_language.addItem(window.translate_text("Chinese"), "zh")
         self.cmb_language.setCurrentIndex(max(0, self.cmb_language.findData(preferences.language)))
 
+        self.cmb_ui_font = QComboBox()
+        for label, value in UI_FONT_ITEMS:
+            self.cmb_ui_font.addItem(window.translate_text(label), value)
+        self.cmb_ui_font.setCurrentIndex(max(0, self.cmb_ui_font.findData(getattr(preferences, "ui_font", "default"))))
+
+        self.cmb_mono_font = QComboBox()
+        for label, value in MONO_FONT_ITEMS:
+            self.cmb_mono_font.addItem(window.translate_text(label), value)
+        self.cmb_mono_font.setCurrentIndex(max(0, self.cmb_mono_font.findData(getattr(preferences, "mono_font", "default"))))
+
         form.addRow(window.translate_text("Theme"), self.cmb_theme)
         form.addRow(window.translate_text("Language"), self.cmb_language)
+        form.addRow(window.translate_text("Interface Font"), self.cmb_ui_font)
+        form.addRow(window.translate_text("Path / Log Font"), self.cmb_mono_font)
         layout.addLayout(form)
 
         theme_note = QLabel(window.translate_text("System follows desktop appearance when available."))
@@ -184,6 +197,8 @@ class UiSettingsDialog(QDialog):
         return UIPreferences(
             theme=str(self.cmb_theme.currentData()),
             language=str(self.cmb_language.currentData()),
+            ui_font=str(self.cmb_ui_font.currentData()),
+            mono_font=str(self.cmb_mono_font.currentData()),
         )
 
 
@@ -803,7 +818,7 @@ class MainWindowController:
         self._proj_x0 = None
         self._preview_pick_state = None
         self._preview_full_view = None
-        self._top_status_text = "READY"
+        self._top_status_text = "Ready"
         self._last_overall_pct = 0.0
         self._last_overall_detail = "0/0"
         self._pending_terminal_status: tuple[str, str] | None = None
@@ -862,7 +877,7 @@ class MainWindowController:
             (w.page_data_paths.edit_main_output_root, w.page_data_paths.btn_output_browse, "dir", ""),
             (w.page_data_paths.edit_aux_path, w.page_data_paths.btn_aux_browse, "dir", ""),
             (w.page_data_paths.edit_boundary_root, w.page_data_paths.btn_boundary_root_browse, "dir", ""),
-            (w.page_data_paths.edit_boundary_path, w.page_data_paths.btn_boundary_browse, "file", "Shapefiles (*.shp);;All Files (*)"),
+            (w.page_data_paths.edit_boundary_path, w.page_data_paths.btn_boundary_browse, "file", "Boundary Files (*.shp *.bln *.txt);;All Files (*)"),
             (w.page_data_paths.edit_low_degree_path, w.page_data_paths.btn_low_degree_browse, "file", "Text Files (*.txt);;All Files (*)"),
             (w.page_data_paths.edit_degree1_path, w.page_data_paths.btn_degree1_browse, "file", "Text Files (*.txt);;All Files (*)"),
             (w.page_data_paths.edit_gia_path, w.page_data_paths.btn_gia_browse, "file", "Text Files (*.txt);;All Files (*)"),
@@ -875,7 +890,7 @@ class MainWindowController:
             (w.page_leakage.edit_lrc_output, w.page_leakage.btn_lrc_output_browse, "save_file", ""),
             (w.page_leakage.edit_regional_boundary, w.page_leakage.btn_regional_boundary_browse, "file_or_dir", ""),
             (w.page_basin.edit_data_file, w.page_basin.btn_data_browse, "file", ""),
-            (w.page_basin.edit_boundary_file, w.page_basin.btn_boundary_browse, "file_or_dir", ""),
+            (w.page_basin.edit_boundary_file, w.page_basin.btn_boundary_browse, "file_or_dir", "Boundary Files (*.shp *.bln *.txt);;All Files (*)"),
             (w.page_preview.edit_dataset_source, w.page_preview.btn_dataset_browse, "file", ""),
             (w.page_preview.edit_boundary_overlay, w.page_preview.btn_boundary_overlay_browse, "file_or_dir", "Boundary Files (*.shp *.txt *.bln);;All Files (*)"),
             (w.page_preview.edit_custom_overlay, w.page_preview.btn_custom_overlay_browse, "file_or_dir", "Shapefiles (*.shp);;All Files (*)"),
@@ -1083,8 +1098,40 @@ class MainWindowController:
 
         self._basin_preview_ax = self._basin_preview_figure.add_subplot(111)
         self._basin_preview_ax.set_facecolor("#eef4f8")
-        self._basin_preview_ax.text(0.5, 0.5, "Load grid data to render preview", ha="center", va="center", transform=self._basin_preview_ax.transAxes)
+        self._basin_preview_ax.text(
+            0.5,
+            0.5,
+            self.window.translate_text("Load grid data to render preview"),
+            ha="center",
+            va="center",
+            transform=self._basin_preview_ax.transAxes,
+            fontproperties=self._matplotlib_cjk_font(),
+        )
         self._basin_preview_canvas.draw_idle()
+
+    def _matplotlib_cjk_font(self):
+        if hasattr(self, "_mpl_cjk_font"):
+            return self._mpl_cjk_font
+        self._mpl_cjk_font = None
+        font_candidates = [
+            Path(r"C:\Windows\Fonts\msyh.ttc"),
+            Path(r"C:\Windows\Fonts\msyhbd.ttc"),
+            Path(r"C:\Windows\Fonts\simhei.ttf"),
+            Path(r"C:\Windows\Fonts\simsun.ttc"),
+        ]
+        try:
+            from matplotlib import rcParams
+            from matplotlib.font_manager import FontProperties
+
+            rcParams["axes.unicode_minus"] = False
+            rcParams["font.sans-serif"] = ["Microsoft YaHei", "SimHei", "SimSun", "Arial Unicode MS", "DejaVu Sans"]
+            for font_path in font_candidates:
+                if font_path.exists():
+                    self._mpl_cjk_font = FontProperties(fname=str(font_path))
+                    break
+        except Exception:
+            self._mpl_cjk_font = None
+        return self._mpl_cjk_font
 
     def refresh_plot_theme(self):
         if self._figure is None or self._ax is None:
@@ -1213,15 +1260,17 @@ class MainWindowController:
         active = str(getattr(page, "_selected_filter_panel", "") or "")
         active_checked = bool(active and active in buttons and buttons[active].isChecked())
         title_map = {
-            "gaussian": "Gaussian 参数",
-            "pnmn": "PnMl 参数",
-            "gaussian_pnmn": "Gaussian+PnMl 参数",
-            "ddk": "DDK 参数",
-            "fan": "FAN 参数",
-            "fan_pnmn": "FAN+PnMl 参数",
-            "hsaf": "HSAF 参数",
+            "gaussian": "Gaussian Parameters",
+            "pnmn": "PnMl Parameters",
+            "gaussian_pnmn": "Gaussian+PnMl Parameters",
+            "ddk": "DDK Parameters",
+            "fan": "FAN Parameters",
+            "fan_pnmn": "FAN+PnMl Parameters",
+            "hsaf": "HSAF Parameters",
         }
-        page.lbl_filter_parameter_title.setText(title_map.get(active, "参数设置") if active_checked else "参数设置")
+        page.lbl_filter_parameter_title.setText(
+            self.window.translate_text(title_map.get(active, "Parameter Settings") if active_checked else "Parameter Settings")
+        )
         page.panel_filter_empty.setVisible(not active_checked)
         page.panel_filter_gaussian.setVisible(active_checked and active in {"gaussian", "gaussian_pnmn"})
         page.panel_filter_pnmn.setVisible(active_checked and active in {"pnmn", "gaussian_pnmn", "fan_pnmn", "hsaf"})
@@ -1253,7 +1302,7 @@ class MainWindowController:
         ]
 
     def _hsaf_variant_to_ui(self, value: str) -> str:
-        return "纬度自适应" if str(value or "").strip().lower() == "adaptive" else "全局固定"
+        return "Latitude Adaptive" if str(value or "").strip().lower() == "adaptive" else "Global Fixed"
 
     def _hsaf_variant_from_ui(self, value: str) -> str:
         text = str(value or "").strip().lower()
@@ -1389,7 +1438,7 @@ class MainWindowController:
         product_type = self._download_product_type()
         if update_options:
             current = self._combo_value(page.cmb_gfc_center)
-            values = ["CSR", "JPL", "GSFC"] if product_type == "MASCON_NC" else ["自动", "CSR", "JPL", "GFZ", "HUST", "ITSG"]
+            values = ["CSR", "JPL", "GSFC"] if product_type == "MASCON_NC" else ["Auto", "CSR", "JPL", "GFZ", "HUST", "ITSG"]
             with QSignalBlocker(page.cmb_gfc_center):
                 page.cmb_gfc_center.clear()
                 for value in values:
@@ -1398,8 +1447,11 @@ class MainWindowController:
         center = self._configured_gfc_center()
         if hasattr(page, "cmb_mascon_resolution"):
             page.cmb_mascon_resolution.setVisible(product_type == "MASCON_NC")
-        page.btn_download_gfc_range.setText(self.window.translate_text("Download Mascon" if product_type == "MASCON_NC" else "Download GFC"))
-        page.btn_download_gfc_range.setToolTip(page.lbl_gfc_download_status.text())
+        page.btn_download_dir_browse.setText(self.window.translate_text("Choose Folder..."))
+        page.btn_download_gfc_range.setText(self.window.translate_text("Download"))
+        page.btn_download_gfc_range.setToolTip(
+            self.window.translate_text("Download Mascon" if product_type == "MASCON_NC" else "Download GFC")
+        )
         if product_type == "GSM" and center in {"CSR", "JPL", "GFZ"}:
             self._apply_low_degree_files_for_center(center)
             login = current_earthdata_login()
@@ -1844,28 +1896,66 @@ class MainWindowController:
                 return value
         return "Name"
 
-    def _populate_basin_name_field_options(self, boundary_path: str) -> str:
-        page = self.window.page_basin
-        current = self._basin_name_field()
-        if Path(boundary_path).suffix.lower() != ".shp" or not hasattr(page, "cmb_basin_name_field"):
-            return current
-        try:
+    def _basin_boundary_field_options(self, boundary_path: str) -> list[str]:
+        path = Path(boundary_path)
+        if path.suffix.lower() == ".shp":
             import shapefile
 
-            sf = shapefile.Reader(boundary_path)
+            sf = shapefile.Reader(str(path))
             try:
-                fields = [str(f[0]) for f in sf.fields[1:]]
+                return [str(f[0]) for f in sf.fields[1:]]
             finally:
                 with contextlib.suppress(Exception):
                     sf.close()
+        if path.suffix.lower() in {".txt", ".csv", ".tsv"} and path.exists():
+            with path.open("r", encoding="utf-8", errors="ignore") as handle:
+                for line in handle:
+                    text = line.strip()
+                    if not text or text.startswith("#"):
+                        continue
+                    parts = [part.strip() for part in re.split(r"[\t,; ]+", text) if part.strip()]
+                    if len(parts) > 2 and any(not self._looks_numeric(part) for part in parts):
+                        return parts
+                    break
+        return []
+
+    def _check_basin_boundary_components(self, boundary_path: str) -> list[str]:
+        path = Path(boundary_path)
+        if path.suffix.lower() != ".shp":
+            return []
+        required = [path.with_suffix(".shx"), path.with_suffix(".dbf")]
+        missing_required = [item.name for item in required if not item.exists()]
+        if missing_required:
+            raise FileNotFoundError(f"Missing shapefile sidecar(s): {', '.join(missing_required)}")
+        optional = [path.with_suffix(".prj")]
+        return [item.name for item in optional if not item.exists()]
+
+    @staticmethod
+    def _looks_numeric(value: str) -> bool:
+        try:
+            float(str(value).strip())
+            return True
+        except Exception:
+            return False
+
+    def _populate_basin_name_field_options(self, boundary_path: str) -> str:
+        page = self.window.page_basin
+        current = self._basin_name_field()
+        if not hasattr(page, "cmb_basin_name_field"):
+            return current
+        try:
+            fields = self._basin_boundary_field_options(boundary_path)
         except Exception:
             return current
         resolved = current
         if fields:
             lower_fields = {field.lower(): field for field in fields}
             if current.lower() not in lower_fields:
-                with contextlib.suppress(Exception):
-                    resolved = resolve_shapefile_name_field(boundary_path, current) or fields[0]
+                if Path(boundary_path).suffix.lower() == ".shp":
+                    with contextlib.suppress(Exception):
+                        resolved = resolve_shapefile_name_field(boundary_path, current) or fields[0]
+                else:
+                    resolved = next((field for field in fields if field.lower() == "name"), fields[0])
             else:
                 resolved = lower_fields[current.lower()]
         page.cmb_basin_name_field.blockSignals(True)
@@ -1906,8 +1996,12 @@ class MainWindowController:
     def _preview_basin_name(self) -> str:
         page = self.window.page_basin
         if hasattr(page, "cmb_preview_basin"):
+            data = page.cmb_preview_basin.currentData()
+            if data:
+                return str(data).strip()
             text = str(page.cmb_preview_basin.currentText() or "").strip()
-            if text and text != "First boundary":
+            first_boundary = self.window.translate_text("First boundary")
+            if text and text not in {"First boundary", first_boundary}:
                 return text
         return self._selected_basin_name()
 
@@ -2197,6 +2291,9 @@ class MainWindowController:
             selected, _ = QFileDialog.getOpenFileName(self.window, self.window.translate_text("File..."), start, dialog_filter)
         if selected:
             self._set_edit_text(edit, self._native_path(selected))
+            if edit is self.window.page_basin.edit_boundary_file:
+                with contextlib.suppress(Exception):
+                    self._populate_basin_name_field_options(selected)
 
     def on_toggle_reference_roots(self, checked: bool):
         page = self.window.page_data_paths
@@ -2215,7 +2312,7 @@ class MainWindowController:
         self.host.current_cfg_path = Path(path)
         self.push_config_to_ui(cfg)
         self.refresh_dashboard()
-        self.window.set_top_status("CONFIG READY", "success")
+        self.window.set_top_status("Config Ready", "success")
         self.on_log(f"[CONFIG] Loaded {path}", "stdout")
 
     def on_save_config(self):
@@ -2230,7 +2327,7 @@ class MainWindowController:
         self.host.cfg = Config(copy.deepcopy(cfg_dict))
         self.host.current_cfg_path = Path(path)
         self.refresh_dashboard()
-        self.window.set_top_status("CONFIG SAVED", "success")
+        self.window.set_top_status("Config Saved", "success")
         self.on_log(f"[CONFIG] Saved {path}", "stdout")
 
     def on_open_settings(self):
@@ -2364,6 +2461,7 @@ class MainWindowController:
         basin_cfg = base.setdefault("basin", {})
         leak_cfg = base.setdefault("leakage", {})
         par_cfg = base.setdefault("parallel", {})
+        io_cfg = base.setdefault("io", {})
 
         path_cfg["GFC"] = self._native_path(w.page_data_paths.edit_gfc_input_dir.text(), base_dir=ROOT_DIR)
         path_cfg["OUTPUT"] = self._native_path(w.page_data_paths.edit_main_output_root.text(), base_dir=ROOT_DIR)
@@ -2424,6 +2522,25 @@ class MainWindowController:
         ]
         grid_cfg["dlon"] = d
         grid_cfg["dlat"] = d
+
+        selected_formats = []
+        if getattr(w.page_processing, "chk_export_mat", None) is not None and w.page_processing.chk_export_mat.isChecked():
+            selected_formats.append("mat")
+        if getattr(w.page_processing, "chk_export_txt", None) is not None and w.page_processing.chk_export_txt.isChecked():
+            selected_formats.append("txt")
+        if getattr(w.page_processing, "chk_export_nc", None) is not None and w.page_processing.chk_export_nc.isChecked():
+            selected_formats.append("nc")
+        if getattr(w.page_processing, "chk_export_hdf5", None) is not None and w.page_processing.chk_export_hdf5.isChecked():
+            selected_formats.append("hdf5")
+        if not selected_formats:
+            selected_formats = ["mat"]
+            if getattr(w.page_processing, "chk_export_mat", None) is not None:
+                w.page_processing.chk_export_mat.setChecked(True)
+        io_cfg["output_formats"] = selected_formats
+        io_cfg["save_monthly_mat"] = "mat" in selected_formats
+        io_cfg["save_stack_mat"] = "mat" in selected_formats
+        io_cfg["export_txt"] = "txt" in selected_formats
+        io_cfg["save_stack_hdf5"] = "hdf5" in selected_formats
 
         inv_cfg["Lmax"] = int(w.page_processing.slider_degree_order.value())
         inv_cfg["remove_mean"] = bool(w.page_processing.chk_remove_mean.isChecked())
@@ -2691,6 +2808,27 @@ class MainWindowController:
         w.page_processing.edit_grid_lat_max.setText(str(cfg.grid.lat[1]))
         w.page_processing.edit_grid_lon_min.setText(str(cfg.grid.lon[0]))
         w.page_processing.edit_grid_lon_max.setText(str(cfg.grid.lon[1]))
+        io_raw = raw.get("io", {}) if isinstance(raw, dict) else {}
+        formats = {str(item).lower() for item in io_raw.get("output_formats", []) or []}
+        if not formats:
+            if bool(getattr(cfg.io, "save_monthly_mat", True) or getattr(cfg.io, "save_stack_mat", True)):
+                formats.add("mat")
+            if bool(getattr(cfg.io, "export_txt", False)):
+                formats.add("txt")
+            if bool(getattr(cfg.io, "save_stack_hdf5", False)):
+                formats.add("hdf5")
+        if not formats:
+            formats.add("mat")
+        for attr, key in (
+            ("chk_export_mat", "mat"),
+            ("chk_export_txt", "txt"),
+            ("chk_export_nc", "nc"),
+            ("chk_export_hdf5", "hdf5"),
+        ):
+            checkbox = getattr(w.page_processing, attr, None)
+            if checkbox is not None:
+                with QSignalBlocker(checkbox):
+                    checkbox.setChecked(key in formats)
         w.page_processing.slider_degree_order.setValue(int(cfg.inversion.Lmax))
         self._update_degree_order_label(int(cfg.inversion.Lmax))
         with QSignalBlocker(w.page_processing.chk_remove_mean):
@@ -3032,6 +3170,7 @@ class MainWindowController:
             boundary_path = self._resolve_basin_boundary_file(boundary_path)
             if page.edit_boundary_file.text().strip() != boundary_path:
                 page.edit_boundary_file.setText(boundary_path)
+            missing_optional = self._check_basin_boundary_components(boundary_path)
             name_field = self._populate_basin_name_field_options(boundary_path)
             boundaries = basin_read_boundary(boundary_path, name_field=name_field)
             if not boundaries:
@@ -3044,12 +3183,15 @@ class MainWindowController:
                     lat_vec = np.asarray(self.host._basin_cache.get("lat"), dtype=float).squeeze()
             self._populate_basin_table_from_boundaries(boundaries, lon_vec=lon_vec, lat_vec=lat_vec)
             if hasattr(page, "lbl_boundary_info"):
-                page.lbl_boundary_info.setText(f"Boundary loaded: {len(boundaries)} feature(s)")
+                suffix = f" | missing optional: {', '.join(missing_optional)}" if missing_optional else ""
+                page.lbl_boundary_info.setText(f"Boundary loaded: {len(boundaries)} feature(s){suffix}")
             if hasattr(page, "lbl_selected_basin"):
                 page.lbl_selected_basin.setText(f"Preview basin: {self._preview_basin_name() or getattr(boundaries[0], 'name', 'basin')}")
             if hasattr(page, "lbl_mask_info"):
                 page.lbl_mask_info.setText("Mask: boundary loaded; waiting for grid input" if lon_vec is None or lat_vec is None else "Mask: generating from boundary and grid")
             self.on_log(f"[BASIN] Boundary loaded: {boundary_path} ({len(boundaries)} feature(s))", "stdout")
+            if missing_optional:
+                self.on_log(f"[BASIN] Boundary sidecar warning: missing {', '.join(missing_optional)}", "stderr")
             with contextlib.suppress(Exception):
                 if lon_vec is not None and lat_vec is not None:
                     self.on_generate_basin_mask_preview()
@@ -3360,7 +3502,7 @@ class MainWindowController:
             self.signals.log.emit(f"[OUTPUT] {out_file}", "stdout")
             self.window.page_processing.lbl_sh_tool_status.setText(f"Status: SH -> Grid completed ({out_file.name}).")
 
-        self._run_in_thread("all", _target, "RUNNING SH -> GRID TOOL")
+        self._run_in_thread("all", _target, "Running SH to Grid Tool")
 
     def _grid_to_sh_template_gfc(self, source_path: Path, label: str, cfg_local: Config) -> Path | None:
         if source_path.suffix.lower() == ".gfc" and source_path.exists():
@@ -3472,7 +3614,7 @@ class MainWindowController:
             else:
                 self.window.page_processing.lbl_sh_tool_status.setText(f"Status: Grid -> SH completed ({out_file.name}; no GFC template found).")
 
-        self._run_in_thread("all", _target, "RUNNING GRID -> SH TOOL")
+        self._run_in_thread("all", _target, "Running Grid to SH Tool")
 
     def on_use_preview_stack_for_leakage(self):
         src = self.window.page_preview.edit_dataset_source.text().strip()
@@ -3845,7 +3987,12 @@ class MainWindowController:
                 labels = []
             if 0 <= time_idx < len(labels):
                 label = f" | {labels[time_idx]}"
-            ax.set_title(f"{ctx['basin_name']} | {Path(ctx['stack_path']).name}{label}", fontsize=10, loc="left")
+            ax.set_title(
+                f"{ctx['basin_name']} | {Path(ctx['stack_path']).name}{label}",
+                fontsize=10,
+                loc="left",
+                fontproperties=self._matplotlib_cjk_font(),
+            )
             ax.set_xlabel("Longitude")
             ax.set_ylabel("Latitude")
             ax.set_xlim(xlim)
@@ -3902,7 +4049,7 @@ class MainWindowController:
                 f"Status: Grid -> Series completed ({safe_basin}, {len(ctx['series'])} samples)."
             )
 
-        self._run_in_thread("all", _target, "RUNNING GRID -> SERIES TOOL")
+        self._run_in_thread("all", _target, "Running Grid to Series Tool")
 
     def on_tool_harmonic_fit(self):
         self.pull_ui_to_host()
@@ -3949,7 +4096,7 @@ class MainWindowController:
                 f"Status: harmonic analysis completed (trend={float(stats.get('trend', np.nan)):.4f})."
             )
 
-        self._run_in_thread("all", _target, "RUNNING HARMONIC TOOL")
+        self._run_in_thread("all", _target, "Running Harmonic Tool")
 
     def on_load_stack_info(self):
         page = self.window.page_preview
@@ -4715,15 +4862,15 @@ class MainWindowController:
                     events["pause"].clear()
                     events["stop"].clear()
                 if err is not None:
-                    self._pending_terminal_status = ("ERROR", "danger")
-                    self.signals.status.emit("ERROR", "danger")
+                    self._pending_terminal_status = ("Error", "danger")
+                    self.signals.status.emit("Error", "danger")
                     if isinstance(err, EarthdataAuthRequired):
                         self.signals.message.emit("earthdata_auth", "Earthdata Authorization", str(err))
                     else:
                         self.signals.message.emit("error", scope.title(), str(err))
                 else:
-                    self._pending_terminal_status = ("READY", "success")
-                    self.signals.status.emit("READY", "success")
+                    self._pending_terminal_status = ("Ready", "success")
+                    self.signals.status.emit("Ready", "success")
 
         t = threading.Thread(target=worker, daemon=True)
         self._threads[scope] = t
@@ -4768,7 +4915,7 @@ class MainWindowController:
             run_pipeline(self.host.cfg, pause_event=pause_event, stop_event=stop_event, progress_cb=_progress)
             self.on_log("[PIPELINE] Full pipeline finished.", "stdout")
 
-        self._run_in_thread("all", _target, "RUNNING PIPELINE")
+        self._run_in_thread("all", _target, "Running Pipeline")
 
     def on_run_basin(self):
         # The Basin page is a scoped analysis entrypoint; keep the hidden
@@ -4781,7 +4928,7 @@ class MainWindowController:
         if not self.host.var_basin_file.get():
             self._show_warning(self.window.translate_text("Basin Analysis"), self.window.translate_text("Please select a basin boundary file first."))
             return
-        self._run_in_thread("basin", self.host.run_basin_analysis, "RUNNING BASIN")
+        self._run_in_thread("basin", self.host.run_basin_analysis, "Running Basin")
 
     def on_run_leakage(self):
         self.pull_ui_to_host()
@@ -4794,7 +4941,7 @@ class MainWindowController:
             self.on_leakage_strategy_changed()
             self.pull_ui_to_host()
             self.on_log("[LEAKAGE] Regional mode has no boundary file; switched to global recovery automatically.", "stderr")
-        self._run_in_thread("leakage", self.host.run_leakage_correction, "RUNNING LEAKAGE")
+        self._run_in_thread("leakage", self.host.run_leakage_correction, "Running Leakage")
 
     def on_pause_active(self):
         scope = self.host._active_scope or "all"
@@ -4814,10 +4961,10 @@ class MainWindowController:
             self.on_log(f"[RUN] Resumed {scope}", "stdout")
         else:
             pause_event.set()
-            self.window.set_top_status("PAUSED", "warning")
+            self.window.set_top_status("Paused", "warning")
             self.window.set_run_progress(-1.0, stage="Paused")
             self.window.set_pause_action_paused(True)
-            self.window.page_dashboard.lbl_dashboard_status.setText("PAUSED")
+            self.window.page_dashboard.lbl_dashboard_status.setText("Paused")
             self.window.page_dashboard.lbl_dashboard_stage.setText("Pipeline execution is paused.")
             self.on_log(f"[RUN] Paused {scope}", "stdout")
         self.window.refresh_translations()
@@ -4830,9 +4977,9 @@ class MainWindowController:
         if scope not in self.host._scope_events:
             return
         self.host._scope_events[scope]["stop"].set()
-        self.window.set_top_status("STOP REQUESTED", "danger")
+        self.window.set_top_status("Stop Requested", "danger")
         self.window.set_run_progress(-1.0, stage="Stopping...")
-        self.window.page_dashboard.lbl_dashboard_status.setText("STOP REQUESTED")
+        self.window.page_dashboard.lbl_dashboard_status.setText("Stop Requested")
         self.window.page_dashboard.lbl_dashboard_stage.setText("Waiting for the running task to stop safely.")
         self.on_log(f"[RUN] Stop requested: {scope}", "stderr")
         self.window.refresh_translations()
@@ -4850,7 +4997,7 @@ class MainWindowController:
         self.window.console_text.clear()
         self.window.filters_text.clear()
         self.window.alerts_text.clear()
-        self.window.set_top_status("READY", "success")
+        self.window.set_top_status("Ready", "success")
         self.window.set_run_progress(0.0, detail="0/0", stage="Idle")
         self.window.top_progress_wrap.setVisible(False)
         self.window.set_run_active(False, text="Idle")
@@ -4910,7 +5057,7 @@ class MainWindowController:
             self.window.page_dashboard.badge_summary_state.setProperty("variant", "warning")
             self.window.page_dashboard.badge_summary_state.style().unpolish(self.window.page_dashboard.badge_summary_state)
             self.window.page_dashboard.badge_summary_state.style().polish(self.window.page_dashboard.badge_summary_state)
-            self.window.page_dashboard.lbl_dashboard_status.setText("RUNNING")
+            self.window.page_dashboard.lbl_dashboard_status.setText("Running")
             self.window.page_dashboard.lbl_dashboard_counts.setText(detail_text.replace("/", " / "))
             self.window.page_dashboard.lbl_dashboard_stage.setText(stage_text)
             self.window.page_dashboard.lbl_active_run_name.setText("Running pipeline")
@@ -4919,8 +5066,8 @@ class MainWindowController:
             self.window.page_dashboard.bar_active_run.setValue(int(round(max(0.0, min(100.0, pct)))))
             self._set_progress_active(self.window.page_dashboard.bar_active_run, pct > 0.0)
             if pct >= 100.0:
-                self.window.set_top_status("FINALIZING OUTPUTS", "warning")
-                self.window.page_dashboard.lbl_dashboard_status.setText("FINALIZING")
+                self.window.set_top_status("Finalizing Outputs", "warning")
+                self.window.page_dashboard.lbl_dashboard_status.setText("Finalizing")
         elif self.host._active_scope == scope:
             self._last_overall_pct = pct
             self._last_overall_detail = detail_text
@@ -4934,7 +5081,7 @@ class MainWindowController:
         self.window.set_top_status(text, variant)
         self.window.page_monitor.lbl_pipeline_status.setText(text)
         self.window.page_dashboard.lbl_dashboard_status.setText(text)
-        if text == "READY":
+        if text.lower() == "ready":
             if getattr(self, "_last_completed_scope", "") == "leakage":
                 self.on_refresh_leakage_preview()
             completed_scope = getattr(self, "_last_completed_scope", "")
@@ -4953,7 +5100,7 @@ class MainWindowController:
             self.window.page_monitor.lbl_last_artifact.setText("Latest Artifact: pipeline finished, inspect outputs/local for generated files.")
             self.window.page_dashboard.lbl_preview_artifact.setText("Latest Artifact: pipeline finished, inspect outputs/local for generated files.")
             QTimer.singleShot(1200, lambda: self.window.set_run_active(False, text="Idle"))
-        elif text == "ERROR":
+        elif text.lower() == "error":
             self.window.set_run_progress(-1.0, detail=self._last_overall_detail or "0/0", stage="Failed")
             self.window.page_dashboard.lbl_dashboard_stage.setText("Run failed. Check Console or the Dashboard output preview for the error trace.")
             self.window.page_dashboard.lbl_active_counts.setText((self._last_overall_detail or "0/0").replace("/", " / "))
@@ -4983,7 +5130,7 @@ class MainWindowController:
     def _date_from_ym(self, text: str) -> str:
         text = str(text or "").strip()
         if len(text) == 7 and text[4] == "-":
-            return f"{text}-01"
+            return text
         return text
 
     @staticmethod

@@ -4,16 +4,21 @@ from __future__ import annotations
 
 from typing import Iterable
 
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QColor, QPainter, QPen
+from PySide6.QtCore import QPointF, QRectF, QSize, Qt
+from PySide6.QtGui import QColor, QIcon, QPainter, QPainterPath, QPen, QPixmap
 from PySide6.QtWidgets import (
+    QComboBox,
+    QDialog,
+    QDialogButtonBox,
     QFrame,
     QGridLayout,
     QHBoxLayout,
     QLabel,
+    QLineEdit,
     QPushButton,
     QProgressBar,
     QSizePolicy,
+    QSpinBox,
     QTableWidget,
     QTableWidgetItem,
     QToolButton,
@@ -22,6 +27,120 @@ from PySide6.QtWidgets import (
 )
 
 from grace_pipeline.ui.qt.theme import COLOR
+
+
+class YearMonthEdit(QLineEdit):
+    """Compact YYYY-MM field backed by a month picker dialog."""
+
+    def __init__(self, value: str = "", placeholder: str = "YYYY-MM", *, allow_when_readonly: bool = True):
+        super().__init__(value)
+        self._allow_when_readonly = bool(allow_when_readonly)
+        self.setPlaceholderText(placeholder)
+        self.setMaxLength(7)
+
+    def mousePressEvent(self, event):  # noqa: N802 - Qt override
+        if self.isEnabled() and (self._allow_when_readonly or not self.isReadOnly()):
+            self.open_month_picker()
+            event.accept()
+            return
+        super().mousePressEvent(event)
+
+    def open_month_picker(self) -> None:
+        text = self.text().strip()
+        year = 2002
+        month = 4
+        if len(text) >= 7 and text[4] == "-":
+            try:
+                year = int(text[:4])
+                month = max(1, min(12, int(text[5:7])))
+            except ValueError:
+                pass
+
+        dialog = QDialog(self)
+        translator = getattr(self.window(), "translate_text", None)
+        dialog.setWindowTitle(translator("Select Month") if callable(translator) else "Select Month")
+        layout = QVBoxLayout(dialog)
+        row = QHBoxLayout()
+        year_spin = QSpinBox()
+        year_spin.setRange(1900, 2100)
+        year_spin.setValue(year)
+        month_combo = QComboBox()
+        for value in range(1, 13):
+            month_combo.addItem(f"{value:02d}", value)
+        month_combo.setCurrentIndex(month - 1)
+        row.addWidget(year_spin, 1)
+        row.addWidget(month_combo, 1)
+        layout.addLayout(row)
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            self.setText(f"{year_spin.value():04d}-{int(month_combo.currentData()):02d}")
+
+
+def build_line_icon(icon_key: str, color: str | None = None, size: int = 22) -> QIcon:
+    """Return a compact line icon for shell controls and navigation."""
+
+    pixmap = QPixmap(size, size)
+    pixmap.fill(Qt.transparent)
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.Antialiasing, True)
+    painter.scale(size / 24.0, size / 24.0)
+    pen = QPen(QColor(color or COLOR["text_muted"]), 1.8, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
+    painter.setPen(pen)
+    painter.setBrush(Qt.NoBrush)
+
+    key = str(icon_key or "").strip().lower()
+    if key == "menu":
+        painter.drawLine(5, 7, 19, 7)
+        painter.drawLine(5, 12, 19, 12)
+        painter.drawLine(5, 17, 19, 17)
+    elif key == "dashboard":
+        for rect in (
+            QRectF(4, 4, 6.5, 6.5),
+            QRectF(13.5, 4, 6.5, 4.5),
+            QRectF(4, 13.5, 6.5, 6.5),
+            QRectF(13.5, 11.5, 6.5, 8.5),
+        ):
+            painter.drawRoundedRect(rect, 1.2, 1.2)
+    elif key in {"processing", "filter"}:
+        for y, knob_x in ((6, 9), (12, 15), (18, 11)):
+            painter.drawLine(4, y, 20, y)
+            painter.setBrush(QColor(color))
+            painter.drawEllipse(QPointF(knob_x, y), 2.2, 2.2)
+            painter.setBrush(Qt.NoBrush)
+    elif key == "leakage":
+        path = QPainterPath()
+        path.moveTo(12, 3.5)
+        path.cubicTo(8.2, 8.2, 6.2, 11.0, 6.2, 14.2)
+        path.cubicTo(6.2, 18.2, 8.7, 20.8, 12.0, 20.8)
+        path.cubicTo(15.3, 20.8, 17.8, 18.2, 17.8, 14.2)
+        path.cubicTo(17.8, 11.0, 15.8, 8.2, 12, 3.5)
+        painter.drawPath(path)
+        painter.drawLine(9.0, 15.0, 15.0, 15.0)
+    elif key == "basin":
+        painter.drawRoundedRect(QRectF(4, 5, 16, 14), 2.0, 2.0)
+        path = QPainterPath()
+        path.moveTo(5.5, 16.5)
+        path.cubicTo(8.0, 12.0, 10.2, 13.8, 12.0, 10.5)
+        path.cubicTo(14.0, 14.0, 16.2, 11.8, 18.5, 16.5)
+        painter.drawPath(path)
+        painter.drawLine(6.0, 8.0, 10.5, 8.0)
+    elif key == "preview":
+        path = QPainterPath()
+        path.moveTo(3.5, 12.0)
+        path.cubicTo(6.5, 7.5, 9.2, 5.8, 12.0, 5.8)
+        path.cubicTo(14.8, 5.8, 17.5, 7.5, 20.5, 12.0)
+        path.cubicTo(17.5, 16.5, 14.8, 18.2, 12.0, 18.2)
+        path.cubicTo(9.2, 18.2, 6.5, 16.5, 3.5, 12.0)
+        painter.drawPath(path)
+        painter.drawEllipse(QPointF(12.0, 12.0), 3.0, 3.0)
+    else:
+        painter.drawRoundedRect(QRectF(5, 5, 14, 14), 3.0, 3.0)
+        painter.drawLine(8, 12, 16, 12)
+    painter.end()
+    return QIcon(pixmap)
 
 
 class NavigationButton(QPushButton):
@@ -35,11 +154,26 @@ class NavigationButton(QPushButton):
         self.setCursor(Qt.PointingHandCursor)
         self.setObjectName("NavButton")
         self.setProperty("skipTextTranslation", True)
+        self.setIconSize(QSize(20, 20))
+        self.refresh_icon()
         self.apply_language(lambda value: value)
 
     def apply_language(self, translator) -> None:
         label = translator(self._nav_label)
-        self.setText(f"{self._nav_icon}  {label}" if self._nav_icon else label)
+        self.refresh_icon()
+        self.setText(label)
+
+    def refresh_icon(self) -> None:
+        color = COLOR["primary"] if self.isChecked() else COLOR["text_muted"]
+        self.setIcon(build_line_icon(self._nav_icon, color))
+
+    def nextCheckState(self) -> None:  # noqa: N802
+        super().nextCheckState()
+        self.refresh_icon()
+
+    def setChecked(self, checked: bool) -> None:  # type: ignore[override]
+        super().setChecked(checked)
+        self.refresh_icon()
 
 
 class ElidedLabel(QLabel):

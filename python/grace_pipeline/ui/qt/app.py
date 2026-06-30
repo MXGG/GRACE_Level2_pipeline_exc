@@ -62,11 +62,11 @@ def start_gui(argv: list[str] | None = None):
     if splash is not None:
         splash.set_progress(12, "Loading runtime environment...")
 
-    app.setStyleSheet(app_stylesheet("system", app=app))
+    app.setStyleSheet(app_stylesheet("blue", app=app))
     _load_windows_fonts()
     preferred_families = [
-        "Segoe UI",
         "Microsoft YaHei UI",
+        "Segoe UI",
         "Microsoft YaHei",
         "Arial",
     ]

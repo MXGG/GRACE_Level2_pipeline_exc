@@ -66,6 +66,7 @@ VersionInfoCopyright={#MyAppCopyright}
 
 [Languages]
 Name: "default"; MessagesFile: "compiler:Default.isl"
+Name: "zh_CN"; MessagesFile: "compiler:Languages\ChineseSimplified.isl"
 
 [Tasks]
 Name: "desktopicon"; Description: "创建桌面快捷方式"; GroupDescription: "附加选项："; Flags: unchecked
