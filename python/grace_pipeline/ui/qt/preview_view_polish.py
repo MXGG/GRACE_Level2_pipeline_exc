@@ -54,6 +54,9 @@ def _is_3d_axes(ax) -> bool:
 
 def _display_grid_enabled(controller) -> bool:
     page = controller.window.page_preview
+    spatial_switch = getattr(page, "chk_enable_spatial_grid", None)
+    if spatial_switch is not None and not spatial_switch.isChecked():
+        return False
     with contextlib.suppress(Exception):
         if hasattr(controller, "_preview_layer_visible"):
             return bool(controller._preview_layer_visible("graticule"))
@@ -94,6 +97,8 @@ def _float_option(page, attr: str, default: float, *, min_value: float | None = 
 
 def _graticule_linestyle(style: str) -> str:
     key = (style or "").strip().lower()
+    if key in {"none", "no line", "无线条", "off", "关闭"}:
+        return "none"
     if key in {"solid", "实线"}:
         return "-"
     if key in {"dotted", "点线"}:
@@ -161,6 +166,8 @@ def _rerender_safely(controller) -> None:
 
 def _sync_display_option_labels(window) -> None:
     page = window.page_preview
+    if hasattr(page, "chk_enable_spatial_grid"):
+        page.chk_enable_spatial_grid.setText(_tr(window, "Enable Spatial Grid", "启用空间网格配置"))
     if hasattr(page, "chk_show_graticule"):
         page.chk_show_graticule.setText(_tr(window, "Enable Graticule", "启用经纬网"))
     if hasattr(page, "chk_show_colorbar"):
@@ -313,30 +320,32 @@ def _draw_2d_graticule_and_labels(controller) -> None:
         lon0, lat0, lat1, lat2 = 0.0, 0.0, 30.0, 60.0
 
     opts = _graticule_options(controller)
+    line_visible = opts["linestyle"] not in {"none", "None", ""} and opts["linewidth"] > 0
     lon_step = opts["lon_interval"]
     lat_step = opts["lat_interval"]
     lat_lines = np.arange(-90 + lat_step, 90, lat_step)
     lon_lines = np.arange(-180, 180 + 0.1, lon_step)
 
-    for lat_line in lat_lines:
-        lons = np.linspace(-180, 180, 721)
-        lats = np.full_like(lons, lat_line, dtype=float)
-        if proj == "PlateCarree":
-            x = normalize_lon_for_plot(lons)
-            y = lats
-        else:
-            x, y = _project_line(controller, proj, lons, lats, lon0=lon0, lat0=lat0, lat1=lat1, lat2=lat2)
-        _plot_2d_line(ax, x, y, color=opts["color"], linewidth=opts["linewidth"], alpha=0.86, linestyle=opts["linestyle"])
+    if line_visible:
+        for lat_line in lat_lines:
+            lons = np.linspace(-180, 180, 721)
+            lats = np.full_like(lons, lat_line, dtype=float)
+            if proj == "PlateCarree":
+                x = normalize_lon_for_plot(lons)
+                y = lats
+            else:
+                x, y = _project_line(controller, proj, lons, lats, lon0=lon0, lat0=lat0, lat1=lat1, lat2=lat2)
+            _plot_2d_line(ax, x, y, color=opts["color"], linewidth=opts["linewidth"], alpha=0.86, linestyle=opts["linestyle"])
 
-    for lon_line in lon_lines:
-        lats = np.linspace(-88, 88, 721)
-        lons = np.full_like(lats, lon_line, dtype=float)
-        if proj == "PlateCarree":
-            x = normalize_lon_for_plot(lons)
-            y = lats
-        else:
-            x, y = _project_line(controller, proj, lons, lats, lon0=lon0, lat0=lat0, lat1=lat1, lat2=lat2)
-        _plot_2d_line(ax, x, y, color=opts["color"], linewidth=opts["linewidth"], alpha=0.86, linestyle=opts["linestyle"])
+        for lon_line in lon_lines:
+            lats = np.linspace(-88, 88, 721)
+            lons = np.full_like(lats, lon_line, dtype=float)
+            if proj == "PlateCarree":
+                x = normalize_lon_for_plot(lons)
+                y = lats
+            else:
+                x, y = _project_line(controller, proj, lons, lats, lon0=lon0, lat0=lat0, lat1=lat1, lat2=lat2)
+            _plot_2d_line(ax, x, y, color=opts["color"], linewidth=opts["linewidth"], alpha=0.86, linestyle=opts["linestyle"])
 
     if _projection_accepts_rectangular_frame(proj):
         _draw_graticule_frame(ax, opts)
@@ -467,30 +476,31 @@ def _draw_3d_graticule_and_coastlines(controller) -> None:
         return
     if _display_grid_enabled(controller):
         opts = _graticule_options(controller)
-        for lat in np.arange(-90 + opts["lat_interval"], 90, opts["lat_interval"]):
-            lons = np.linspace(-180, 180, 361)
-            _plot_3d_lonlat(
-                ax,
-                lons,
-                np.full_like(lons, lat),
-                radius=1.075,
-                color=opts["color"],
-                linewidth=opts["linewidth"],
-                alpha=0.75,
-                linestyle=opts["linestyle"],
-            )
-        for lon in np.arange(-180, 180 + 0.1, opts["lon_interval"]):
-            lats = np.linspace(-85, 85, 241)
-            _plot_3d_lonlat(
-                ax,
-                np.full_like(lats, lon),
-                lats,
-                radius=1.075,
-                color=opts["color"],
-                linewidth=opts["linewidth"],
-                alpha=0.75,
-                linestyle=opts["linestyle"],
-            )
+        if opts["linestyle"] not in {"none", "None", ""} and opts["linewidth"] > 0:
+            for lat in np.arange(-90 + opts["lat_interval"], 90, opts["lat_interval"]):
+                lons = np.linspace(-180, 180, 361)
+                _plot_3d_lonlat(
+                    ax,
+                    lons,
+                    np.full_like(lons, lat),
+                    radius=1.075,
+                    color=opts["color"],
+                    linewidth=opts["linewidth"],
+                    alpha=0.75,
+                    linestyle=opts["linestyle"],
+                )
+            for lon in np.arange(-180, 180 + 0.1, opts["lon_interval"]):
+                lats = np.linspace(-85, 85, 241)
+                _plot_3d_lonlat(
+                    ax,
+                    np.full_like(lats, lon),
+                    lats,
+                    radius=1.075,
+                    color=opts["color"],
+                    linewidth=opts["linewidth"],
+                    alpha=0.75,
+                    linestyle=opts["linestyle"],
+                )
 
     if not _display_coastlines_enabled(controller):
         return

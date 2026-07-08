@@ -351,34 +351,38 @@ QRadioButton::indicator:disabled {{
 }}
 
 QCheckBox[switchRole="true"] {{
-    spacing: 10px;
-    min-height: 24px;
+    spacing: 12px;
+    min-height: 30px;
 }}
 
 QCheckBox[switchRole="true"]::indicator {{
-    width: 38px;
-    height: 20px;
-    border: none;
-    border-radius: 0px;
-    background: transparent;
+    width: 46px;
+    height: 24px;
+    min-width: 46px;
+    max-width: 46px;
+    min-height: 24px;
+    max-height: 24px;
+    border: 1px solid #C9B79C;
+    border-radius: 12px;
+    background: #F5F3EF;
     image: url("{switch_off_icon}");
 }}
 
 QCheckBox[switchRole="true"]::indicator:hover {{
-    border: none;
-    background: transparent;
+    border: 1px solid #B98A4A;
+    background: #FAF4EC;
     image: url("{switch_off_icon}");
 }}
 
 QCheckBox[switchRole="true"]::indicator:checked {{
-    border: none;
-    background: transparent;
+    border: 1px solid #A46A2A;
+    background: #A46A2A;
     image: url("{switch_on_icon}");
 }}
 
 QCheckBox[switchRole="true"]::indicator:disabled {{
-    border: none;
-    background: transparent;
+    border: 1px solid #DDD6CC;
+    background: #F5F3EF;
     image: url("{switch_off_icon}");
 }}
 

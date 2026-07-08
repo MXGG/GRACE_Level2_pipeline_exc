@@ -22,7 +22,9 @@ SPEC_DIR = Path(SPECPATH)
 SRC_DIR = SPEC_DIR
 REPO_ROOT = SRC_DIR.parent
 APP_ICON = REPO_ROOT / "installer" / "grace-l2.ico"
-SPLASH_IMAGE = SRC_DIR / "grace_pipeline" / "ui" / "qt" / "assets" / "splash.png"
+QT_ASSETS_DIR = SRC_DIR / "grace_pipeline" / "ui" / "qt" / "assets"
+SPLASH_IMAGE = QT_ASSETS_DIR / "splash.png"
+QT_ICON_DIR = QT_ASSETS_DIR / "icons"
 
 extra_binaries = []
 extra_binaries += collect_dynamic_libs("netCDF4")
@@ -83,6 +85,8 @@ datas = [
 ]
 if SPLASH_IMAGE.exists():
     datas.append((str(SPLASH_IMAGE), "grace_pipeline/ui/qt/assets"))
+if QT_ICON_DIR.exists():
+    datas.append((str(QT_ICON_DIR), "grace_pipeline/ui/qt/assets/icons"))
 if APP_ICON.exists():
     datas.append((str(APP_ICON), "resources"))
 

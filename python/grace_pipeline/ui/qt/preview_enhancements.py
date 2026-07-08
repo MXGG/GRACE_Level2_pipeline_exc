@@ -254,7 +254,9 @@ def _apply_preview_labels(window) -> None:
         "缩放": _tr(window, "Zoom", "缩放"),
         "Color Scale": _tr(window, "Color Scale Settings", "色带设置"),
         "色标尺": _tr(window, "Color Scale Settings", "色带设置"),
+        "Enable Spatial Grid": _tr(window, "Enable Spatial Grid", "启用空间网格配置"),
         "Spatial Extent": _tr(window, "Spatial Extent", "空间范围"),
+        "Spatial Grid Configuration": _tr(window, "Spatial Grid Configuration", "空间网格配置"),
         "Colormap": _tr(window, "Colormap", "色带"),
         "Minimum": _tr(window, "Minimum", "最小值"),
         "Maximum": _tr(window, "Maximum", "最大值"),
@@ -488,7 +490,10 @@ def _graticule_ui_options(controller) -> dict:
     style_widget = getattr(page, "cmb_graticule_style", None)
     font_widget = getattr(page, "cmb_graticule_font", None)
     style_key = _combo_value(style_widget, "Dashed").strip().lower()
-    linestyle = "-" if style_key in {"solid", "实线"} else (":" if style_key in {"dotted", "点线"} else "--")
+    if style_key in {"none", "no line", "无线条", "off", "关闭"}:
+        linestyle = "none"
+    else:
+        linestyle = "-" if style_key in {"solid", "实线"} else (":" if style_key in {"dotted", "点线"} else "--")
     color_widget = getattr(page, "edit_graticule_color", None)
     labels_widget = getattr(page, "chk_graticule_labels", None)
     font_family = _combo_value(font_widget, "Default").strip()
@@ -511,11 +516,17 @@ def _draw_enhanced_graticule(controller, *, proj, lon0=0.0, lat0=0.0, lat1=30.0,
     if ax is None:
         return
     opts = _graticule_ui_options(controller)
+    line_visible = opts["linestyle"] not in {"none", "None", ""} and opts["linewidth"] > 0
     if proj == "PlateCarree":
         with contextlib.suppress(Exception):
             ax.set_xticks(np.arange(-180, 180 + 0.1, opts["lon_interval"]))
             ax.set_yticks(np.arange(-90, 90 + 0.1, opts["lat_interval"]))
-            ax.grid(True, color=opts["color"], linewidth=opts["linewidth"], linestyle=opts["linestyle"], alpha=0.78, zorder=7)
+            if line_visible:
+                ax.grid(True, color=opts["color"], linewidth=opts["linewidth"], linestyle=opts["linestyle"], alpha=0.78, zorder=7)
+            else:
+                ax.grid(False)
+        return
+    if not line_visible:
         return
     for lat in np.arange(-90 + opts["lat_interval"], 90, opts["lat_interval"]):
         lons = np.linspace(-180, 180, 721)
@@ -617,19 +628,38 @@ def _apply_bbox(controller, grid, lon, lat):
         )
     lon_min, lon_max, lat_min, lat_max = bbox
     lat_min, lat_max = min(lat_min, lat_max), max(lat_min, lat_max)
-    lon_eval = normalize_lon_for_plot(lon, lon_mode=infer_plot_lon_mode(lon))
-    full_lon = abs(lon_max - lon_min) >= 359.0
+    raw_span = lon_max - lon_min
+    if raw_span < 0.0:
+        raw_span += 360.0
+    full_lon = abs(raw_span) >= 359.0
+    lon_mode = "0_360" if lon_min >= 0.0 and (lon_max > 180.0 or lon_min > lon_max) else "-180_180"
+    lon_eval = normalize_lon_for_plot(lon, lon_mode=lon_mode)
+    if lon_mode == "0_360":
+        lon_min_eval = lon_min % 360.0
+        lon_max_eval = lon_max % 360.0
+        if abs(lon_max - 360.0) < 1.0e-9:
+            lon_max_eval = 360.0
+    else:
+        lon_min_eval = float(normalize_lon_for_plot([lon_min], lon_mode="-180_180")[0])
+        lon_max_eval = float(normalize_lon_for_plot([lon_max], lon_mode="-180_180")[0])
+        if abs(lon_max - 180.0) < 1.0e-9:
+            lon_max_eval = 180.0
     if full_lon:
         lon_mask = np.ones_like(lon, dtype=bool)
-    elif lon_min <= lon_max:
-        lon_mask = (lon_eval >= lon_min) & (lon_eval <= lon_max)
+    elif lon_mode == "0_360" and abs(lon_max_eval - 360.0) < 1.0e-9:
+        lon_mask = lon_eval >= lon_min_eval
+    elif lon_min_eval <= lon_max_eval:
+        lon_mask = (lon_eval >= lon_min_eval) & (lon_eval <= lon_max_eval)
     else:
-        lon_mask = (lon_eval >= lon_min) | (lon_eval <= lon_max)
+        lon_mask = (lon_eval >= lon_min_eval) | (lon_eval <= lon_max_eval)
     lat_mask = (lat >= lat_min) & (lat <= lat_max)
     if np.any(lon_mask) and np.any(lat_mask):
-        lon = lon[lon_mask]
+        lon = normalize_lon_for_plot(lon[lon_mask], lon_mode="-180_180")
         lat = lat[lat_mask]
         grid = grid[np.ix_(lon_mask, lat_mask)]
+        order = np.argsort(lon)
+        lon = lon[order]
+        grid = grid[order, :]
     return grid, lon, lat, bbox
 
 
@@ -750,9 +780,11 @@ def _render_2d_fallback(controller) -> None:
     elif np.any(finite_xy):
         im = ax.scatter(x[finite_xy], y[finite_xy], c=grid_plot[finite_xy], s=9, marker="s", linewidths=0, cmap=cmap, vmin=cmin, vmax=cmax, zorder=2)
     ax.set_axis_off()
-    _draw_enhanced_graticule(controller, proj=proj, lon0=lon0, lat0=lat0, lat1=lat1, lat2=lat2)
+    spatial_grid_enabled = bool(getattr(page, "chk_enable_spatial_grid", None) is None or page.chk_enable_spatial_grid.isChecked())
+    if spatial_grid_enabled and _preview_layer_visible(controller, "graticule", fallback=getattr(page, "chk_layer_grid", None) is None or page.chk_layer_grid.isChecked()):
+        _draw_enhanced_graticule(controller, proj=proj, lon0=lon0, lat0=lat0, lat1=lat1, lat2=lat2)
     _draw_enhanced_coastlines(controller, proj=proj, lon0=lon0, lat0=lat0, lat1=lat1, lat2=lat2, bbox=bbox)
-    if im is not None:
+    if im is not None and _preview_layer_visible(controller, "colorbar", fallback=getattr(page, "chk_show_colorbar", None) is None or page.chk_show_colorbar.isChecked()):
         controller._figure.colorbar(im, ax=ax, shrink=0.82, pad=0.02)
     finite = np.isfinite(x) & np.isfinite(y)
     if np.any(finite):
@@ -841,7 +873,8 @@ def _render_3d_globe(controller) -> None:
         coastline_segments = _draw_3d_coastlines(controller, ax, params=params)
         with contextlib.suppress(Exception):
             controller.on_log(f"[PREVIEW] 3D coastline drawn segments = {coastline_segments}", "stdout")
-    if _preview_layer_visible(controller, "graticule", fallback=getattr(page, "chk_layer_grid", None) is None or page.chk_layer_grid.isChecked()):
+    spatial_grid_enabled = bool(getattr(page, "chk_enable_spatial_grid", None) is None or page.chk_enable_spatial_grid.isChecked())
+    if spatial_grid_enabled and _preview_layer_visible(controller, "graticule", fallback=getattr(page, "chk_layer_grid", None) is None or page.chk_layer_grid.isChecked()):
         _draw_3d_graticule(ax, params=params, options=_graticule_ui_options(controller))
     _draw_3d_boundary_layers(controller, ax, params=params)
     controller._preview_globe_params = params
@@ -907,6 +940,8 @@ def _draw_3d_graticule(ax, *, params: dict, options: dict | None = None) -> None
         "linestyle": "--",
         "color": "#8aa4b4",
     }
+    if options.get("linestyle") in {"none", "None", ""} or float(options.get("linewidth", 0.0) or 0.0) <= 0.0:
+        return
     radius = _line_radius(params, 0.010)
     for lat in np.arange(-90 + options["lat_interval"], 90, options["lat_interval"]):
         lons = np.linspace(-180, 180, 361)
@@ -1237,14 +1272,10 @@ def _enhanced_load_stack_info(self) -> None:
         page.slider_time_index.setValue(0)
         page.slider_time_index.blockSignals(False)
         self._sync_preview_time_label(0)
-        _t_years, time_labels = self.host._resolve_time(info.get("t"), nt, meta=meta)
-        first_label = str(time_labels[0]) if time_labels else "-"
-        last_label = str(time_labels[min(len(time_labels), nt) - 1]) if time_labels else "-"
-        unit = _unit_from_meta(meta, target_var)
         if _is_zh(self.window):
-            page.lbl_stack_info.setText(f"尺寸 {shape[0]} × {shape[1]} × {nt}\n变量 {target_var} | 单位 {unit}\n时间 {first_label} — {last_label}")
+            page.lbl_stack_info.setText(f"尺寸 {shape[0]} × {shape[1]} × {nt}")
         else:
-            page.lbl_stack_info.setText(f"Size {shape[0]} × {shape[1]} × {nt}\nVariable {target_var} | Unit {unit}\nTime {first_label} — {last_label}")
+            page.lbl_stack_info.setText(f"Size {shape[0]} × {shape[1]} × {nt}")
         self._apply_preview_bbox_from_info(info)
         _apply_preview_labels(self.window)
         self.on_log(f"[PREVIEW] Data loaded: {path}", "stdout")
@@ -1254,16 +1285,6 @@ def _enhanced_load_stack_info(self) -> None:
 
 
 def _enhanced_var_changed(self) -> None:
-    page = self.window.page_preview
-    active = page.cmb_data_var.currentText().strip() or "ewh"
-    text = page.lbl_stack_info.text().strip()
-    unit = _current_unit(self)
-    lines = text.splitlines() if text else []
-    if len(lines) >= 2 and (lines[1].startswith("变量") or lines[1].startswith("Variable")):
-        lines[1] = f"变量 {active} | 单位 {unit}" if _is_zh(self.window) else f"Variable {active} | Unit {unit}"
-        page.lbl_stack_info.setText("\n".join(lines))
-    elif not text:
-        page.lbl_stack_info.setText(f"变量 {active} | 单位 {unit}" if _is_zh(self.window) else f"Variable {active} | Unit {unit}")
     _apply_preview_labels(self.window)
 
 

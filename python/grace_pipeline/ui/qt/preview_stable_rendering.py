@@ -68,6 +68,9 @@ def _visible_layers(controller, *layer_types: str):
 
 def _show_grid(controller) -> bool:
     page = controller.window.page_preview
+    spatial_switch = getattr(page, "chk_enable_spatial_grid", None)
+    if spatial_switch is not None and not spatial_switch.isChecked():
+        return False
     fallback = bool(getattr(page, "chk_layer_grid", None) and page.chk_layer_grid.isChecked())
     return _show_layer(controller, "graticule", fallback=fallback)
 
@@ -131,6 +134,8 @@ def _project(controller, proj: str, lon, lat, *, lon0=0.0, lat0=0.0, lat1=30.0, 
 
 
 def _line(ax, x, y, *, color, linewidth, alpha=1.0, linestyle="-", zorder=20):
+    if str(linestyle or "").strip().lower() in {"none", "no line", "无线条", "off", "关闭"}:
+        return
     x = np.asarray(x, dtype=float)
     y = np.asarray(y, dtype=float)
     ok = np.isfinite(x) & np.isfinite(y)
@@ -308,10 +313,12 @@ def _draw_imported_raster_layer(controller, layer, idx, proj, lon0, lat0, lat1, 
     if not Path(path).exists():
         return None
     with contextlib.suppress(Exception):
+        meta = dict(getattr(layer, "metadata", {}) or {})
+        active_var = str(meta.get("active_var") or page.cmb_data_var.currentText().strip() or "").strip() or None
         grid, lon, lat, _t_val, _meta = load_stack_slice_any(
             path,
             time_index=idx,
-            active_var=page.cmb_data_var.currentText().strip() or None,
+            active_var=active_var,
         )
         if grid is None or lon is None or lat is None:
             return None
@@ -325,6 +332,7 @@ def _draw_imported_raster_layer(controller, layer, idx, proj, lon0, lat0, lat1, 
         grid_plot = grid.T if grid.shape == (lon.size, lat.size) else np.squeeze(grid)
         x, y = _project(controller, proj, lon2d, lat2d, lon0=lon0, lat0=lat0, lat1=lat1, lat2=lat2)
         alpha = float(getattr(layer, "opacity", 0.72) or 0.72)
+        zorder = 6 + min(9, max(0, int(getattr(layer, "zorder", 0) or 0) // 10))
         return controller._ax.pcolormesh(
             x,
             y,
@@ -334,7 +342,7 @@ def _draw_imported_raster_layer(controller, layer, idx, proj, lon0, lat0, lat1, 
             vmin=cmin,
             vmax=cmax,
             alpha=max(0.05, min(1.0, alpha)),
-            zorder=int(getattr(layer, "zorder", 5) or 5),
+            zorder=zorder,
         )
     return None
 
@@ -398,7 +406,10 @@ def _render_manual_2d(controller) -> None:
 
     layer_queue = []
     with contextlib.suppress(Exception):
-        layer_queue = controller._preview_sorted_layers(visible_only=True)
+        if hasattr(controller, "_preview_render_layers"):
+            layer_queue = controller._preview_render_layers(visible_only=True)
+        else:
+            layer_queue = controller._preview_sorted_layers(visible_only=True)
     if not layer_queue:
         layer_queue = []
 
@@ -415,7 +426,7 @@ def _render_manual_2d(controller) -> None:
                     cmap=cmap,
                     vmin=cmin,
                     vmax=cmax,
-                    zorder=int(getattr(layer, "zorder", 2) or 2),
+                    zorder=2,
                 )
             elif np.any(finite_xy):
                 im = ax.scatter(
@@ -428,18 +439,18 @@ def _render_manual_2d(controller) -> None:
                     cmap=cmap,
                     vmin=cmin,
                     vmax=cmax,
-                    zorder=int(getattr(layer, "zorder", 2) or 2),
+                    zorder=2,
                 )
         elif layer_type == "raster":
             overlay_im = _draw_imported_raster_layer(controller, layer, idx, proj, lon0, lat0, lat1, lat2, cmap, cmin, cmax)
             if im is None and overlay_im is not None:
                 im = overlay_im
         elif layer_type == "coastline":
-            _draw_coastlines(controller, proj, lon0, lat0, lat1, lat2, zorder=int(getattr(layer, "zorder", 32) or 32))
+            _draw_coastlines(controller, proj, lon0, lat0, lat1, lat2, zorder=max(30, int(getattr(layer, "zorder", 32) or 32)))
         elif layer_type == "graticule":
-            _draw_graticule(controller, proj, lon0, lat0, lat1, lat2, zorder=int(getattr(layer, "zorder", 25) or 25))
+            _draw_graticule(controller, proj, lon0, lat0, lat1, lat2, zorder=max(45, int(getattr(layer, "zorder", 25) or 25)))
         elif layer_type in {"boundary", "shapefile"}:
-            _draw_boundary_layer(controller, layer, proj, lon0, lat0, lat1, lat2, _bbox, zorder=int(getattr(layer, "zorder", 40) or 40))
+            _draw_boundary_layer(controller, layer, proj, lon0, lat0, lat1, lat2, _bbox, zorder=max(35, int(getattr(layer, "zorder", 40) or 40)))
 
     if not layer_queue and _show_base_raster(controller):
         finite_xy = np.isfinite(x) & np.isfinite(y) & np.isfinite(grid_plot)
@@ -546,9 +557,60 @@ def _extent_from_page(controller) -> list[float]:
     ]
 
 
+def _extent_lon_span(lon_min: float, lon_max: float) -> float:
+    raw_span = float(lon_max) - float(lon_min)
+    if raw_span < 0.0:
+        raw_span += 360.0
+    return abs(raw_span)
+
+
+def _extent_uses_0360(extent: list[float] | tuple[float, ...]) -> bool:
+    lon_min, lon_max = float(extent[0]), float(extent[1])
+    return lon_min >= 0.0 and (lon_max > 180.0 or lon_min > lon_max)
+
+
+def _normalize_extent_lons(extent: list[float] | tuple[float, ...], lon_mode: str) -> tuple[float, float, float, float]:
+    lon_min, lon_max, lat_min, lat_max = [float(v) for v in extent]
+    lat_min, lat_max = min(lat_min, lat_max), max(lat_min, lat_max)
+    if lon_mode == "0_360":
+        lon_min = lon_min % 360.0
+        lon_max = lon_max % 360.0
+        if abs(float(extent[1]) - 360.0) < 1.0e-9:
+            lon_max = 360.0
+    else:
+        lon_min = float(normalize_lon_for_plot([lon_min], lon_mode="-180_180")[0])
+        lon_max = float(normalize_lon_for_plot([lon_max], lon_mode="-180_180")[0])
+        if abs(float(extent[1]) - 180.0) < 1.0e-9:
+            lon_max = 180.0
+    return lon_min, lon_max, lat_min, lat_max
+
+
+def _cartopy_display_extent(extent: list[float] | tuple[float, ...] | None) -> list[float] | None:
+    if extent is None:
+        return None
+    lon_min_raw, lon_max_raw, lat_min, lat_max = [float(v) for v in extent]
+    lat_min, lat_max = min(lat_min, lat_max), max(lat_min, lat_max)
+    span = _extent_lon_span(lon_min_raw, lon_max_raw)
+    if span >= 359.0:
+        return [-180.0, 180.0, lat_min, lat_max]
+
+    lon_min = float(normalize_lon_for_plot([lon_min_raw], lon_mode="-180_180")[0])
+    lon_max = float(normalize_lon_for_plot([lon_max_raw], lon_mode="-180_180")[0])
+    if abs(lon_max_raw - 180.0) < 1.0e-9 or abs(lon_max_raw - 360.0) < 1.0e-9:
+        lon_max = 180.0 if lon_min >= 0.0 else 0.0
+
+    # A wrapped interval cannot be represented as one PlateCarree extent.
+    # Keep a global frame; the grid itself is still cropped before drawing.
+    if lon_min > lon_max:
+        return [-180.0, 180.0, lat_min, lat_max]
+    return [lon_min, lon_max, lat_min, lat_max]
+
+
 def _resolve_projection_extent(controller, label: str, params: dict, bbox) -> tuple[list[float] | None, str | None]:
     spec = projection_spec(label)
     has_extent_param = "extent" in spec.get("view_params", [])
+    page = controller.window.page_preview
+    custom_extent = bool(getattr(page, "chk_auto_region", None) is not None and not page.chk_auto_region.isChecked())
     if has_extent_param and isinstance(params.get("extent"), (list, tuple)) and len(params["extent"]) == 4:
         extent = [float(v) for v in params["extent"]]
     elif bbox is not None:
@@ -556,7 +618,7 @@ def _resolve_projection_extent(controller, label: str, params: dict, bbox) -> tu
     else:
         extent = _extent_from_page(controller)
 
-    if not has_extent_param and spec.get("recommended_scope") == "global":
+    if not custom_extent and not has_extent_param and spec.get("recommended_scope") == "global":
         return None, None
 
     if not projection_supports_global_extent(label) and is_global_extent(extent):
@@ -572,15 +634,24 @@ def _resolve_projection_extent(controller, label: str, params: dict, bbox) -> tu
 def _crop_grid_to_extent(grid, lon, lat, extent):
     if extent is None:
         return grid, lon, lat
-    lon_min, lon_max, lat_min, lat_max = [float(v) for v in extent]
-    lon_eval = normalize_lon_for_plot(lon, lon_mode="-180_180")
-    if lon_min <= lon_max:
+    lon_mode = "0_360" if _extent_uses_0360(extent) else "-180_180"
+    lon_min, lon_max, lat_min, lat_max = _normalize_extent_lons(extent, lon_mode)
+    lon_eval = normalize_lon_for_plot(lon, lon_mode=lon_mode)
+    full_lon = _extent_lon_span(float(extent[0]), float(extent[1])) >= 359.0
+    if full_lon:
+        lon_mask = np.ones_like(lon_eval, dtype=bool)
+    elif lon_mode == "0_360" and abs(lon_max - 360.0) < 1.0e-9:
+        lon_mask = lon_eval >= lon_min
+    elif lon_min <= lon_max:
         lon_mask = (lon_eval >= lon_min) & (lon_eval <= lon_max)
     else:
         lon_mask = (lon_eval >= lon_min) | (lon_eval <= lon_max)
     lat_mask = (lat >= min(lat_min, lat_max)) & (lat <= max(lat_min, lat_max))
     if np.any(lon_mask) and np.any(lat_mask):
-        return grid[np.ix_(lon_mask, lat_mask)], lon[lon_mask], lat[lat_mask]
+        cropped_grid = grid[np.ix_(lon_mask, lat_mask)]
+        cropped_lon = normalize_lon_for_plot(lon[lon_mask], lon_mode="-180_180")
+        order = np.argsort(cropped_lon)
+        return cropped_grid[order, :], cropped_lon[order], lat[lat_mask]
     return grid, lon, lat
 
 
@@ -622,13 +693,14 @@ def _draw_cartopy_graticule(controller, ax, data_crs, *, zorder: int) -> None:
         return
     try:
         opts = _graticule_options(controller)
+        line_visible = opts["linestyle"] not in {"none", "None", ""} and opts["linewidth"] > 0
         gl = ax.gridlines(
             crs=data_crs,
             draw_labels=bool(opts["show_labels"]),
-            linewidth=opts["linewidth"],
+            linewidth=opts["linewidth"] if line_visible else 0.0,
             color=opts["color"],
-            alpha=0.76,
-            linestyle=opts["linestyle"],
+            alpha=0.76 if line_visible else 0.0,
+            linestyle=opts["linestyle"] if line_visible else "-",
             zorder=zorder,
         )
         gl.xlocator = mticker.FixedLocator(np.arange(-180, 180 + 0.1, opts["lon_interval"]))
@@ -667,7 +739,9 @@ def _draw_cartopy_imported_raster(controller, ax, data_crs, layer, idx, cmap, cm
     if not path or Path(path).suffix.lower() not in {".nc", ".nc4", ".cdf", ".h5", ".hdf5", ".hdf", ".mat"} or not Path(path).exists():
         return None
     try:
-        grid, lon, lat, _t_val, _meta = load_stack_slice_any(path, time_index=idx, active_var=page.cmb_data_var.currentText().strip() or None)
+        meta = dict(getattr(layer, "metadata", {}) or {})
+        active_var = str(meta.get("active_var") or page.cmb_data_var.currentText().strip() or "").strip() or None
+        grid, lon, lat, _t_val, _meta = load_stack_slice_any(path, time_index=idx, active_var=active_var)
         if grid is None or lon is None or lat is None:
             return None
         grid = np.asarray(grid, dtype=float)
@@ -678,6 +752,7 @@ def _draw_cartopy_imported_raster(controller, ax, data_crs, layer, idx, cmap, cm
         lon, grid = _normalize_grid_longitudes(lon, grid)
         lon2d, lat2d = np.meshgrid(lon, lat)
         grid_plot = grid.T if grid.shape == (lon.size, lat.size) else np.squeeze(grid)
+        zorder = 6 + min(9, max(0, int(getattr(layer, "zorder", 0) or 0) // 10))
         return ax.pcolormesh(
             lon2d,
             lat2d,
@@ -688,7 +763,7 @@ def _draw_cartopy_imported_raster(controller, ax, data_crs, layer, idx, cmap, cm
             vmin=cmin,
             vmax=cmax,
             alpha=max(0.05, min(1.0, float(getattr(layer, "opacity", 0.72) or 0.72))),
-            zorder=int(getattr(layer, "zorder", 5) or 5),
+            zorder=zorder,
         )
     except Exception as exc:
         with contextlib.suppress(Exception):
@@ -736,7 +811,12 @@ def _render_cartopy_2d(controller) -> None:
     if warning:
         with contextlib.suppress(Exception):
             controller.on_log(f"[PREVIEW] {warning}", "stderr")
-    if extent is not None and not spec.get("supports_global_extent", True):
+    should_crop_extent = extent is not None and (
+        getattr(page, "chk_auto_region", None) is None
+        or not page.chk_auto_region.isChecked()
+        or not spec.get("supports_global_extent", True)
+    )
+    if should_crop_extent:
         grid, lon, lat = _crop_grid_to_extent(grid, lon, lat, extent)
     if lon.size < 2 or lat.size < 2:
         raise RuntimeError("Selected extent does not contain enough grid cells.")
@@ -758,23 +838,26 @@ def _render_cartopy_2d(controller) -> None:
     im = None
     layer_queue = []
     with contextlib.suppress(Exception):
-        layer_queue = controller._preview_sorted_layers(visible_only=True)
+        if hasattr(controller, "_preview_render_layers"):
+            layer_queue = controller._preview_render_layers(visible_only=True)
+        else:
+            layer_queue = controller._preview_sorted_layers(visible_only=True)
 
     for layer in layer_queue:
         layer_type = getattr(layer, "type", "")
         zorder = int(getattr(layer, "zorder", 10) or 10)
         if layer_type == "raster" and not getattr(layer, "path", None):
-            im = ax.pcolormesh(lon2d, lat2d, grid_plot, transform=data_crs, shading="auto", cmap=cmap, vmin=cmin, vmax=cmax, zorder=zorder)
+            im = ax.pcolormesh(lon2d, lat2d, grid_plot, transform=data_crs, shading="auto", cmap=cmap, vmin=cmin, vmax=cmax, zorder=2)
         elif layer_type == "raster":
             overlay_im = _draw_cartopy_imported_raster(controller, ax, data_crs, layer, idx, cmap, cmin, cmax)
             if im is None and overlay_im is not None:
                 im = overlay_im
         elif layer_type == "coastline":
-            _draw_cartopy_coastlines(controller, ax, data_crs, zorder=zorder)
+            _draw_cartopy_coastlines(controller, ax, data_crs, zorder=max(30, zorder))
         elif layer_type == "graticule":
-            _draw_cartopy_graticule(controller, ax, data_crs, zorder=zorder)
+            _draw_cartopy_graticule(controller, ax, data_crs, zorder=max(45, zorder))
         elif layer_type in {"boundary", "shapefile"}:
-            _draw_cartopy_boundary_layer(controller, ax, data_crs, layer, zorder=zorder)
+            _draw_cartopy_boundary_layer(controller, ax, data_crs, layer, zorder=max(35, zorder))
 
     if not layer_queue and _show_base_raster(controller):
         im = ax.pcolormesh(lon2d, lat2d, grid_plot, transform=data_crs, shading="auto", cmap=cmap, vmin=cmin, vmax=cmax, zorder=2)
@@ -782,10 +865,11 @@ def _render_cartopy_2d(controller) -> None:
         _draw_cartopy_graticule(controller, ax, data_crs, zorder=30)
 
     try:
-        if extent is None:
+        display_extent = _cartopy_display_extent(extent)
+        if display_extent is None:
             ax.set_global()
         else:
-            ax.set_extent(extent, crs=data_crs)
+            ax.set_extent(display_extent, crs=data_crs)
     except Exception as exc:
         with contextlib.suppress(Exception):
             controller.on_log(f"[PREVIEW] Extent failed for {label}: {extent}: {exc}", "stderr")
@@ -804,9 +888,17 @@ def _render_cartopy_2d(controller) -> None:
     else:
         ax.set_position([0.035, 0.06, 0.92, 0.86])
 
+    pick_x = np.asarray(lon2d, dtype=float)
+    pick_y = np.asarray(lat2d, dtype=float)
+    with contextlib.suppress(Exception):
+        points = crs.transform_points(data_crs, pick_x, pick_y)
+        if points is not None and points.shape[-1] >= 2:
+            pick_x = points[..., 0]
+            pick_y = points[..., 1]
+
     controller._preview_pick_state = {
-        "x": np.asarray(lon2d, dtype=float),
-        "y": np.asarray(lat2d, dtype=float),
+        "x": np.asarray(pick_x, dtype=float),
+        "y": np.asarray(pick_y, dtype=float),
         "lon": np.asarray(lon2d, dtype=float),
         "lat": np.asarray(lat2d, dtype=float),
         "grid": np.asarray(grid_plot, dtype=float),

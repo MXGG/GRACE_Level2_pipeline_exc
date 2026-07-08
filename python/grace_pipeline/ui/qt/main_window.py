@@ -677,8 +677,8 @@ QRadioButton::indicator {{
     height: 16px;
 }}
 QCheckBox[switchRole="true"]::indicator {{
-    width: 38px;
-    height: 20px;
+    width: 46px;
+    height: 24px;
 }}
 """
 

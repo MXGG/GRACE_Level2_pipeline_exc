@@ -1058,6 +1058,10 @@ class MainWindowController:
         w.page_preview.slider_time_index.valueChanged.connect(self.on_preview_index_changed)
         w.page_preview.cmb_data_var.currentTextChanged.connect(lambda _t: self.on_preview_var_changed())
         w.page_preview.chk_auto_region.toggled.connect(self.on_preview_region_mode_changed)
+        if hasattr(w.page_preview, "chk_enable_spatial_grid"):
+            w.page_preview.chk_enable_spatial_grid.toggled.connect(
+                lambda _checked: self._refresh_preview_after_layer_change()
+            )
         w.page_preview.btn_overlay_add.clicked.connect(self.on_add_preview_overlay_layer)
         if hasattr(w.page_preview, "chk_show_graticule"):
             w.page_preview.chk_show_graticule.toggled.connect(
@@ -1116,6 +1120,8 @@ class MainWindowController:
 
         self._figure = Figure(figsize=(10, 6), dpi=100)
         self._canvas = FigureCanvasQTAgg(self._figure)
+        self._canvas.setMouseTracking(True)
+        self._canvas.setAttribute(Qt.WA_Hover, True)
         self._nav_toolbar = NavigationToolbar2QT(self._canvas, self.window)
         self._nav_toolbar.setMovable(False)
         for action in list(self._nav_toolbar.actions()):
@@ -4955,11 +4961,42 @@ class MainWindowController:
     def _preview_layer_name(self, layer: PreviewLayer) -> str:
         return self.window.translate_text(layer.name)
 
+    def _preview_layer_config_text(self, layer: PreviewLayer) -> str:
+        meta = dict(getattr(layer, "metadata", {}) or {})
+        if layer.type == "raster":
+            var_name = str(meta.get("active_var") or "").strip()
+            opacity = max(0.0, min(1.0, float(getattr(layer, "opacity", 1.0) or 1.0)))
+            parts = []
+            if var_name:
+                parts.append(f"ƒ {var_name}")
+            if getattr(layer, "path", None):
+                parts.append(f"α {int(round(opacity * 100))}%")
+            return "  ".join(parts) or "ƒ current"
+        if layer.type in {"boundary", "shapefile"}:
+            field = str(meta.get("field") or "").strip()
+            return f"◇ {field}" if field else "◇ file"
+        if layer.type == "coastline":
+            return "〰 line"
+        return ""
+
     def _preview_sorted_layers(self, *, visible_only: bool = False) -> list[PreviewLayer]:
         layers = sorted(self.preview_layers, key=lambda item: item.zorder)
         if visible_only:
             layers = [layer for layer in layers if layer.visible]
         return layers
+
+    def _preview_render_layers(self, *, visible_only: bool = False) -> list[PreviewLayer]:
+        priority = {
+            "raster": 0,
+            "coastline": 20,
+            "boundary": 30,
+            "shapefile": 30,
+            "graticule": 40,
+            "annotation": 50,
+            "colorbar": 100,
+        }
+        layers = self._preview_sorted_layers(visible_only=visible_only)
+        return sorted(layers, key=lambda item: (priority.get(item.type, 60), item.zorder))
 
     def _normalize_preview_layer_zorders(self) -> None:
         for index, layer in enumerate(self._preview_sorted_layers()):
@@ -5052,6 +5089,7 @@ class MainWindowController:
                 "",
                 self.window.translate_text("Layer"),
                 self.window.translate_text("Type"),
+                self.window.translate_text("Config"),
                 self.window.translate_text("Actions"),
             ])
             table.setRowCount(0)
@@ -5072,6 +5110,12 @@ class MainWindowController:
                 type_item.setFlags(type_item.flags() & ~Qt.ItemIsEditable)
                 table.setItem(row, 2, type_item)
 
+                config_item = QTableWidgetItem(self._preview_layer_config_text(layer))
+                config_item.setFlags(config_item.flags() & ~Qt.ItemIsEditable)
+                if layer.path:
+                    config_item.setToolTip(str(layer.path))
+                table.setItem(row, 3, config_item)
+
                 actions = QWidget()
                 actions.setObjectName("LayerActionCell")
                 layout = QHBoxLayout(actions)
@@ -5083,7 +5127,7 @@ class MainWindowController:
                 delete_button = self._layer_action_button("×", "Delete", lambda _=False, layer_id=layer.id: self._delete_preview_layer(layer_id))
                 delete_button.setEnabled(layer.removable)
                 layout.addWidget(delete_button)
-                table.setCellWidget(row, 3, actions)
+                table.setCellWidget(row, 4, actions)
                 table.setRowHeight(row, 34)
                 if selected_layer_id and selected_layer_id == layer.id:
                     table.selectRow(row)
@@ -5166,11 +5210,76 @@ class MainWindowController:
         )
         if not path:
             return
-        self._add_preview_overlay_layer(path)
+        suffix = Path(path).suffix.lower()
+        layer_type = "boundary" if suffix in {".shp", ".bln", ".txt"} else "raster"
+        options = self._prompt_preview_layer_import_options(path, layer_type)
+        if options is None:
+            return
+        self._add_preview_overlay_layer(path, metadata=options.get("metadata"), opacity=options.get("opacity"))
         self._sync_preview_overlay_controls()
         self._refresh_preview_after_layer_change()
 
-    def _add_preview_overlay_layer(self, path: str, visible: bool = True):
+    def _probe_preview_layer_variables(self, path: str) -> tuple[list[str], str | None]:
+        variables: list[str] = []
+        active_var: str | None = None
+        with contextlib.suppress(Exception):
+            _shape, _lon, _lat, _t, meta = probe_stack_any(path, load_stack_any)
+            meta = dict(meta or {})
+            raw_variables = meta.get("data_var_names") or []
+            variables = [str(item) for item in raw_variables if str(item).strip()]
+            active_var = str(meta.get("active_var") or "").strip() or None
+        if active_var and active_var not in variables:
+            variables.insert(0, active_var)
+        variables = list(dict.fromkeys(variables))
+        return variables, active_var
+
+    def _prompt_preview_layer_import_options(self, path: str, layer_type: str) -> dict | None:
+        if layer_type != "raster":
+            return {"metadata": {}, "opacity": 1.0}
+        variables, active_var = self._probe_preview_layer_variables(path)
+        if not variables:
+            variables = [self.window.page_preview.cmb_data_var.currentText().strip() or "ewh"]
+            active_var = variables[0]
+
+        dialog = QDialog(self.window)
+        dialog.setWindowTitle(self.window.translate_text("Import Layer"))
+        dialog.setModal(True)
+        layout = QVBoxLayout(dialog)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(10)
+        title = QLabel(Path(path).name)
+        title.setObjectName("SectionTitle")
+        layout.addWidget(title)
+        form = QFormLayout()
+        form.setContentsMargins(0, 0, 0, 0)
+        combo_var = QComboBox()
+        combo_var.addItems(variables)
+        if active_var and active_var in variables:
+            combo_var.setCurrentText(active_var)
+        opacity_spin = QDoubleSpinBox()
+        opacity_spin.setRange(0.05, 1.0)
+        opacity_spin.setSingleStep(0.05)
+        opacity_spin.setDecimals(2)
+        opacity_spin.setValue(0.72)
+        form.addRow(self.window.translate_text("Plot Variable"), combo_var)
+        form.addRow(self.window.translate_text("Opacity"), opacity_spin)
+        layout.addLayout(form)
+        hint = QLabel(self.window.translate_text("The layer uses the current preview colormap and value range."))
+        hint.setObjectName("MutedText")
+        hint.setWordWrap(True)
+        layout.addWidget(hint)
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+        if dialog.exec() != QDialog.Accepted:
+            return None
+        return {
+            "metadata": {"active_var": combo_var.currentText().strip()},
+            "opacity": float(opacity_spin.value()),
+        }
+
+    def _add_preview_overlay_layer(self, path: str, visible: bool = True, metadata: dict | None = None, opacity: float | None = None):
         clean_path = str(path or "").strip()
         if not clean_path:
             return
@@ -5178,11 +5287,19 @@ class MainWindowController:
         for layer in self.preview_layers:
             if str(layer.path or "") == str(resolved):
                 layer.visible = bool(visible)
+                if metadata:
+                    layer.metadata.update(metadata)
+                if opacity is not None:
+                    layer.opacity = float(opacity)
                 self._render_preview_layer_table(selected_layer_id=layer.id)
                 return
         suffix = Path(resolved).suffix.lower()
         layer_type = "boundary" if suffix in {".shp", ".bln", ".txt"} else "raster"
-        zorder = (max((layer.zorder for layer in self.preview_layers), default=0) + 10)
+        if layer_type == "raster":
+            base = [layer.zorder for layer in self.preview_layers if layer.type == "raster"]
+            zorder = (max(base, default=0) + 10)
+        else:
+            zorder = (max((layer.zorder for layer in self.preview_layers), default=0) + 10)
         layer = PreviewLayer(
             id=f"layer-{uuid4().hex[:10]}",
             name=Path(resolved).name,
@@ -5191,7 +5308,8 @@ class MainWindowController:
             visible=bool(visible),
             zorder=zorder,
             removable=True,
-            opacity=0.72 if layer_type == "raster" else 1.0,
+            opacity=float(opacity) if opacity is not None else (0.72 if layer_type == "raster" else 1.0),
+            metadata=dict(metadata or {}),
         )
         self.preview_layers.append(layer)
         self._render_preview_layer_table(selected_layer_id=layer.id)
@@ -5628,24 +5746,56 @@ class MainWindowController:
         state = getattr(self, "_preview_pick_state", None)
         if state is None or event is None:
             return
+        if getattr(event, "inaxes", None) is not getattr(self, "_ax", None):
+            return
         xdata = event.xdata
         ydata = event.ydata
-        if (xdata is None or ydata is None) and getattr(event, "inaxes", None) is getattr(self, "_ax", None):
+        if (xdata is None or ydata is None) and getattr(event, "inaxes", None) is not None:
             with contextlib.suppress(Exception):
                 xdata, ydata = event.inaxes.transData.inverted().transform((event.x, event.y))
         if xdata is None or ydata is None:
             return
-        x = state["x"].ravel()
-        y = state["y"].ravel()
-        lon = state["lon"].ravel()
-        lat = state["lat"].ravel()
-        grid = state["grid"].ravel()
+        x = np.asarray(state.get("x"), dtype=float).ravel()
+        y = np.asarray(state.get("y"), dtype=float).ravel()
+        lon = np.asarray(state.get("lon"), dtype=float).ravel()
+        lat = np.asarray(state.get("lat"), dtype=float).ravel()
+        grid = np.asarray(state.get("grid"), dtype=float).ravel()
+        size = min(x.size, y.size, lon.size, lat.size, grid.size)
+        if size <= 0:
+            return
+        x = x[:size]
+        y = y[:size]
+        lon = lon[:size]
+        lat = lat[:size]
+        grid = grid[:size]
         mask = np.isfinite(x) & np.isfinite(y) & np.isfinite(lon) & np.isfinite(lat)
         if not np.any(mask):
             return
-        dx = x[mask] - float(xdata)
-        dy = y[mask] - float(ydata)
-        idx = int(np.argmin(dx * dx + dy * dy))
+
+        lon_pick = None
+        lat_pick = None
+        inaxes = getattr(event, "inaxes", None)
+        if hasattr(inaxes, "projection"):
+            with contextlib.suppress(Exception):
+                import cartopy.crs as ccrs
+
+                lon_candidate, lat_candidate = ccrs.PlateCarree().transform_point(
+                    float(xdata),
+                    float(ydata),
+                    inaxes.projection,
+                )
+                if np.isfinite(lon_candidate) and np.isfinite(lat_candidate):
+                    lon_pick = float(lon_candidate)
+                    lat_pick = float(lat_candidate)
+
+        if lon_pick is not None and lat_pick is not None:
+            dlon = ((lon[mask] - lon_pick + 180.0) % 360.0) - 180.0
+            dlat = lat[mask] - lat_pick
+            idx = int(np.argmin(dlon * dlon + dlat * dlat))
+        else:
+            dx = x[mask] - float(xdata)
+            dy = y[mask] - float(ydata)
+            idx = int(np.argmin(dx * dx + dy * dy))
         lon_val = float(lon[mask][idx])
         lat_val = float(lat[mask][idx])
         grid_val = float(grid[mask][idx]) if np.isfinite(grid[mask][idx]) else float("nan")
