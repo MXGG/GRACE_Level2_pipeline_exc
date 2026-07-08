@@ -8,15 +8,18 @@ import hashlib
 import io
 import json
 import os
+import platform
 import re
 import sys
 import threading
 import time
 import webbrowser
 import traceback
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from calendar import monthrange
 from pathlib import Path
+from uuid import uuid4
 
 import numpy as np
 from scipy.io import loadmat
@@ -24,22 +27,28 @@ from PySide6.QtCore import QDir, QObject, QSignalBlocker, Qt, Signal, QTimer
 from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QApplication,
     QCheckBox,
     QComboBox,
     QDialog,
     QDialogButtonBox,
+    QDoubleSpinBox,
     QFileDialog,
     QFormLayout,
     QHBoxLayout,
     QInputDialog,
     QLabel,
     QLineEdit,
+    QMenu,
     QMessageBox,
     QPushButton,
     QSpinBox,
+    QTableWidgetItem,
     QTextEdit,
+    QTreeWidgetItem,
     QVBoxLayout,
     QWidget,
+    QWidgetAction,
 )
 
 from grace_pipeline.app.basin import run_basin_analysis as service_run_basin_analysis
@@ -120,6 +129,7 @@ from grace_pipeline.ui.plotting.projections import (
 )
 from grace_pipeline.ui.qt.path_defaults import DEFAULT_DATA_PATHS
 from grace_pipeline.ui.qt.preferences import MONO_FONT_ITEMS, THEME_ITEMS, UI_FONT_ITEMS, UIPreferences
+from grace_pipeline.ui.qt.projection_registry import projection_defaults, projection_engine_name, projection_renderer
 from grace_pipeline.ui.qt.qt_safe import is_deleted_qt_object_error, qt_object_is_alive, safe_set_text
 from grace_pipeline.ui.qt.theme import COLOR
 from grace_pipeline.ui.qt.widgets import populate_table
@@ -130,6 +140,21 @@ DEFAULT_CFG_PATH = find_default_config(ROOT_DIR) or (ROOT_DIR / "cfg" / "default
 DEFAULT_CFG_DIR = get_config_dir(ROOT_DIR)
 DEFAULT_USER_CFG_PATH = DEFAULT_CFG_DIR / "user.json"
 DEFAULT_COASTLINE_PATH = DEFAULT_DATA_PATHS["COASTLINE_SHP"]
+
+
+@dataclass
+class PreviewLayer:
+    """Renderable preview layer state independent from Qt table widgets."""
+
+    id: str
+    name: str
+    type: str
+    path: str | None = None
+    visible: bool = True
+    zorder: int = 0
+    opacity: float = 1.0
+    removable: bool = True
+    metadata: dict = field(default_factory=dict)
 
 
 class UiSettingsDialog(QDialog):
@@ -823,6 +848,7 @@ class MainWindowController:
         self._last_overall_detail = "0/0"
         self._pending_terminal_status: tuple[str, str] | None = None
         self._pending_terminal_scope = ""
+        self.preview_layers: list[PreviewLayer] = []
 
         self._connect_signals()
         self._mount_plot_canvas()
@@ -854,6 +880,22 @@ class MainWindowController:
         w.page_dashboard.btn_open_data_paths.clicked.connect(lambda: w.set_active_page("data_paths"))
         w.page_dashboard.btn_open_processing.clicked.connect(lambda: w.set_active_page("processing"))
         w.page_dashboard.btn_open_preview.clicked.connect(lambda: w.set_active_page("preview"))
+        if hasattr(w.page_dashboard, "btn_open_leakage"):
+            w.page_dashboard.btn_open_leakage.clicked.connect(lambda: w.set_active_page("leakage"))
+        if hasattr(w.page_dashboard, "btn_open_basin"):
+            w.page_dashboard.btn_open_basin.clicked.connect(lambda: w.set_active_page("basin"))
+        if hasattr(w.page_dashboard, "btn_open_output_root"):
+            w.page_dashboard.btn_open_output_root.clicked.connect(self.on_open_dashboard_output_root)
+        if hasattr(w.page_dashboard, "btn_copy_output_root"):
+            w.page_dashboard.btn_copy_output_root.clicked.connect(self.on_copy_dashboard_output_root)
+        if hasattr(w.page_dashboard, "btn_copy_output_tree"):
+            w.page_dashboard.btn_copy_output_tree.clicked.connect(self.on_copy_dashboard_output_tree)
+        if hasattr(w.page_dashboard, "btn_copy_selected_output_path"):
+            w.page_dashboard.btn_copy_selected_output_path.clicked.connect(self.on_copy_dashboard_selected_output_path)
+        if hasattr(w.page_dashboard, "btn_pause_run"):
+            w.page_dashboard.btn_pause_run.clicked.connect(self.on_pause_active)
+        if hasattr(w.page_dashboard, "btn_stop_run"):
+            w.page_dashboard.btn_stop_run.clicked.connect(self.on_stop_active)
         if w.page_dashboard.btn_run_full is not w.btn_run:
             w.page_dashboard.btn_run_full.clicked.connect(self.on_run_pipeline)
 
@@ -1016,8 +1058,43 @@ class MainWindowController:
         w.page_preview.slider_time_index.valueChanged.connect(self.on_preview_index_changed)
         w.page_preview.cmb_data_var.currentTextChanged.connect(lambda _t: self.on_preview_var_changed())
         w.page_preview.chk_auto_region.toggled.connect(self.on_preview_region_mode_changed)
-        w.page_preview.chk_layer_boundaries.toggled.connect(self._sync_preview_overlay_controls)
-        w.page_preview.chk_layer_rivers.toggled.connect(self._sync_preview_overlay_controls)
+        w.page_preview.btn_overlay_add.clicked.connect(self.on_add_preview_overlay_layer)
+        if hasattr(w.page_preview, "chk_show_graticule"):
+            w.page_preview.chk_show_graticule.toggled.connect(
+                lambda checked: self._set_preview_layer_type_visible("graticule", checked)
+            )
+        if hasattr(w.page_preview, "chk_show_colorbar"):
+            w.page_preview.chk_show_colorbar.toggled.connect(
+                lambda checked: self._set_preview_layer_type_visible("colorbar", checked)
+            )
+        for attr in (
+            "edit_graticule_lon_interval",
+            "edit_graticule_lat_interval",
+            "edit_graticule_line_width",
+            "edit_graticule_tick_length",
+            "edit_graticule_tick_width",
+            "edit_graticule_font_size",
+            "edit_graticule_color",
+        ):
+            widget = getattr(w.page_preview, attr, None)
+            if hasattr(widget, "editingFinished"):
+                widget.editingFinished.connect(self._refresh_preview_after_layer_change)
+        for attr in ("cmb_graticule_font", "cmb_graticule_style", "cmb_graticule_tickdir", "cmb_graticule_box"):
+            widget = getattr(w.page_preview, attr, None)
+            if hasattr(widget, "currentTextChanged"):
+                widget.currentTextChanged.connect(lambda *_args: self._refresh_preview_after_layer_change())
+        if hasattr(w.page_preview, "chk_graticule_labels"):
+            w.page_preview.chk_graticule_labels.toggled.connect(lambda *_args: self._refresh_preview_after_layer_change())
+        if hasattr(w.page_preview, "btn_overlay_remove"):
+            w.page_preview.btn_overlay_remove.clicked.connect(self.on_remove_preview_overlay_layer)
+        if hasattr(w.page_preview, "btn_overlay_up"):
+            w.page_preview.btn_overlay_up.clicked.connect(lambda: self.on_move_preview_overlay_layer(-1))
+        if hasattr(w.page_preview, "btn_overlay_down"):
+            w.page_preview.btn_overlay_down.clicked.connect(lambda: self.on_move_preview_overlay_layer(1))
+        if hasattr(w.page_preview, "btn_overlay_top"):
+            w.page_preview.btn_overlay_top.clicked.connect(self.on_top_preview_overlay_layer)
+        self._ensure_preview_layers()
+        self._render_preview_layer_table()
         self._sync_preview_overlay_controls()
 
         w.page_monitor.btn_pause_run.clicked.connect(self.on_pause_active)
@@ -1041,17 +1118,17 @@ class MainWindowController:
         self._canvas = FigureCanvasQTAgg(self._figure)
         self._nav_toolbar = NavigationToolbar2QT(self._canvas, self.window)
         self._nav_toolbar.setMovable(False)
-        keep = {"Home", "Back", "Forward", "Pan", "Zoom"}
         for action in list(self._nav_toolbar.actions()):
             text = (action.text() or "").strip()
-            if text not in keep:
-                self._nav_toolbar.removeAction(action)
-            elif text == "Home":
+            if text == "Home":
                 with contextlib.suppress(Exception):
                     action.triggered.disconnect()
                 action.triggered.connect(self.on_preview_home)
         self._canvas.mpl_connect("button_press_event", self.on_preview_canvas_event)
         self._canvas.mpl_connect("motion_notify_event", self.on_preview_canvas_event)
+        self._canvas.mpl_connect("scroll_event", self.on_preview_scroll_event)
+        self._canvas.mpl_connect("button_release_event", self.on_preview_3d_mouse_release)
+        self._canvas.mpl_connect("draw_event", self.on_preview_3d_draw_event)
         layout = self.window.page_preview.plot_container.layout()
         if layout is None:
             layout = QVBoxLayout(self.window.page_preview.plot_container)
@@ -1063,8 +1140,97 @@ class MainWindowController:
             toolbar_layout.setContentsMargins(6, 2, 6, 2)
             toolbar_layout.setSpacing(2)
         toolbar_layout.addWidget(self._nav_toolbar, 0, Qt.AlignRight | Qt.AlignVCenter)
+        self._mount_preview_3d_controls(toolbar_layout)
         self._ax = self._figure.add_subplot(111)
         self._sync_preview_tools_button()
+
+    def _mount_preview_3d_controls(self, toolbar_layout: QHBoxLayout) -> None:
+        panel = QWidget()
+        panel.setObjectName("Preview3DControls")
+        layout = QFormLayout(panel)
+        layout.setContentsMargins(14, 12, 14, 12)
+        layout.setHorizontalSpacing(12)
+        layout.setVerticalSpacing(8)
+        layout.setFieldGrowthPolicy(QFormLayout.AllNonFixedFieldsGrow)
+
+        self.btn_preview_3d_reset = QPushButton("Reset View")
+        self.btn_preview_3d_reset.setObjectName("PlotToolButton")
+        self.btn_preview_3d_reset.clicked.connect(self._reset_preview_3d_view)
+
+        self.cmb_preview_3d_preset = QComboBox()
+        self.cmb_preview_3d_preset.setObjectName("Preview3DPreset")
+        self.cmb_preview_3d_preset.addItems(["Front", "Asia", "Europe-Africa", "Americas", "North Pole", "South Pole"])
+        self.cmb_preview_3d_preset.currentTextChanged.connect(self._apply_preview_3d_preset)
+
+        self.spin_preview_3d_azimuth = self._make_preview_3d_spin(-180.0, 180.0, -60.0, suffix="°")
+        self.spin_preview_3d_elevation = self._make_preview_3d_spin(-90.0, 90.0, 25.0, suffix="°")
+        self.spin_preview_3d_roll = self._make_preview_3d_spin(-180.0, 180.0, 0.0, suffix="°")
+        self.spin_preview_3d_zoom = self._make_preview_3d_spin(0.2, 5.0, 1.0, decimals=2, step=0.05)
+        self.spin_preview_3d_focal = self._make_preview_3d_spin(0.2, 5.0, 1.0, decimals=2, step=0.1)
+        self.spin_preview_3d_relief = self._make_preview_3d_spin(0.0, 0.05, 0.0, decimals=3, step=0.005)
+
+        self.cmb_preview_3d_projection = QComboBox()
+        self.cmb_preview_3d_projection.addItems(["Orthographic", "Perspective"])
+        self.cmb_preview_3d_projection.currentTextChanged.connect(self._on_preview_3d_projection_changed)
+
+        self.btn_preview_fit_globe = QPushButton("Fit Globe")
+        self.btn_preview_fit_globe.setObjectName("PlotToolButton")
+        self.btn_preview_fit_globe.clicked.connect(lambda: self._set_preview_3d_zoom(1.0, rerender=False))
+
+        for label, widget in (
+            ("Preset", self.cmb_preview_3d_preset),
+            ("Azimuth", self.spin_preview_3d_azimuth),
+            ("Elevation", self.spin_preview_3d_elevation),
+            ("Roll", self.spin_preview_3d_roll),
+            ("Zoom", self.spin_preview_3d_zoom),
+            ("Projection Mode", self.cmb_preview_3d_projection),
+            ("Focal Length", self.spin_preview_3d_focal),
+            ("Relief", self.spin_preview_3d_relief),
+        ):
+            layout.addRow(label, widget)
+
+        action_row = QWidget(panel)
+        action_layout = QHBoxLayout(action_row)
+        action_layout.setContentsMargins(0, 4, 0, 0)
+        action_layout.setSpacing(8)
+        action_layout.addWidget(self.btn_preview_3d_reset)
+        action_layout.addWidget(self.btn_preview_fit_globe)
+        layout.addRow("", action_row)
+
+        for spin in (
+            self.spin_preview_3d_azimuth,
+            self.spin_preview_3d_elevation,
+            self.spin_preview_3d_roll,
+            self.spin_preview_3d_zoom,
+            self.spin_preview_3d_focal,
+            self.spin_preview_3d_relief,
+        ):
+            spin.valueChanged.connect(self._on_preview_3d_control_changed)
+
+        menu = QMenu(self.window.page_preview.plot_toolbar_host)
+        menu.setObjectName("Preview3DViewMenu")
+        action = QWidgetAction(menu)
+        action.setDefaultWidget(panel)
+        menu.addAction(action)
+
+        self.btn_preview_3d_view = QPushButton("3D View ▼")
+        self.btn_preview_3d_view.setObjectName("PlotToolButton")
+        self.btn_preview_3d_view.setMenu(menu)
+        self.btn_preview_3d_view.setToolTip(self.window.translate_text("3D Globe view controls"))
+        self.preview_3d_controls = self.btn_preview_3d_view
+        self.preview_3d_controls_panel = panel
+        toolbar_layout.addWidget(self.btn_preview_3d_view, 0, Qt.AlignRight | Qt.AlignVCenter)
+
+    def _make_preview_3d_spin(self, minimum: float, maximum: float, value: float, *, suffix: str = "", decimals: int = 1, step: float = 1.0) -> QDoubleSpinBox:
+        spin = QDoubleSpinBox()
+        spin.setObjectName("Preview3DSpin")
+        spin.setRange(float(minimum), float(maximum))
+        spin.setDecimals(int(decimals))
+        spin.setSingleStep(float(step))
+        spin.setValue(float(value))
+        spin.setSuffix(suffix)
+        spin.setFixedWidth(110)
+        return spin
 
     def _mount_basin_preview_canvas(self):
         from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg, NavigationToolbar2QT
@@ -1076,7 +1242,7 @@ class MainWindowController:
         self._basin_preview_canvas = FigureCanvasQTAgg(self._basin_preview_figure)
         self._basin_preview_toolbar = NavigationToolbar2QT(self._basin_preview_canvas, self.window)
         self._basin_preview_toolbar.setMovable(False)
-        keep = {"Home", "Back", "Forward", "Pan", "Zoom", "Save"}
+        keep = {"Home", "Back", "Forward", "Pan", "Save"}
         for action in list(self._basin_preview_toolbar.actions()):
             text = (action.text() or "").strip()
             if text and text not in keep:
@@ -1095,8 +1261,21 @@ class MainWindowController:
             toolbar_layout.setSpacing(2)
         toolbar_layout.addStretch(1)
         toolbar_layout.addWidget(self._basin_preview_toolbar, 0, Qt.AlignRight | Qt.AlignVCenter)
+        self.btn_basin_zoom_out = QPushButton("-")
+        self.btn_basin_zoom_out.setObjectName("PlotToolButton")
+        self.btn_basin_zoom_out.setToolTip(self.window.translate_text("Zoom out"))
+        self.btn_basin_zoom_out.setFixedSize(32, 30)
+        self.btn_basin_zoom_out.clicked.connect(lambda: self._zoom_axes_out(self._basin_preview_ax, self._basin_preview_canvas))
+        self.btn_basin_zoom_in = QPushButton("+")
+        self.btn_basin_zoom_in.setObjectName("PlotToolButton")
+        self.btn_basin_zoom_in.setToolTip(self.window.translate_text("Zoom in"))
+        self.btn_basin_zoom_in.setFixedSize(32, 30)
+        self.btn_basin_zoom_in.clicked.connect(lambda: self._zoom_axes_out(self._basin_preview_ax, self._basin_preview_canvas, factor=1 / 1.35))
+        toolbar_layout.addWidget(self.btn_basin_zoom_in, 0, Qt.AlignRight | Qt.AlignVCenter)
+        toolbar_layout.addWidget(self.btn_basin_zoom_out, 0, Qt.AlignRight | Qt.AlignVCenter)
 
         self._basin_preview_ax = self._basin_preview_figure.add_subplot(111)
+        self._basin_preview_canvas.mpl_connect("motion_notify_event", self.on_basin_preview_canvas_event)
         self._basin_preview_ax.set_facecolor("#eef4f8")
         self._basin_preview_ax.text(
             0.5,
@@ -1108,6 +1287,24 @@ class MainWindowController:
             fontproperties=self._matplotlib_cjk_font(),
         )
         self._basin_preview_canvas.draw_idle()
+
+    def on_basin_preview_canvas_event(self, event):
+        page = self.window.page_basin
+        if event is None or event.xdata is None or event.ydata is None:
+            return
+        with contextlib.suppress(Exception):
+            page.lbl_basin_map_cursor.setText(f"{float(event.ydata):.2f} N, {float(event.xdata):.2f} E")
+            state = getattr(self, "_basin_preview_pick_state", None)
+            if state:
+                lon = np.asarray(state["lon"], dtype=float).ravel()
+                lat = np.asarray(state["lat"], dtype=float).ravel()
+                grid = np.asarray(state["grid"], dtype=float).ravel()
+                lon2d, lat2d = np.meshgrid(np.asarray(state["lon_vec"], dtype=float), np.asarray(state["lat_vec"], dtype=float))
+                d2 = (lon2d.ravel() - float(event.xdata)) ** 2 + (lat2d.ravel() - float(event.ydata)) ** 2
+                if d2.size and grid.size == d2.size:
+                    idx = int(np.nanargmin(d2))
+                    value = grid[idx]
+                    page.lbl_basin_map_value.setText("—" if not np.isfinite(value) else f"{float(value):.3f}")
 
     def _matplotlib_cjk_font(self):
         if hasattr(self, "_mpl_cjk_font"):
@@ -1236,6 +1433,170 @@ class MainWindowController:
             (page.btn_filter_hsaf, "HSAF"),
         )
         return [name for btn, name in mapping if btn.isChecked()]
+
+    def _dashboard_output_root(self) -> str:
+        cfg_output = self._native_path(getattr(self.host.cfg.path, "OUTPUT", ""), base_dir=ROOT_DIR)
+        ui_output = self.window.page_data_paths.edit_main_output_root.text().strip()
+        return cfg_output or self._native_path(ui_output, base_dir=ROOT_DIR)
+
+    @staticmethod
+    def _short_path_for_dashboard(path_text: str, max_len: int = 62) -> str:
+        text = str(path_text or "").strip()
+        if not text:
+            return "Not configured"
+        if len(text) <= max_len:
+            return text
+        root = Path(text).anchor
+        name = Path(text).name
+        if root and len(root) + len(name) + 8 <= max_len:
+            return f"{root}...\\{name}"
+        return f"...{text[-max(8, max_len - 3):]}"
+
+    @staticmethod
+    def _count_files_quick(path_text: str, suffixes: tuple[str, ...]) -> int:
+        root = Path(str(path_text or ""))
+        if not root.exists():
+            return 0
+        suffix_set = {item.lower() for item in suffixes}
+        try:
+            return sum(1 for item in root.iterdir() if item.is_file() and item.suffix.lower() in suffix_set)
+        except Exception:
+            return 0
+
+    def _dashboard_output_counts(self, output_root: str) -> dict[str, int]:
+        if not output_root:
+            return {"monthly": 0, "stacks": 0, "plots": 0, "logs": 0, "leakage": 0, "basin": 0}
+        root = Path(output_root) if output_root else Path()
+        local = root / "local"
+        return {
+            "monthly": self._count_files_quick(str(local / "monthly_mat"), (".mat",)),
+            "stacks": self._count_files_quick(str(local / "stacks"), (".mat", ".nc", ".nc4", ".h5", ".hdf5")),
+            "plots": self._count_files_quick(str(local / "plots"), (".png", ".jpg", ".jpeg", ".tif", ".tiff", ".pdf", ".svg")),
+            "logs": self._count_files_quick(str(local / "logs"), (".log", ".txt")),
+            "leakage": self._count_files_quick(str(root / "leakage"), (".mat", ".nc", ".h5", ".txt", ".png", ".pdf")),
+            "basin": self._count_files_quick(str(root / "basin"), (".mat", ".txt", ".csv", ".png", ".pdf")),
+        }
+
+    def _dashboard_output_tree(self, output_root: str, counts: dict[str, int] | None = None) -> str:
+        counts = counts or self._dashboard_output_counts(output_root)
+        root_name = Path(output_root).name if output_root else "outputs"
+        return "\n".join(
+            [
+                root_name,
+                f"|- local",
+                f"|  |- monthly_mat    {counts.get('monthly', 0)}",
+                f"|  |- stacks         {counts.get('stacks', 0)}",
+                f"|  |- plots          {counts.get('plots', 0)}",
+                f"|  `- logs           {counts.get('logs', 0)}",
+                f"|- leakage           {counts.get('leakage', 0)}",
+                f"`- basin             {counts.get('basin', 0)}",
+            ]
+        )
+
+    def _populate_dashboard_output_tree(self, output_root: str, counts: dict[str, int]) -> None:
+        tree = getattr(self.window.page_dashboard, "output_tree", None)
+        if tree is None:
+            return
+        tree.clear()
+        root_path = Path(output_root) if output_root else Path("outputs")
+
+        def add_item(parent, label: str, count: str, path: Path):
+            item = QTreeWidgetItem(parent, [label, count])
+            native = self._native_path(path)
+            item.setData(0, Qt.UserRole, native)
+            item.setToolTip(0, native)
+            item.setToolTip(1, native)
+            return item
+
+        root_item = add_item(tree, root_path.name or "outputs", "", root_path)
+        local_item = add_item(root_item, "local", "", root_path / "local")
+        add_item(local_item, "monthly_mat", str(counts.get("monthly", 0)), root_path / "local" / "monthly_mat")
+        add_item(local_item, "stacks", str(counts.get("stacks", 0)), root_path / "local" / "stacks")
+        add_item(local_item, "plots", str(counts.get("plots", 0)), root_path / "local" / "plots")
+        add_item(local_item, "logs", str(counts.get("logs", 0)), root_path / "local" / "logs")
+        add_item(root_item, "leakage", str(counts.get("leakage", 0)), root_path / "leakage")
+        add_item(root_item, "basin", str(counts.get("basin", 0)), root_path / "basin")
+        root_item.setExpanded(True)
+        local_item.setExpanded(True)
+        tree.resizeColumnToContents(0)
+
+    def _refresh_dashboard_outputs(self, output_root: str | None = None) -> None:
+        dashboard = self.window.page_dashboard
+        output_root = output_root or self._dashboard_output_root()
+        counts = self._dashboard_output_counts(output_root)
+        short_root = self._short_path_for_dashboard(output_root)
+        safe_set_text(getattr(dashboard, "lbl_output_root", None), short_root)
+        if qt_object_is_alive(getattr(dashboard, "lbl_output_root", None)):
+            dashboard.lbl_output_root.setToolTip(output_root or "")
+        for attr, key in (
+            ("lbl_count_monthly", "monthly"),
+            ("lbl_count_stacks", "stacks"),
+            ("lbl_count_plots", "plots"),
+            ("lbl_count_logs", "logs"),
+            ("lbl_count_leakage", "leakage"),
+            ("lbl_count_basin", "basin"),
+        ):
+            safe_set_text(getattr(dashboard, attr, None), str(counts.get(key, 0)))
+        safe_set_text(getattr(dashboard, "lbl_output_tree", None), self._dashboard_output_tree(output_root, counts))
+        self._populate_dashboard_output_tree(output_root, counts)
+        state = "Ready" if output_root else "Missing"
+        detail = short_root if output_root else "Select an output directory"
+        safe_set_text(getattr(dashboard, "lbl_output_state_value", None), state)
+        safe_set_text(getattr(dashboard, "lbl_output_hint", None), detail)
+
+    def _set_dashboard_step(self, key: str, status: str, summary: str, variant: str = "neutral") -> None:
+        dashboard = self.window.page_dashboard
+        step = getattr(dashboard, "workflow_steps", {}).get(key)
+        if not step:
+            return
+        safe_set_text(step.get("status"), status)
+        safe_set_text(step.get("summary"), summary)
+        badge = step.get("status")
+        frame = step.get("frame")
+        for widget in (badge, frame):
+            if qt_object_is_alive(widget):
+                widget.setProperty("variant", variant)
+                widget.style().unpolish(widget)
+                widget.style().polish(widget)
+
+    @staticmethod
+    def _memory_status_text() -> str:
+        try:
+            import psutil
+
+            mem = psutil.virtual_memory()
+            used = (mem.total - mem.available) / (1024 ** 3)
+            total = mem.total / (1024 ** 3)
+            return f"{used:.1f} / {total:.1f} GB ({mem.percent:.0f}%)"
+        except Exception:
+            return "Not available"
+
+    def on_copy_dashboard_output_root(self) -> None:
+        output_root = self._dashboard_output_root()
+        QApplication.clipboard().setText(output_root)
+        self.on_log(f"[DASHBOARD] Copied output root: {output_root}", "stdout")
+
+    def on_copy_dashboard_output_tree(self) -> None:
+        text = getattr(self.window.page_dashboard, "lbl_output_tree", QLabel()).text()
+        QApplication.clipboard().setText(text)
+        self.on_log("[DASHBOARD] Copied output structure.", "stdout")
+
+    def on_copy_dashboard_selected_output_path(self) -> None:
+        tree = getattr(self.window.page_dashboard, "output_tree", None)
+        item = tree.currentItem() if tree is not None else None
+        path_text = item.data(0, Qt.UserRole) if item is not None else self._dashboard_output_root()
+        QApplication.clipboard().setText(str(path_text or ""))
+        self.on_log(f"[DASHBOARD] Copied output path: {path_text}", "stdout")
+
+    def on_open_dashboard_output_root(self) -> None:
+        output_root = self._dashboard_output_root()
+        if not output_root:
+            self._show_warning("Output Directory", "Output directory is not configured.")
+            return
+        path = Path(output_root)
+        path.mkdir(parents=True, exist_ok=True)
+        with contextlib.suppress(Exception):
+            os.startfile(str(path))
 
     def _sync_processing_filter_button_styles(self, *_args) -> None:
         self._sync_processing_filter_panels()
@@ -1447,7 +1808,7 @@ class MainWindowController:
         center = self._configured_gfc_center()
         if hasattr(page, "cmb_mascon_resolution"):
             page.cmb_mascon_resolution.setVisible(product_type == "MASCON_NC")
-        page.btn_download_dir_browse.setText(self.window.translate_text("Choose Folder..."))
+        page.btn_download_dir_browse.setText(self.window.translate_text("Choose Folder"))
         page.btn_download_gfc_range.setText(self.window.translate_text("Download"))
         page.btn_download_gfc_range.setToolTip(
             self.window.translate_text("Download Mascon" if product_type == "MASCON_NC" else "Download GFC")
@@ -2082,18 +2443,26 @@ class MainWindowController:
 
     def _sync_dashboard_run_summary(self) -> None:
         dashboard = self.window.page_dashboard
-        output_root = self._native_path(getattr(self.host.cfg.path, "OUTPUT", ""), base_dir=ROOT_DIR) or self.window.page_data_paths.edit_main_output_root.text().strip()
         filters = ", ".join(self._enabled_filter_names()) or "None"
         safe_set_text(getattr(dashboard, "lbl_active_filters", None), f"Filters: {filters}")
-        safe_set_text(getattr(dashboard, "lbl_active_io", None), f"I/O: {output_root}")
+        safe_set_text(getattr(dashboard, "lbl_active_io", None), f"Output: {self._short_path_for_dashboard(self._dashboard_output_root())}")
         if not self.host._active_scope:
-            safe_set_text(getattr(dashboard, "lbl_dashboard_status", None), "Idle")
-            safe_set_text(getattr(dashboard, "lbl_dashboard_counts", None), "0 / 0")
-            safe_set_text(getattr(dashboard, "lbl_dashboard_stage", None), "Ready to run with the current configuration.")
+            safe_set_text(getattr(dashboard, "lbl_dashboard_status", None), "Ready")
+            safe_set_text(getattr(dashboard, "lbl_dashboard_counts", None), "")
+            safe_set_text(getattr(dashboard, "lbl_dashboard_stage", None), "No active task.")
             safe_set_text(getattr(dashboard, "lbl_active_run_name", None), "Ready")
-            safe_set_text(getattr(dashboard, "lbl_active_task", None), "No pipeline activity yet.")
-            safe_set_text(getattr(dashboard, "lbl_active_counts", None), "0 / 0")
+            safe_set_text(getattr(dashboard, "lbl_active_task", None), "No active task.")
+            safe_set_text(getattr(dashboard, "lbl_active_counts", None), "")
             dashboard.bar_active_run.setValue(0)
+            dashboard.bar_active_run.setVisible(False)
+            if hasattr(dashboard, "btn_pause_run"):
+                dashboard.btn_pause_run.setVisible(False)
+            if hasattr(dashboard, "btn_stop_run"):
+                dashboard.btn_stop_run.setVisible(False)
+            if hasattr(dashboard, "btn_run_full"):
+                dashboard.btn_run_full.setVisible(True)
+            if hasattr(dashboard, "btn_validate_paths"):
+                dashboard.btn_validate_paths.setVisible(True)
             self._set_progress_active(dashboard.bar_active_run, False)
         self.window.refresh_translations()
 
@@ -2124,12 +2493,15 @@ class MainWindowController:
         self.window.page_monitor.lbl_output_plots.setText(
             f"Plots: {output_plots or 'Not resolved'}"
         )
-        self.window.page_dashboard.lbl_preview_root.setText(f"Output Root: {output_root or 'Not resolved'}")
-        self.window.page_dashboard.lbl_preview_output.setText(f"Local Output: {output_local or 'Not resolved'}")
-        self.window.page_dashboard.lbl_preview_stacks.setText(f"Stacks: {output_stacks or 'Not resolved'}")
-        self.window.page_dashboard.lbl_preview_monthly.setText(f"Monthly MAT: {output_monthly or 'Not resolved'}")
-        self.window.page_dashboard.lbl_preview_plots.setText(f"Plots: {output_plots or 'Not resolved'}")
-        self.window.page_dashboard.lbl_preview_logs.setText(f"Logs: {output_logs or 'Not resolved'}")
+        if hasattr(self.window.page_dashboard, "lbl_count_monthly"):
+            self._refresh_dashboard_outputs(output_root)
+        else:
+            self.window.page_dashboard.lbl_preview_root.setText(f"Output Root: {output_root or 'Not resolved'}")
+            self.window.page_dashboard.lbl_preview_output.setText(f"Local Output: {output_local or 'Not resolved'}")
+            self.window.page_dashboard.lbl_preview_stacks.setText(f"Stacks: {output_stacks or 'Not resolved'}")
+            self.window.page_dashboard.lbl_preview_monthly.setText(f"Monthly MAT: {output_monthly or 'Not resolved'}")
+            self.window.page_dashboard.lbl_preview_plots.setText(f"Plots: {output_plots or 'Not resolved'}")
+            self.window.page_dashboard.lbl_preview_logs.setText(f"Logs: {output_logs or 'Not resolved'}")
         self.window.refresh_translations()
 
     def _poll_terminal_run_state(self) -> None:
@@ -2532,6 +2904,10 @@ class MainWindowController:
             selected_formats.append("nc")
         if getattr(w.page_processing, "chk_export_hdf5", None) is not None and w.page_processing.chk_export_hdf5.isChecked():
             selected_formats.append("hdf5")
+        if getattr(w.page_processing, "chk_export_geotiff", None) is not None and w.page_processing.chk_export_geotiff.isChecked():
+            selected_formats.append("geotiff")
+        if getattr(w.page_processing, "chk_export_gfc", None) is not None and w.page_processing.chk_export_gfc.isChecked():
+            selected_formats.append("gfc")
         if not selected_formats:
             selected_formats = ["mat"]
             if getattr(w.page_processing, "chk_export_mat", None) is not None:
@@ -2541,6 +2917,37 @@ class MainWindowController:
         io_cfg["save_stack_mat"] = "mat" in selected_formats
         io_cfg["export_txt"] = "txt" in selected_formats
         io_cfg["save_stack_hdf5"] = "hdf5" in selected_formats
+        io_cfg["save_netcdf"] = "nc" in selected_formats
+        io_cfg["save_geotiff"] = "geotiff" in selected_formats
+        io_cfg["export_json_summary"] = bool(
+            getattr(w.page_processing, "chk_export_json_summary", None) is None
+            or w.page_processing.chk_export_json_summary.isChecked()
+        )
+        io_cfg["export_csv"] = bool(
+            getattr(w.page_processing, "chk_export_csv", None) is not None
+            and w.page_processing.chk_export_csv.isChecked()
+        )
+        gfc_lmax_text = ""
+        if getattr(w.page_processing, "edit_gfc_lmax", None) is not None:
+            gfc_lmax_text = w.page_processing.edit_gfc_lmax.text().strip()
+        gfc_content = "anomaly"
+        if getattr(w.page_processing, "cmb_gfc_content", None) is not None:
+            gfc_content = self._combo_value(w.page_processing.cmb_gfc_content) or "anomaly"
+        coefficient_export = {
+            "enabled": "gfc" in selected_formats,
+            "format": "icgem_gfc",
+            "coefficient_content": gfc_content,
+            "max_degree": int(round(self._safe_float(gfc_lmax_text, 0.0))) if gfc_lmax_text else None,
+            "norm": "fully_normalized",
+            "errors": "no",
+            "tide_system": "zero_tide",
+            "unit_for_grid_inverse": str(grid_cfg.get("unit", "mmEWH") or "mmEWH"),
+            "allow_grid_to_cs": True,
+            "require_global_grid": True,
+            "roundtrip_check": True,
+            "output_dir": "monthly_gfc",
+        }
+        io_cfg["coefficient_export"] = coefficient_export
 
         inv_cfg["Lmax"] = int(w.page_processing.slider_degree_order.value())
         inv_cfg["remove_mean"] = bool(w.page_processing.chk_remove_mean.isChecked())
@@ -2824,11 +3231,32 @@ class MainWindowController:
             ("chk_export_txt", "txt"),
             ("chk_export_nc", "nc"),
             ("chk_export_hdf5", "hdf5"),
+            ("chk_export_geotiff", "geotiff"),
+            ("chk_export_gfc", "gfc"),
         ):
             checkbox = getattr(w.page_processing, attr, None)
             if checkbox is not None:
                 with QSignalBlocker(checkbox):
                     checkbox.setChecked(key in formats)
+        coeff_raw = io_raw.get("coefficient_export", {}) if isinstance(io_raw, dict) else {}
+        if isinstance(coeff_raw, dict):
+            if coeff_raw.get("enabled") and getattr(w.page_processing, "chk_export_gfc", None) is not None:
+                with QSignalBlocker(w.page_processing.chk_export_gfc):
+                    w.page_processing.chk_export_gfc.setChecked(True)
+            if getattr(w.page_processing, "cmb_gfc_content", None) is not None:
+                with QSignalBlocker(w.page_processing.cmb_gfc_content):
+                    self._set_combo_value(w.page_processing.cmb_gfc_content, str(coeff_raw.get("coefficient_content", "anomaly") or "anomaly"))
+            if getattr(w.page_processing, "edit_gfc_lmax", None) is not None:
+                value = coeff_raw.get("max_degree", None)
+                self._set_edit_text(w.page_processing.edit_gfc_lmax, "" if value in (None, "") else str(value), block_signals=True)
+        for attr, key in (
+            ("chk_export_json_summary", "export_json_summary"),
+            ("chk_export_csv", "export_csv"),
+        ):
+            checkbox = getattr(w.page_processing, attr, None)
+            if checkbox is not None:
+                with QSignalBlocker(checkbox):
+                    checkbox.setChecked(bool(io_raw.get(key, attr == "chk_export_json_summary")))
         w.page_processing.slider_degree_order.setValue(int(cfg.inversion.Lmax))
         self._update_degree_order_label(int(cfg.inversion.Lmax))
         with QSignalBlocker(w.page_processing.chk_remove_mean):
@@ -3021,36 +3449,99 @@ class MainWindowController:
     def refresh_dashboard(self):
         cfg = self.host.cfg
         dashboard = self.window.page_dashboard
-        safe_set_text(getattr(dashboard, "lbl_project_name", None), self.host.current_cfg_path.name if self.host.current_cfg_path else "In-Memory Config")
+        cfg_name = self.host.current_cfg_path.name if self.host.current_cfg_path else "In-Memory Config"
+        cfg_hash = hashlib.sha1(json.dumps(getattr(cfg, "_raw", {}), sort_keys=True, default=str).encode("utf-8")).hexdigest()[:12]
+        safe_set_text(getattr(dashboard, "lbl_project_name", None), cfg_name)
         safe_set_text(getattr(dashboard, "lbl_last_edited", None), datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
-        safe_set_text(getattr(dashboard, "lbl_uid", None), hashlib.sha1(json.dumps(getattr(cfg, "_raw", {}), sort_keys=True, default=str).encode("utf-8")).hexdigest()[:12])
+        safe_set_text(getattr(dashboard, "lbl_uid", None), cfg_hash)
         output_root = self._native_path(getattr(cfg.path, "OUTPUT", ""), base_dir=ROOT_DIR)
-        safe_set_text(getattr(dashboard, "lbl_output_root", None), output_root)
-        safe_set_text(getattr(dashboard, "lbl_output_hint", None), "Local execution | Output directories resolved from active config.")
-        safe_set_text(getattr(dashboard, "lbl_output_route", None), "Local runs: outputs/local/... | HPC pulls: outputs/remote/<jobid>/...")
+        if not output_root:
+            output_root = self._dashboard_output_root()
         time_entries = self._detect_time_entries_for_ui()
         count = len(time_entries)
         safe_set_text(getattr(dashboard, "lbl_data_count", None), str(count))
         if time_entries:
             cov = summarize_time_coverage(time_entries)
+            missing = int(cov.get("missing_month_count", 0))
+            span = f"{time_entries[0].ym} -> {time_entries[-1].ym}"
             safe_set_text(
                 getattr(dashboard, "lbl_time_span", None),
-                f"{int(cov.get('available_month_count', count))} GFC files | "
-                f"{time_entries[0].ym} // {time_entries[-1].ym} | "
-                f"missing={int(cov.get('missing_month_count', 0))} "
-                f"(GRACE={int(cov.get('grace_missing_count', 0))})"
+                f"{span} | missing={missing}"
             )
         else:
-            safe_set_text(getattr(dashboard, "lbl_time_span", None), "GFC data files | not detected")
-        basin_enabled = bool(getattr(cfg, "basin", {}).get("analysis_enable", False))
-        leak_enabled = bool(getattr(cfg, "leakage", {}).get("enable", False))
+            safe_set_text(getattr(dashboard, "lbl_time_span", None), "GFC data not detected")
+
+        filters = self._enabled_filter_names()
+        filter_text = ", ".join(filters) if filters else "None"
+        safe_set_text(getattr(dashboard, "lbl_filter_method_value", None), filter_text)
+        degree_text = getattr(self.window.page_processing, "lbl_degree_order", None)
+        degree_value = degree_text.text() if qt_object_is_alive(degree_text) else str(self.window.page_processing.slider_degree_order.value())
+        resolution = self.window.page_processing.edit_resolution_deg.text().strip() or "1.0"
+        safe_set_text(getattr(dashboard, "lbl_filter_method_detail", None), f"Lmax {degree_value} | {resolution} deg")
+
+        safe_set_text(getattr(dashboard, "lbl_config_status_value", None), "Ready")
+        safe_set_text(getattr(dashboard, "lbl_config_status_detail", None), f"{cfg_name} | {cfg_hash}")
+        self._refresh_dashboard_outputs(output_root)
+
+        if not getattr(dashboard, "lbl_preview_artifact", None).text().strip():
+            safe_set_text(getattr(dashboard, "lbl_preview_artifact", None), "Waiting for output")
+        if not getattr(dashboard, "lbl_preview_artifact_detail", None).text().strip():
+            safe_set_text(getattr(dashboard, "lbl_preview_artifact_detail", None), "No recent artifact")
+
+        lowdeg = bool(self.window.page_processing.chk_lowdeg_enable.isChecked())
+        gia = bool(self.window.page_processing.chk_apply_gia.isChecked())
+        leak_enabled = bool(getattr(getattr(cfg, "leakage", None), "enable", False))
+        basin_enabled = bool(getattr(getattr(cfg, "basin", None), "analysis_enable", False))
+        self._set_dashboard_step(
+            "data_paths",
+            "Ready" if count and output_root else "Check",
+            f"{count} GFC months | {self._short_path_for_dashboard(output_root, 32)}" if count else "Load data paths",
+            "success" if count and output_root else "warning",
+        )
+        self._set_dashboard_step(
+            "preprocess",
+            "Configured",
+            f"Low-degree {'on' if lowdeg else 'off'} | GIA {'on' if gia else 'off'}",
+            "success" if lowdeg or gia else "neutral",
+        )
+        self._set_dashboard_step(
+            "processing",
+            "Configured" if filters else "Choose",
+            filter_text,
+            "success" if filters else "warning",
+        )
+        self._set_dashboard_step(
+            "leakage",
+            "Enabled" if leak_enabled else "Optional",
+            "Regional correction" if leak_enabled else "Configure when needed",
+            "success" if leak_enabled else "neutral",
+        )
+        self._set_dashboard_step(
+            "basin",
+            "Enabled" if basin_enabled else "Optional",
+            "Boundary analysis" if basin_enabled else "Configure basin outputs",
+            "success" if basin_enabled else "neutral",
+        )
+        stack_count = self._dashboard_output_counts(output_root).get("stacks", 0)
+        self._set_dashboard_step(
+            "preview",
+            "Ready" if stack_count else "Waiting",
+            f"{stack_count} stack file(s)" if stack_count else "Render after outputs exist",
+            "success" if stack_count else "neutral",
+        )
+
+        safe_set_text(getattr(dashboard, "lbl_runtime_version", None), "v0.1")
+        safe_set_text(getattr(dashboard, "lbl_runtime_env", None), f"Python {sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro} | {platform.system()} {platform.release()}")
+        safe_set_text(getattr(dashboard, "lbl_runtime_user", None), os.environ.get("USERNAME") or os.environ.get("USER") or "unknown")
+        safe_set_text(getattr(dashboard, "lbl_runtime_memory", None), self._memory_status_text())
+        safe_set_text(getattr(dashboard, "lbl_runtime_config", None), f"{cfg_name} | {cfg_hash}")
+        safe_set_text(getattr(dashboard, "lbl_runtime_time", None), datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+
         safe_set_text(getattr(dashboard, "badge_summary_state", None), "Ready to Process")
         if qt_object_is_alive(getattr(dashboard, "badge_summary_state", None)):
             dashboard.badge_summary_state.setProperty("variant", "success")
             dashboard.badge_summary_state.style().unpolish(dashboard.badge_summary_state)
             dashboard.badge_summary_state.style().polish(dashboard.badge_summary_state)
-        safe_set_text(getattr(dashboard, "lbl_active_run_name", None), "Configured")
-        safe_set_text(getattr(dashboard, "lbl_active_task", None), f"Basin={'ON' if basin_enabled else 'OFF'} | Leakage={'ON' if leak_enabled else 'OFF'}")
         self._sync_dashboard_run_summary()
         self._sync_monitor_context()
 
@@ -4000,6 +4491,15 @@ class MainWindowController:
             ax.grid(True, color="#d8e3eb", linewidth=0.6)
             ax.tick_params(labelsize=8)
             fig.tight_layout()
+            self._basin_preview_pick_state = {
+                "lon_vec": np.asarray(lon_plot, dtype=float),
+                "lat_vec": np.asarray(lat_plot, dtype=float),
+                "grid": np.asarray(grid_plot.T, dtype=float),
+            }
+            with contextlib.suppress(Exception):
+                page.lbl_basin_map_dataset.setText(f"{ctx['basin_name']} | {Path(ctx['stack_path']).name}")
+                page.lbl_basin_map_cursor.setText("—")
+                page.lbl_basin_map_value.setText("—")
 
             out_dir = Path(getattr(self.host.cfg.path, "OUTPUT", ROOT_DIR / "output")) / "local" / "gui_review"
             out_dir.mkdir(parents=True, exist_ok=True)
@@ -4125,13 +4625,22 @@ class MainWindowController:
             page.slider_time_index.setValue(0)
             page.slider_time_index.blockSignals(False)
             self._sync_preview_time_label(0)
-            _t_years, time_labels = self.host._resolve_time(info.get("t"), nt, meta=meta)
-            time_summary = ""
-            if time_labels:
-                first_label = str(time_labels[0])
-                last_label = str(time_labels[min(len(time_labels), nt) - 1])
-                time_summary = f" | time={first_label}" if first_label == last_label else f" | time={first_label}..{last_label}"
-            page.lbl_stack_info.setText(f"{shape[0]} x {shape[1]} x {nt} | active={target_var}{time_summary}")
+            file_size = ""
+            with contextlib.suppress(Exception):
+                size_bytes = Path(path).stat().st_size
+                if size_bytes >= 1024 * 1024 * 1024:
+                    file_size = f" | {size_bytes / (1024 * 1024 * 1024):.2f} GB"
+                elif size_bytes >= 1024 * 1024:
+                    file_size = f" | {size_bytes / (1024 * 1024):.1f} MB"
+                elif size_bytes > 0:
+                    file_size = f" | {size_bytes / 1024:.1f} KB"
+            if len(shape) >= 3:
+                shape_text = f"{shape[0]} x {shape[1]} x {nt}"
+            elif len(shape) >= 2:
+                shape_text = f"{shape[0]} x {shape[1]}"
+            else:
+                shape_text = "unknown"
+            page.lbl_stack_info.setText(f"{self.window.translate_text('Size')} {shape_text}{file_size}")
             self._apply_preview_bbox_from_info(info)
             self.window.refresh_translations()
             self.on_log(f"[PREVIEW] Stack loaded: {path}", "stdout")
@@ -4173,15 +4682,6 @@ class MainWindowController:
         return label
 
     def on_preview_var_changed(self):
-        current = self.window.page_preview.lbl_stack_info.text().strip()
-        active = self.window.page_preview.cmb_data_var.currentText().strip() or "ewh"
-        if "|" in current and "x" in current:
-            base = current.split("| active=", 1)[0].strip()
-            self.window.page_preview.lbl_stack_info.setText(f"{base} | active={active}")
-        elif current and current != "Stack not loaded.":
-            self.window.page_preview.lbl_stack_info.setText(f"{current} | active={active}")
-        else:
-            self.window.page_preview.lbl_stack_info.setText(f"Active variable: {active}")
         self.window.refresh_translations()
 
     def on_preview_region_mode_changed(self, checked: bool):
@@ -4246,18 +4746,503 @@ class MainWindowController:
         page = self.window.page_preview
         tools_visible = bool(page.plot_toolbar_host.isVisible())
         page.btn_toggle_tools.setText("Hide Tools" if tools_visible else "Tools")
+        self._sync_preview_toolbar_mode()
         page.plot_toolbar_host.updateGeometry()
         page.plot_card.updateGeometry()
         self.window.refresh_translations()
 
+    def _preview_is_3d_mode(self) -> bool:
+        with contextlib.suppress(Exception):
+            return projection_renderer(self.window.page_preview.cmb_projection.currentText().strip()) == "matplotlib_3d"
+        return False
+
+    def _preview_is_3d_axes(self) -> bool:
+        ax = getattr(self, "_ax", None)
+        return bool(ax is not None and (getattr(ax, "name", "") == "3d" or hasattr(ax, "get_zlim3d")))
+
+    def _sync_preview_toolbar_mode(self) -> None:
+        is_3d = self._preview_is_3d_mode() or self._preview_is_3d_axes()
+        with contextlib.suppress(Exception):
+            self._nav_toolbar.setVisible(True)
+        with contextlib.suppress(Exception):
+            self.preview_3d_controls.setVisible(is_3d)
+        if is_3d:
+            with contextlib.suppress(Exception):
+                self.window.page_preview.plot_toolbar_host.setToolTip(
+                    self.window.translate_text("3D Globe: use mouse drag to rotate and wheel or Zoom to scale.")
+                )
+
+    def _collect_preview_3d_control_params(self) -> dict:
+        params = dict(getattr(self, "_preview_globe_params", {}) or projection_defaults("3D Globe"))
+        with contextlib.suppress(Exception):
+            params["azimuth"] = float(self.spin_preview_3d_azimuth.value())
+            params["elevation"] = float(self.spin_preview_3d_elevation.value())
+            params["roll"] = float(self.spin_preview_3d_roll.value())
+            params["zoom"] = float(self.spin_preview_3d_zoom.value())
+            params["focal_length"] = float(self.spin_preview_3d_focal.value())
+            params["relief_exaggeration"] = float(self.spin_preview_3d_relief.value())
+            params["projection_mode"] = "perspective" if self.cmb_preview_3d_projection.currentText().lower().startswith("pers") else "orthographic"
+        self._preview_globe_control_params = params
+        return params
+
+    def _sync_preview_3d_controls_from_params(self, params: dict | None = None) -> None:
+        params = dict(params or getattr(self, "_preview_globe_params", {}) or projection_defaults("3D Globe"))
+        widgets = [
+            getattr(self, "spin_preview_3d_azimuth", None),
+            getattr(self, "spin_preview_3d_elevation", None),
+            getattr(self, "spin_preview_3d_roll", None),
+            getattr(self, "spin_preview_3d_zoom", None),
+            getattr(self, "spin_preview_3d_focal", None),
+            getattr(self, "spin_preview_3d_relief", None),
+            getattr(self, "cmb_preview_3d_projection", None),
+        ]
+        blockers = [QSignalBlocker(widget) for widget in widgets if widget is not None]
+        try:
+            with contextlib.suppress(Exception):
+                self.spin_preview_3d_azimuth.setValue(float(params.get("azimuth", -60.0)))
+                self.spin_preview_3d_elevation.setValue(float(params.get("elevation", 25.0)))
+                self.spin_preview_3d_roll.setValue(float(params.get("roll", 0.0)))
+                self.spin_preview_3d_zoom.setValue(float(params.get("zoom", 1.0)))
+                self.spin_preview_3d_focal.setValue(float(params.get("focal_length", 1.0)))
+                self.spin_preview_3d_relief.setValue(float(params.get("relief_exaggeration", 0.0)))
+                mode = str(params.get("projection_mode", "orthographic")).lower()
+                self.cmb_preview_3d_projection.setCurrentText("Perspective" if mode.startswith("pers") else "Orthographic")
+        finally:
+            del blockers
+
+    def _apply_preview_3d_preset(self, name: str) -> None:
+        if not (self._preview_is_3d_mode() or self._preview_is_3d_axes()):
+            return
+        presets = {
+            "Front": {"central_longitude": 0.0, "central_latitude": 20.0, "azimuth": -60.0, "elevation": 25.0, "zoom": 1.0},
+            "Asia": {"central_longitude": 105.0, "central_latitude": 25.0, "azimuth": -75.0, "elevation": 25.0, "zoom": 1.15},
+            "Europe-Africa": {"central_longitude": 20.0, "central_latitude": 15.0, "azimuth": -35.0, "elevation": 25.0, "zoom": 1.15},
+            "Americas": {"central_longitude": -100.0, "central_latitude": 10.0, "azimuth": 115.0, "elevation": 25.0, "zoom": 1.15},
+            "North Pole": {"central_longitude": 0.0, "central_latitude": 90.0, "azimuth": -90.0, "elevation": 82.0, "zoom": 1.15},
+            "South Pole": {"central_longitude": 0.0, "central_latitude": -90.0, "azimuth": -90.0, "elevation": -82.0, "zoom": 1.15},
+        }
+        params = dict(getattr(self, "_preview_globe_params", {}) or projection_defaults("3D Globe"))
+        params.update(presets.get(name, presets["Front"]))
+        self._preview_globe_control_params = params
+        self._sync_preview_3d_controls_from_params(params)
+        for key in ("central_longitude", "central_latitude", "azimuth", "elevation", "zoom"):
+            self._set_projection_param_value(key, float(params.get(key, 0.0)))
+        self.on_render_preview()
+
+    def _on_preview_3d_projection_changed(self, _text: str) -> None:
+        with contextlib.suppress(Exception):
+            self.spin_preview_3d_focal.setEnabled(self.cmb_preview_3d_projection.currentText().lower().startswith("pers"))
+        self._on_preview_3d_control_changed()
+
+    def _on_preview_3d_control_changed(self, *_args) -> None:
+        if not (self._preview_is_3d_mode() or self._preview_is_3d_axes()):
+            return
+        params = self._collect_preview_3d_control_params()
+        for key in ("azimuth", "elevation", "zoom"):
+            self._set_projection_param_value(key, float(params.get(key, 0.0)))
+        sender = self.sender()
+        if sender is getattr(self, "spin_preview_3d_relief", None):
+            self.on_render_preview()
+            return
+        with contextlib.suppress(Exception):
+            from grace_pipeline.ui.qt import preview_enhancements as pe
+
+            pe.apply_3d_globe_view(self)
+            self._canvas.draw_idle()
+
+    def on_preview_3d_mouse_release(self, _event) -> None:
+        if self._preview_is_3d_axes():
+            with contextlib.suppress(Exception):
+                from grace_pipeline.ui.qt import preview_enhancements as pe
+
+                pe.apply_3d_globe_view(self)
+                self._canvas.draw_idle()
+
+    def on_preview_3d_draw_event(self, _event) -> None:
+        if self._preview_is_3d_axes():
+            with contextlib.suppress(Exception):
+                from grace_pipeline.ui.qt import preview_enhancements as pe
+
+                pe.apply_3d_globe_view(self, draw=False)
+
+    def _projection_param_edit(self, key: str):
+        info = getattr(self.window.page_preview, "projection_param_widgets", {}).get(key)
+        if isinstance(info, dict):
+            return info.get("edit")
+        if isinstance(info, tuple) and len(info) >= 2:
+            return info[1]
+        return None
+
+    def _set_projection_param_value(self, key: str, value: float) -> None:
+        edit = self._projection_param_edit(key)
+        if edit is not None:
+            with contextlib.suppress(Exception):
+                edit.setText(f"{float(value):.6g}")
+
+    def _preview_3d_zoom_value(self) -> float:
+        spin = getattr(self, "spin_preview_3d_zoom", None)
+        if spin is not None:
+            with contextlib.suppress(Exception):
+                return max(0.1, min(5.0, float(spin.value())))
+        edit = self._projection_param_edit("zoom")
+        if edit is not None:
+            with contextlib.suppress(Exception):
+                return max(0.1, min(5.0, float(edit.text().strip())))
+        return max(0.1, min(5.0, float(getattr(self, "_preview_globe_zoom", 1.0) or 1.0)))
+
+    def _set_preview_3d_zoom(self, zoom: float, *, rerender: bool = False) -> None:
+        zoom = max(0.1, min(5.0, float(zoom)))
+        self._set_projection_param_value("zoom", zoom)
+        spin = getattr(self, "spin_preview_3d_zoom", None)
+        if spin is not None:
+            with contextlib.suppress(Exception):
+                with QSignalBlocker(spin):
+                    spin.setValue(zoom)
+        params = dict(getattr(self, "_preview_globe_params", {}) or projection_defaults("3D Globe"))
+        params["zoom"] = zoom
+        self._preview_globe_control_params = params
+        if rerender:
+            self.on_render_preview()
+            return
+        with contextlib.suppress(Exception):
+            from grace_pipeline.ui.qt import preview_enhancements as pe
+
+            pe.apply_3d_globe_view(self, zoom=zoom)
+            self._canvas.draw_idle()
+
+    def _reset_preview_3d_view(self) -> None:
+        defaults = projection_defaults("3D Globe")
+        for key in ("central_longitude", "central_latitude", "azimuth", "elevation", "zoom"):
+            self._set_projection_param_value(key, float(defaults.get(key, 0.0)))
+        self._preview_globe_control_params = defaults
+        self._sync_preview_3d_controls_from_params(defaults)
+        self.on_render_preview()
+
+    def _preview_zoom_action(self, factor: float = 1.35) -> None:
+        if self._preview_is_3d_mode() or self._preview_is_3d_axes():
+            current = self._preview_3d_zoom_value()
+            # Existing 2D helper uses factors < 1 to zoom in and > 1 to zoom out.
+            next_zoom = current / max(0.05, float(factor))
+            self._set_preview_3d_zoom(next_zoom, rerender=False)
+            return
+        self._zoom_axes_out(self._ax, self._canvas, factor=factor)
+
+    def on_preview_scroll_event(self, event):
+        if not (self._preview_is_3d_mode() or self._preview_is_3d_axes()):
+            return
+        if getattr(event, "inaxes", None) is not self._ax:
+            return
+        current = self._preview_3d_zoom_value()
+        button = str(getattr(event, "button", "") or "").lower()
+        step = float(getattr(event, "step", 0.0) or 0.0)
+        if button == "up" or step > 0:
+            self._set_preview_3d_zoom(current * 1.12, rerender=False)
+        elif button == "down" or step < 0:
+            self._set_preview_3d_zoom(current / 1.12, rerender=False)
+
+    def _preview_type_label(self, layer_type: str) -> str:
+        labels = {
+            "raster": "Raster",
+            "coastline": "Vector",
+            "graticule": "Grid",
+            "boundary": "Boundary",
+            "shapefile": "Boundary",
+            "colorbar": "Decorator",
+            "annotation": "Annotation",
+        }
+        return self.window.translate_text(labels.get(layer_type, layer_type.title()))
+
+    def _preview_layer_name(self, layer: PreviewLayer) -> str:
+        return self.window.translate_text(layer.name)
+
+    def _preview_sorted_layers(self, *, visible_only: bool = False) -> list[PreviewLayer]:
+        layers = sorted(self.preview_layers, key=lambda item: item.zorder)
+        if visible_only:
+            layers = [layer for layer in layers if layer.visible]
+        return layers
+
+    def _normalize_preview_layer_zorders(self) -> None:
+        for index, layer in enumerate(self._preview_sorted_layers()):
+            layer.zorder = index * 10
+
+    def _ensure_preview_layers(self) -> None:
+        if self.preview_layers:
+            return
+        self.preview_layers = [
+            PreviewLayer("data", "Mass Anomaly Data", "raster", visible=True, zorder=0, removable=False),
+            PreviewLayer("coastline", "Coastlines", "coastline", visible=True, zorder=20, removable=False),
+            PreviewLayer("graticule", "Graticule", "graticule", visible=True, zorder=30, removable=False),
+            PreviewLayer("colorbar", "Color Scale", "colorbar", visible=True, zorder=100, removable=False),
+        ]
+
+    def _preview_layer_visible(self, layer_type: str, *, path: str | None = None) -> bool:
+        self._ensure_preview_layers()
+        for layer in self.preview_layers:
+            if layer.type != layer_type or not layer.visible:
+                continue
+            if path is not None and str(layer.path or "") != str(path):
+                continue
+            return True
+        return False
+
+    def _preview_layers_by_type(self, *layer_types: str, visible_only: bool = True) -> list[PreviewLayer]:
+        self._ensure_preview_layers()
+        wanted = set(layer_types)
+        return [
+            layer
+            for layer in self._preview_sorted_layers(visible_only=visible_only)
+            if layer.type in wanted
+        ]
+
+    def _sync_preview_legacy_layer_controls(self) -> None:
+        page = self.window.page_preview
+        mappings = (
+            ("chk_layer_data", self._preview_layer_visible("raster", path=None)),
+            ("chk_layer_coastlines", self._preview_layer_visible("coastline")),
+            ("chk_layer_grid", self._preview_layer_visible("graticule")),
+            ("chk_show_graticule", self._preview_layer_visible("graticule")),
+            ("chk_show_colorbar", self._preview_layer_visible("colorbar")),
+        )
+        for attr, checked in mappings:
+            widget = getattr(page, attr, None)
+            if isinstance(widget, QCheckBox):
+                with QSignalBlocker(widget):
+                    widget.setChecked(bool(checked))
+        for attr, checked in (
+            ("graticule_options_panel", self._preview_layer_visible("graticule")),
+            ("colorbar_options_panel", self._preview_layer_visible("colorbar")),
+        ):
+            panel = getattr(page, attr, None)
+            if panel is not None:
+                with contextlib.suppress(Exception):
+                    panel.setVisible(bool(checked))
+        boundary_widget = getattr(page, "chk_layer_boundaries", None)
+        if isinstance(boundary_widget, QCheckBox):
+            has_visible_import = any(
+                layer.visible and layer.path for layer in self.preview_layers if layer.type in {"boundary", "shapefile", "raster"}
+            )
+            with QSignalBlocker(boundary_widget):
+                boundary_widget.setChecked(bool(has_visible_import))
+
+    def _refresh_preview_after_layer_change(self) -> None:
+        self._sync_preview_legacy_layer_controls()
+        path = self.window.page_preview.edit_dataset_source.text().strip()
+        if path and getattr(self, "_figure", None) is not None:
+            with contextlib.suppress(Exception):
+                self.on_render_preview()
+
+    def _layer_action_button(self, text: str, tooltip: str, callback) -> QPushButton:
+        button = QPushButton(text)
+        button.setObjectName("LayerIconButton")
+        button.setToolTip(self.window.translate_text(tooltip))
+        button.setFixedSize(24, 24)
+        button.clicked.connect(callback)
+        return button
+
+    def _render_preview_layer_table(self, selected_layer_id: str | None = None) -> None:
+        self._ensure_preview_layers()
+        page = self.window.page_preview
+        table = page.table_overlay_layers
+        display_layers = [
+            layer for layer in self._preview_sorted_layers()
+            if layer.type not in {"graticule", "colorbar"}
+        ]
+        with QSignalBlocker(table):
+            table.setHorizontalHeaderLabels([
+                "",
+                self.window.translate_text("Layer"),
+                self.window.translate_text("Type"),
+                self.window.translate_text("Actions"),
+            ])
+            table.setRowCount(0)
+            for row, layer in enumerate(display_layers):
+                table.insertRow(row)
+                visible = QCheckBox()
+                visible.setChecked(layer.visible)
+                visible.setToolTip(self.window.translate_text("Visible"))
+                visible.toggled.connect(lambda checked, layer_id=layer.id: self._set_preview_layer_visible(layer_id, checked))
+                table.setCellWidget(row, 0, visible)
+
+                name_item = QTableWidgetItem(self._preview_layer_name(layer))
+                name_item.setFlags(name_item.flags() & ~Qt.ItemIsEditable)
+                name_item.setData(Qt.UserRole, layer.id)
+                table.setItem(row, 1, name_item)
+
+                type_item = QTableWidgetItem(self._preview_type_label(layer.type))
+                type_item.setFlags(type_item.flags() & ~Qt.ItemIsEditable)
+                table.setItem(row, 2, type_item)
+
+                actions = QWidget()
+                actions.setObjectName("LayerActionCell")
+                layout = QHBoxLayout(actions)
+                layout.setContentsMargins(0, 0, 0, 0)
+                layout.setSpacing(3)
+                layout.addWidget(self._layer_action_button("⤴", "Move to top", lambda _=False, layer_id=layer.id: self._top_preview_layer(layer_id)))
+                layout.addWidget(self._layer_action_button("↑", "Move up", lambda _=False, layer_id=layer.id: self._move_preview_layer(layer_id, -1)))
+                layout.addWidget(self._layer_action_button("↓", "Move down", lambda _=False, layer_id=layer.id: self._move_preview_layer(layer_id, 1)))
+                delete_button = self._layer_action_button("×", "Delete", lambda _=False, layer_id=layer.id: self._delete_preview_layer(layer_id))
+                delete_button.setEnabled(layer.removable)
+                layout.addWidget(delete_button)
+                table.setCellWidget(row, 3, actions)
+                table.setRowHeight(row, 34)
+                if selected_layer_id and selected_layer_id == layer.id:
+                    table.selectRow(row)
+        self._sync_preview_legacy_layer_controls()
+
+    def _set_preview_layer_type_visible(self, layer_type: str, checked: bool) -> None:
+        self._ensure_preview_layers()
+        changed = False
+        for layer in self.preview_layers:
+            if layer.type == layer_type and layer.path is None:
+                changed = layer.visible != bool(checked)
+                layer.visible = bool(checked)
+        self._sync_preview_legacy_layer_controls()
+        self._render_preview_layer_table()
+        if changed:
+            self._refresh_preview_after_layer_change()
+
+    def _set_preview_layer_visible(self, layer_id: str, checked: bool) -> None:
+        for layer in self.preview_layers:
+            if layer.id == layer_id:
+                layer.visible = bool(checked)
+                break
+        self._refresh_preview_after_layer_change()
+
+    def _move_preview_layer(self, layer_id: str, delta: int) -> None:
+        layers = self._preview_sorted_layers()
+        index = next((i for i, layer in enumerate(layers) if layer.id == layer_id), -1)
+        target = index + int(delta)
+        if index < 0 or target < 0 or target >= len(layers):
+            return
+        layers[index], layers[target] = layers[target], layers[index]
+        for row, layer in enumerate(layers):
+            layer.zorder = row * 10
+        self._render_preview_layer_table(selected_layer_id=layer_id)
+        self._refresh_preview_after_layer_change()
+
+    def _top_preview_layer(self, layer_id: str) -> None:
+        layers = self._preview_sorted_layers()
+        index = next((i for i, layer in enumerate(layers) if layer.id == layer_id), -1)
+        if index < 0:
+            return
+        layer = layers.pop(index)
+        layers.append(layer)
+        for row, item in enumerate(layers):
+            item.zorder = row * 10
+        self._render_preview_layer_table(selected_layer_id=layer_id)
+        self._refresh_preview_after_layer_change()
+
+    def _delete_preview_layer(self, layer_id: str) -> None:
+        layer = next((item for item in self.preview_layers if item.id == layer_id), None)
+        if layer is None or not layer.removable:
+            return
+        self.preview_layers = [item for item in self.preview_layers if item.id != layer_id]
+        self._normalize_preview_layer_zorders()
+        self._render_preview_layer_table()
+        self._refresh_preview_after_layer_change()
+
     def _sync_preview_overlay_controls(self, *_args):
         page = self.window.page_preview
-        boundary_enabled = bool(page.chk_layer_boundaries.isChecked())
-        custom_enabled = bool(page.chk_layer_rivers.isChecked())
-        for widget in (page.edit_boundary_overlay, page.btn_boundary_overlay_browse):
-            widget.setEnabled(boundary_enabled)
-        for widget in (page.edit_custom_overlay, page.btn_custom_overlay_browse):
-            widget.setEnabled(custom_enabled)
+        self._ensure_preview_layers()
+        if hasattr(page, "btn_overlay_add"):
+            page.btn_overlay_add.setEnabled(True)
+        for attr in ("btn_overlay_remove", "btn_overlay_up", "btn_overlay_down", "btn_overlay_top"):
+            widget = getattr(page, attr, None)
+            if widget is not None:
+                widget.setEnabled(False)
+        for attr in ("edit_boundary_overlay", "btn_boundary_overlay_browse", "edit_custom_overlay", "btn_custom_overlay_browse"):
+            widget = getattr(page, attr, None)
+            if widget is not None:
+                widget.setEnabled(False)
+        self._render_preview_layer_table()
+
+    def on_add_preview_overlay_layer(self):
+        page = self.window.page_preview
+        path, _selected_filter = QFileDialog.getOpenFileName(
+            self.window,
+            self.window.translate_text("Select boundary or grid file"),
+            page.edit_boundary_overlay.text().strip() or str(ROOT_DIR),
+            self.window.translate_text("Boundary / Grid Files (*.shp *.bln *.txt *.nc *.nc4 *.cdf *.h5 *.hdf5 *.mat);;All Files (*)"),
+        )
+        if not path:
+            return
+        self._add_preview_overlay_layer(path)
+        self._sync_preview_overlay_controls()
+        self._refresh_preview_after_layer_change()
+
+    def _add_preview_overlay_layer(self, path: str, visible: bool = True):
+        clean_path = str(path or "").strip()
+        if not clean_path:
+            return
+        resolved = self._resolve_overlay_file(clean_path) or clean_path
+        for layer in self.preview_layers:
+            if str(layer.path or "") == str(resolved):
+                layer.visible = bool(visible)
+                self._render_preview_layer_table(selected_layer_id=layer.id)
+                return
+        suffix = Path(resolved).suffix.lower()
+        layer_type = "boundary" if suffix in {".shp", ".bln", ".txt"} else "raster"
+        zorder = (max((layer.zorder for layer in self.preview_layers), default=0) + 10)
+        layer = PreviewLayer(
+            id=f"layer-{uuid4().hex[:10]}",
+            name=Path(resolved).name,
+            type=layer_type,
+            path=resolved,
+            visible=bool(visible),
+            zorder=zorder,
+            removable=True,
+            opacity=0.72 if layer_type == "raster" else 1.0,
+        )
+        self.preview_layers.append(layer)
+        self._render_preview_layer_table(selected_layer_id=layer.id)
+
+    def _swap_preview_overlay_rows(self, row_a: int, row_b: int):
+        layers = self._preview_sorted_layers()
+        if row_a < 0 or row_b < 0 or row_a >= len(layers) or row_b >= len(layers):
+            return
+        selected_id = layers[row_a].id
+        layers[row_a], layers[row_b] = layers[row_b], layers[row_a]
+        for row, layer in enumerate(layers):
+            layer.zorder = row * 10
+        self._render_preview_layer_table(selected_layer_id=selected_id)
+
+    def _set_preview_overlay_layer_entries(self, entries: list[tuple[bool, str]], selected: int | None = None):
+        self.preview_layers = [layer for layer in self.preview_layers if not layer.path]
+        for visible, path in entries:
+            self._add_preview_overlay_layer(path, visible=visible)
+        if selected is not None:
+            layers = self._preview_sorted_layers()
+            if 0 <= selected < len(layers):
+                self._render_preview_layer_table(selected_layer_id=layers[selected].id)
+        self._sync_preview_overlay_controls()
+
+    def _preview_overlay_layer_entries(self, include_invisible: bool = False) -> list[tuple[bool, str]]:
+        entries: list[tuple[bool, str]] = []
+        self._ensure_preview_layers()
+        for layer in self._preview_sorted_layers():
+            if not layer.path:
+                continue
+            if layer.visible or include_invisible:
+                entries.append((bool(layer.visible), str(layer.path)))
+        return entries
+
+    def on_remove_preview_overlay_layer(self):
+        row = self.window.page_preview.table_overlay_layers.currentRow()
+        layers = self._preview_sorted_layers()
+        if 0 <= row < len(layers):
+            self._delete_preview_layer(layers[row].id)
+
+    def on_move_preview_overlay_layer(self, delta: int):
+        row = self.window.page_preview.table_overlay_layers.currentRow()
+        layers = self._preview_sorted_layers()
+        if 0 <= row < len(layers):
+            self._move_preview_layer(layers[row].id, delta)
+
+    def on_top_preview_overlay_layer(self):
+        row = self.window.page_preview.table_overlay_layers.currentRow()
+        layers = self._preview_sorted_layers()
+        if 0 <= row < len(layers):
+            self._top_preview_layer(layers[row].id)
 
     def _record_preview_view(self, x_data, y_data):
         try:
@@ -4351,12 +5336,32 @@ class MainWindowController:
             return lon, lat, grid
 
     def on_preview_home(self):
+        if self._preview_is_3d_mode() or self._preview_is_3d_axes():
+            self._reset_preview_3d_view()
+            return
         if self._ax is None or self._preview_full_view is None:
             return
         xmin, xmax, ymin, ymax = self._preview_full_view
         self._ax.set_xlim(xmin, xmax)
         self._ax.set_ylim(ymin, ymax)
         self._canvas.draw_idle()
+
+    @staticmethod
+    def _zoom_axes_out(ax, canvas, factor: float = 1.35):
+        if ax is None or canvas is None:
+            return
+        try:
+            xmin, xmax = ax.get_xlim()
+            ymin, ymax = ax.get_ylim()
+            cx = (xmin + xmax) / 2.0
+            cy = (ymin + ymax) / 2.0
+            half_w = abs(xmax - xmin) * float(factor) / 2.0
+            half_h = abs(ymax - ymin) * float(factor) / 2.0
+            ax.set_xlim(cx - half_w, cx + half_w)
+            ax.set_ylim(cy - half_h, cy + half_h)
+            canvas.draw_idle()
+        except Exception:
+            return
 
     def _apply_preview_main_splitter(self):
         page = self.window.page_preview
@@ -4488,15 +5493,39 @@ class MainWindowController:
             if grid_plot.size == 0 or lon2d.size == 0 or lat2d.size == 0:
                 raise ValueError("Selected region produced an empty plot.")
 
+            self._ensure_preview_layers()
             coast_path = self._resolve_coastline_path()
-            show_coast = self.window.page_preview.chk_layer_coastlines.isChecked() and bool(coast_path)
-            show_grid = self.window.page_preview.chk_layer_grid.isChecked()
-            show_boundaries = self.window.page_preview.chk_layer_boundaries.isChecked()
-            show_data = self.window.page_preview.chk_layer_data.isChecked()
-            boundary_path = self._resolve_boundary_overlay_path()
-            custom_overlay_path = self._resolve_custom_overlay_path()
-            show_custom_overlay = self.window.page_preview.chk_layer_rivers.isChecked() and bool(custom_overlay_path)
+            show_coast = self._preview_layer_visible("coastline") and bool(coast_path)
+            show_grid = self._preview_layer_visible("graticule")
+            show_data = any(layer.type == "raster" and not layer.path and layer.visible for layer in self.preview_layers)
+            show_colorbar = self._preview_layer_visible("colorbar")
+            overlay_layers = self._preview_layers_by_type("boundary", "shapefile", visible_only=True)
             im = None
+
+            def draw_overlay_layers(proj_name, lon0=0.0, lat0=0.0, lat1=30.0, lat2=60.0, scale_cb=lambda xx: xx):
+                for layer in overlay_layers:
+                    overlay_path = str(layer.path or "")
+                    if Path(overlay_path).suffix.lower() not in {".shp", ".bln", ".txt"}:
+                        continue
+                    if not Path(overlay_path).exists():
+                        continue
+                    boundaries = read_boundary_file(overlay_path)
+                    draw_boundaries(
+                        self._ax,
+                        boundaries,
+                        proj=proj_name,
+                        lon0=lon0,
+                        lat0=lat0,
+                        lat1=lat1,
+                        lat2=lat2,
+                        bbox=bbox,
+                        normalize_lon_for_plot_cb=lambda arr: normalize_lon_for_plot(arr, lon_mode=lon_mode),
+                        split_dateline_cb=lambda lons, lats, lon0=0.0: split_dateline(lons, lats, wrap_delta_lon, lon0=lon0),
+                        split_plot_lon_segments_cb=lambda lons, lats, plate_carree=False: split_plot_lon_segments(lons, lats, split_dateline, lon0=lon0, plate_carree=plate_carree, lon_mode=lon_mode),
+                        apply_proj_scale_cb=scale_cb,
+                        plot_line_cb=plot_line,
+                        projector_cb=self._project,
+                    )
 
             if proj == "PlateCarree":
                 if show_data:
@@ -4524,42 +5553,7 @@ class MainWindowController:
                         plot_line_cb=plot_line,
                         projector_cb=self._project,
                     )
-                if show_boundaries and boundary_path and Path(boundary_path).exists():
-                    boundaries = read_boundary_file(boundary_path)
-                    draw_boundaries(
-                        self._ax,
-                        boundaries,
-                        proj="PlateCarree",
-                        lon0=0.0,
-                        lat0=0.0,
-                        lat1=30.0,
-                        lat2=60.0,
-                        bbox=bbox,
-                        normalize_lon_for_plot_cb=lambda arr: normalize_lon_for_plot(arr, lon_mode=lon_mode),
-                        split_dateline_cb=lambda lons, lats, lon0=0.0: split_dateline(lons, lats, wrap_delta_lon, lon0=lon0),
-                        split_plot_lon_segments_cb=lambda lons, lats, plate_carree=False: split_plot_lon_segments(lons, lats, split_dateline, lon0=0.0, plate_carree=plate_carree, lon_mode=lon_mode),
-                        apply_proj_scale_cb=lambda xx: xx,
-                        plot_line_cb=plot_line,
-                        projector_cb=self._project,
-                    )
-                if show_custom_overlay and Path(custom_overlay_path).exists():
-                    boundaries = read_boundary_file(custom_overlay_path)
-                    draw_boundaries(
-                        self._ax,
-                        boundaries,
-                        proj="PlateCarree",
-                        lon0=0.0,
-                        lat0=0.0,
-                        lat1=30.0,
-                        lat2=60.0,
-                        bbox=bbox,
-                        normalize_lon_for_plot_cb=lambda arr: normalize_lon_for_plot(arr, lon_mode=lon_mode),
-                        split_dateline_cb=lambda lons, lats, lon0=0.0: split_dateline(lons, lats, wrap_delta_lon, lon0=lon0),
-                        split_plot_lon_segments_cb=lambda lons, lats, plate_carree=False: split_plot_lon_segments(lons, lats, split_dateline, lon0=0.0, plate_carree=plate_carree, lon_mode=lon_mode),
-                        apply_proj_scale_cb=lambda xx: xx,
-                        plot_line_cb=plot_line,
-                        projector_cb=self._project,
-                    )
+                draw_overlay_layers("PlateCarree", scale_cb=lambda xx: xx)
             else:
                 lon0, lat0 = get_proj_center(lon, lat)
                 lat1, lat2 = get_conic_parallels(float(np.nanmin(lat)), float(np.nanmax(lat)))
@@ -4600,43 +5594,8 @@ class MainWindowController:
                         plot_line_cb=plot_line,
                         projector_cb=self._project,
                     )
-                if show_boundaries and boundary_path and Path(boundary_path).exists():
-                    boundaries = read_boundary_file(boundary_path)
-                    draw_boundaries(
-                        self._ax,
-                        boundaries,
-                        proj=proj,
-                        lon0=lon0,
-                        lat0=lat0,
-                        lat1=lat1,
-                        lat2=lat2,
-                        bbox=bbox,
-                        normalize_lon_for_plot_cb=lambda arr: normalize_lon_for_plot(arr, lon_mode=lon_mode),
-                        split_dateline_cb=lambda lons, lats, lon0=0.0: split_dateline(lons, lats, wrap_delta_lon, lon0=lon0),
-                        split_plot_lon_segments_cb=lambda lons, lats, plate_carree=False: split_plot_lon_segments(lons, lats, split_dateline, lon0=lon0, plate_carree=plate_carree, lon_mode=lon_mode),
-                        apply_proj_scale_cb=lambda xx: apply_proj_scale(xx, self._proj_scale, self._proj_x0),
-                        plot_line_cb=plot_line,
-                        projector_cb=self._project,
-                    )
-                if show_custom_overlay and Path(custom_overlay_path).exists():
-                    boundaries = read_boundary_file(custom_overlay_path)
-                    draw_boundaries(
-                        self._ax,
-                        boundaries,
-                        proj=proj,
-                        lon0=lon0,
-                        lat0=lat0,
-                        lat1=lat1,
-                        lat2=lat2,
-                        bbox=bbox,
-                        normalize_lon_for_plot_cb=lambda arr: normalize_lon_for_plot(arr, lon_mode=lon_mode),
-                        split_dateline_cb=lambda lons, lats, lon0=0.0: split_dateline(lons, lats, wrap_delta_lon, lon0=lon0),
-                        split_plot_lon_segments_cb=lambda lons, lats, plate_carree=False: split_plot_lon_segments(lons, lats, split_dateline, lon0=lon0, plate_carree=plate_carree, lon_mode=lon_mode),
-                        apply_proj_scale_cb=lambda xx: apply_proj_scale(xx, self._proj_scale, self._proj_x0),
-                        plot_line_cb=plot_line,
-                        projector_cb=self._project,
-                    )
-            if im is not None:
+                draw_overlay_layers(proj, lon0=lon0, lat0=lat0, lat1=lat1, lat2=lat2, scale_cb=lambda xx: apply_proj_scale(xx, self._proj_scale, self._proj_x0))
+            if im is not None and show_colorbar:
                 self._figure.colorbar(im, ax=self._ax, shrink=0.84, pad=0.02)
             self._figure.subplots_adjust(left=0.018, right=0.985, top=0.965, bottom=0.03)
             self._apply_preview_main_splitter()
@@ -4667,7 +5626,14 @@ class MainWindowController:
 
     def on_preview_canvas_event(self, event):
         state = getattr(self, "_preview_pick_state", None)
-        if state is None or event is None or event.xdata is None or event.ydata is None:
+        if state is None or event is None:
+            return
+        xdata = event.xdata
+        ydata = event.ydata
+        if (xdata is None or ydata is None) and getattr(event, "inaxes", None) is getattr(self, "_ax", None):
+            with contextlib.suppress(Exception):
+                xdata, ydata = event.inaxes.transData.inverted().transform((event.x, event.y))
+        if xdata is None or ydata is None:
             return
         x = state["x"].ravel()
         y = state["y"].ravel()
@@ -4677,16 +5643,20 @@ class MainWindowController:
         mask = np.isfinite(x) & np.isfinite(y) & np.isfinite(lon) & np.isfinite(lat)
         if not np.any(mask):
             return
-        dx = x[mask] - float(event.xdata)
-        dy = y[mask] - float(event.ydata)
+        dx = x[mask] - float(xdata)
+        dy = y[mask] - float(ydata)
         idx = int(np.argmin(dx * dx + dy * dy))
         lon_val = float(lon[mask][idx])
         lat_val = float(lat[mask][idx])
         grid_val = float(grid[mask][idx]) if np.isfinite(grid[mask][idx]) else float("nan")
         ns = "N" if lat_val >= 0 else "S"
         ew = "E" if lon_val >= 0 else "W"
-        self.window.page_preview.lbl_cursor_position.setText(f"{abs(lat_val):.2f} {ns}, {abs(lon_val):.2f} {ew}")
-        self.window.page_preview.lbl_grid_value.setText(f"{grid_val:.3f}" if np.isfinite(grid_val) else "NaN")
+        page = self.window.page_preview
+        page.lbl_cursor_position.setText(f"{abs(lat_val):.2f} {ns}, {abs(lon_val):.2f} {ew}")
+        page.lbl_grid_value.setText(f"{grid_val:.3f}" if np.isfinite(grid_val) else "NaN")
+        with contextlib.suppress(Exception):
+            page.lbl_cursor_position.repaint()
+            page.lbl_grid_value.repaint()
 
     def on_export_figure(self):
         try:
@@ -4815,6 +5785,20 @@ class MainWindowController:
 
     def _resolve_custom_overlay_path(self) -> str:
         return self._resolve_overlay_file(self.window.page_preview.edit_custom_overlay.text())
+
+    def _resolve_preview_overlay_paths(self) -> list[str]:
+        page = self.window.page_preview
+        paths: list[str] = []
+        with contextlib.suppress(Exception):
+            for _visible, raw_path in self._preview_overlay_layer_entries(include_invisible=False):
+                resolved = self._resolve_overlay_file(raw_path)
+                if resolved and resolved not in paths:
+                    paths.append(resolved)
+        if not paths:
+            for candidate in (self._resolve_boundary_overlay_path(), self._resolve_custom_overlay_path()):
+                if candidate and candidate not in paths:
+                    paths.append(candidate)
+        return paths
 
     def _run_in_thread(self, scope: str, target, status_text: str):
         if self.host._active_scope:
@@ -5063,8 +6047,17 @@ class MainWindowController:
             self.window.page_dashboard.lbl_active_run_name.setText("Running pipeline")
             self.window.page_dashboard.lbl_active_counts.setText(detail_text.replace("/", " / "))
             self.window.page_dashboard.lbl_active_task.setText(stage_text)
+            self.window.page_dashboard.bar_active_run.setVisible(True)
             self.window.page_dashboard.bar_active_run.setValue(int(round(max(0.0, min(100.0, pct)))))
             self._set_progress_active(self.window.page_dashboard.bar_active_run, pct > 0.0)
+            if hasattr(self.window.page_dashboard, "btn_pause_run"):
+                self.window.page_dashboard.btn_pause_run.setVisible(True)
+            if hasattr(self.window.page_dashboard, "btn_stop_run"):
+                self.window.page_dashboard.btn_stop_run.setVisible(True)
+            if hasattr(self.window.page_dashboard, "btn_run_full"):
+                self.window.page_dashboard.btn_run_full.setVisible(False)
+            if hasattr(self.window.page_dashboard, "btn_validate_paths"):
+                self.window.page_dashboard.btn_validate_paths.setVisible(False)
             if pct >= 100.0:
                 self.window.set_top_status("Finalizing Outputs", "warning")
                 self.window.page_dashboard.lbl_dashboard_status.setText("Finalizing")
@@ -5092,6 +6085,7 @@ class MainWindowController:
             self.window.page_dashboard.lbl_active_run_name.setText("Completed")
             self.window.page_dashboard.lbl_active_counts.setText((self._last_overall_detail or "0/0").replace("/", " / "))
             self.window.page_dashboard.lbl_active_task.setText(done_message)
+            self.window.page_dashboard.bar_active_run.setVisible(True)
             self._set_progress_active(self.window.page_dashboard.bar_active_run, True)
             self.window.page_dashboard.badge_summary_state.setText("Run Complete")
             self.window.page_dashboard.badge_summary_state.setProperty("variant", "success")
@@ -5104,6 +6098,7 @@ class MainWindowController:
             self.window.set_run_progress(-1.0, detail=self._last_overall_detail or "0/0", stage="Failed")
             self.window.page_dashboard.lbl_dashboard_stage.setText("Run failed. Check Console or the Dashboard output preview for the error trace.")
             self.window.page_dashboard.lbl_active_counts.setText((self._last_overall_detail or "0/0").replace("/", " / "))
+            self.window.page_dashboard.bar_active_run.setVisible(True)
             self._set_progress_active(self.window.page_dashboard.bar_active_run, False)
             self.window.page_dashboard.badge_summary_state.setText("Run Failed")
             self.window.page_dashboard.badge_summary_state.setProperty("variant", "danger")
@@ -5142,23 +6137,7 @@ class MainWindowController:
 
     @staticmethod
     def _projection_key(text: str) -> str:
-        mapping = {
-            "Robinson (Global)": "Robinson",
-            "Plate Carree": "PlateCarree",
-            "Orthographic": "Orthographic",
-            "Mollweide": "Mollweide",
-            "Mercator": "Mercator",
-            "Miller": "Miller",
-            "Sinusoidal": "Sinusoidal",
-            "Equal Earth": "EqualEarth",
-            "Winkel Tripel": "WinkelTripel",
-            "Eckert IV": "EckertIV",
-            "Azimuthal Equidistant": "AzimuthalEquidistant",
-            "Stereographic": "Stereographic",
-            "Lambert Conformal": "LambertConformal",
-            "Albers Equal Area": "AlbersEqualArea",
-        }
-        return mapping.get(text, "PlateCarree")
+        return projection_engine_name(text)
 
     @staticmethod
     def _project(proj, lon, lat, lon0=0.0, lat0=0.0, lat1=30.0, lat2=60.0):

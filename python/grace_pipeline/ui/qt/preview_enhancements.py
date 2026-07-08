@@ -26,7 +26,7 @@ from PySide6.QtWidgets import (
 
 from grace_pipeline.infra.config import get_root_dir
 from grace_pipeline.ui.qt.qt_safe import is_deleted_qt_object_error, qt_object_is_alive
-from grace_pipeline.ui.plotting.boundaries import plot_line, split_dateline
+from grace_pipeline.ui.plotting.boundaries import plot_line, read_boundary_file, split_dateline
 from grace_pipeline.ui.plotting.overlays import draw_coastlines
 from grace_pipeline.ui.plotting.projections import (
     apply_proj_scale,
@@ -39,31 +39,30 @@ from grace_pipeline.ui.plotting.projections import (
     split_plot_lon_segments,
     wrap_delta_lon,
 )
+from grace_pipeline.ui.qt.projection_registry import (
+    PARAM_DEFS,
+    PROJECTION_DISPLAY_NAMES,
+    projection_defaults,
+    projection_default_extent,
+    projection_engine_name,
+    projection_key_to_name,
+    projection_name_to_key,
+    projection_renderer,
+    projection_spec,
+    visible_projection_params,
+)
 
 ROOT_DIR = get_root_dir().resolve()
-PROJECTION_CHOICES = [
-    "Robinson (Global)",
-    "Plate Carree",
-    "Mercator",
-    "Mollweide",
-    "Equal Earth",
-    "Winkel Tripel",
-    "Eckert IV",
-    "Sinusoidal",
-    "Miller",
-    "Orthographic",
-    "Azimuthal Equidistant",
-    "Stereographic",
-    "Lambert Conformal",
-    "Albers Equal Area",
-    "3D Globe (Surface)",
-]
+PROJECTION_CHOICES = PROJECTION_DISPLAY_NAMES
 FALLBACK_RENDER_PROJECTIONS = {
     "Orthographic",
-    "Azimuthal Equidistant",
+    "AzimuthalEquidistant",
+    "LambertAzimuthalEqualArea",
     "Stereographic",
-    "Lambert Conformal",
-    "Albers Equal Area",
+    "LambertConformal",
+    "AlbersEqualArea",
+    "TransverseMercator",
+    "UTM",
 }
 BASE_CMAPS = [
     "RdBu_r",
@@ -77,6 +76,7 @@ BASE_CMAPS = [
     "matlab_jet",
     "grace_bwr",
 ]
+DEBUG_3D_COASTLINE = True
 
 
 def _is_zh(window) -> bool:
@@ -230,13 +230,42 @@ def _apply_preview_labels(window) -> None:
         "Stack Status": _tr(window, "Data Status", "数据状态"),
         "栈状态": "数据状态",
         "Dataset Source": _tr(window, "Data Source", "数据源"),
-        "Data Variable": _tr(window, "Variable", "数据变量"),
-        "Time Index": _tr(window, "Time", "时间"),
+        "Data Source": _tr(window, "Data Source", "数据源"),
+        "Data Variable": _tr(window, "Plot Variable", "绘图变量"),
+        "Plot Variable": _tr(window, "Plot Variable", "绘图变量"),
+        "Time Index": _tr(window, "Time Slice", "时间索引/切片"),
+        "Time Slice": _tr(window, "Time Slice", "时间索引/切片"),
         "Projection": _tr(window, "Projection", "投影方式"),
+        "Projection Settings": _tr(window, "Projection Settings", "投影设置"),
+        "Projection Parameters": _tr(window, "Projection Parameters", "投影参数"),
+        "Central longitude": _tr(window, "Central longitude", "中心经度"),
+        "中心经度": _tr(window, "Central longitude", "中心经度"),
+        "Central latitude": _tr(window, "Central latitude", "中心纬度"),
+        "中心纬度": _tr(window, "Central latitude", "中心纬度"),
+        "Standard parallels": _tr(window, "Standard parallels", "标准纬线"),
+        "Lat 1": _tr(window, "Lat 1", "纬线 1"),
+        "Lat 2": _tr(window, "Lat 2", "纬线 2"),
+        "Extent": _tr(window, "Extent", "显示范围"),
+        "Azimuth": _tr(window, "Azimuth", "方位角"),
+        "方位角": _tr(window, "Azimuth", "方位角"),
+        "Elevation": _tr(window, "Elevation", "俯仰角"),
+        "俯仰角": _tr(window, "Elevation", "俯仰角"),
+        "Zoom": _tr(window, "Zoom", "缩放"),
+        "缩放": _tr(window, "Zoom", "缩放"),
+        "Color Scale": _tr(window, "Color Scale Settings", "色带设置"),
+        "色标尺": _tr(window, "Color Scale Settings", "色带设置"),
+        "Spatial Extent": _tr(window, "Spatial Extent", "空间范围"),
         "Colormap": _tr(window, "Colormap", "色带"),
-        "Color Min": _tr(window, "Minimum", "色标最小值"),
-        "Color Max": _tr(window, "Maximum", "色标最大值"),
+        "Minimum": _tr(window, "Minimum", "最小值"),
+        "Maximum": _tr(window, "Maximum", "最大值"),
+        "Color Min": _tr(window, "Minimum", "最小值"),
+        "Color Max": _tr(window, "Maximum", "最大值"),
         "Use Detected Extent": _tr(window, "Use Data Extent", "使用数据范围"),
+        "Use Data Extent": _tr(window, "Use Data Extent", "使用数据覆盖范围"),
+        "Lon Min": _tr(window, "Lon Min", "最小经度"),
+        "Lon Max": _tr(window, "Lon Max", "最大经度"),
+        "Lat Min": _tr(window, "Lat Min", "最小纬度"),
+        "Lat Max": _tr(window, "Lat Max", "最大纬度"),
         "Render Preview": _tr(window, "Render Preview", "渲染预览"),
         "Export Figure": _tr(window, "Export", "导出图像"),
         "Hide Controls": _tr(window, "Hide Controls", "隐藏控制"),
@@ -277,6 +306,8 @@ def _apply_preview_labels(window) -> None:
         if "cm" in page.lbl_grid_value.text() and page.lbl_dataset.text().startswith("GRACE Level-2"):
             page.lbl_grid_value.setText("—")
     with contextlib.suppress(Exception):
+        _sync_projection_parameter_panel(window)
+    with contextlib.suppress(Exception):
         last_idx = page.cmb_cmap.count() - 1
         if last_idx >= 0:
             label = _import_cpt_label(window)
@@ -307,23 +338,106 @@ def _projection_key(controller, label: str) -> str:
     try:
         return controller._projection_key(label)
     except Exception:
-        mapping = {
-            "Robinson (Global)": "Robinson",
-            "Plate Carree": "PlateCarree",
-            "Mercator": "Mercator",
-            "Mollweide": "Mollweide",
-            "Equal Earth": "EqualEarth",
-            "Winkel Tripel": "WinkelTripel",
-            "Eckert IV": "EckertIV",
-            "Sinusoidal": "Sinusoidal",
-            "Miller": "Miller",
-            "Orthographic": "Orthographic",
-            "Azimuthal Equidistant": "AzimuthalEquidistant",
-            "Stereographic": "Stereographic",
-            "Lambert Conformal": "LambertConformal",
-            "Albers Equal Area": "AlbersEqualArea",
-        }
-        return mapping.get(label, "Robinson")
+        return projection_engine_name(label)
+
+
+def _safe_param_float(text: str, default: float) -> float:
+    with contextlib.suppress(Exception):
+        return float(str(text).strip())
+    return float(default)
+
+
+def _projection_params(page, projection_label: str) -> dict:
+    params = projection_defaults(projection_label)
+    widgets = getattr(page, "projection_param_widgets", {})
+    for key, value in list(params.items()):
+        widget_info = widgets.get(key)
+        if not widget_info:
+            continue
+        with contextlib.suppress(Exception):
+            if isinstance(widget_info, tuple):
+                _field, edit = widget_info
+                params[key] = _safe_param_float(edit.text(), float(value))
+                continue
+            kind = str(widget_info.get("type") or "float")
+            if kind in {"float", "int"}:
+                edit = widget_info.get("edit")
+                if edit is not None:
+                    parsed = _safe_param_float(edit.text(), float(value))
+                    params[key] = int(round(parsed)) if kind == "int" else parsed
+            elif kind == "float_pair":
+                edits = list(widget_info.get("edits") or [])
+                default = list(value) if isinstance(value, (list, tuple)) else [0.0, 0.0]
+                if len(edits) >= 2:
+                    params[key] = [
+                        _safe_param_float(edits[0].text(), float(default[0])),
+                        _safe_param_float(edits[1].text(), float(default[1])),
+                    ]
+            elif kind == "extent":
+                edits = list(widget_info.get("edits") or [])
+                default = list(value) if isinstance(value, (list, tuple)) and len(value) == 4 else projection_default_extent(projection_label)
+                if len(edits) >= 4:
+                    params[key] = [
+                        _safe_param_float(edits[0].text(), float(default[0])),
+                        _safe_param_float(edits[1].text(), float(default[1])),
+                        _safe_param_float(edits[2].text(), float(default[2])),
+                        _safe_param_float(edits[3].text(), float(default[3])),
+                    ]
+    return params
+
+
+def _sync_projection_parameter_panel(window) -> None:
+    page = window.page_preview
+    panel = getattr(page, "projection_params_panel", None)
+    widgets = getattr(page, "projection_param_widgets", {})
+    if panel is None or not widgets:
+        return
+    label = page.cmb_projection.currentText().strip() or "Robinson"
+    current_key = projection_name_to_key(label)
+    previous_key = getattr(panel, "_last_projection_key", None)
+    projection_changed = previous_key != current_key
+    panel._last_projection_key = current_key
+    params = visible_projection_params(label)
+    spec = projection_spec(label)
+    defaults = projection_defaults(label)
+    has_visible = False
+    for key, widget_info in widgets.items():
+        if isinstance(widget_info, tuple):
+            field, edit = widget_info
+            edits = [edit]
+            kind = "float"
+        else:
+            field = widget_info.get("field")
+            edits = list(widget_info.get("edits") or [])
+            edit = widget_info.get("edit")
+            if edit is not None:
+                edits = [edit]
+            kind = str(widget_info.get("type") or "float")
+        if field is None:
+            continue
+        visible = key in params
+        field.setVisible(visible)
+        if visible:
+            has_visible = True
+            with contextlib.suppress(Exception):
+                default_value = defaults.get(key, PARAM_DEFS.get(key, {}).get("default", ""))
+                if kind == "extent":
+                    values = list(default_value if isinstance(default_value, (list, tuple)) else projection_default_extent(label))
+                    for edit_item, value in zip(edits, values):
+                        if projection_changed or not edit_item.text().strip():
+                            edit_item.setText(str(value))
+                elif kind == "float_pair":
+                    values = list(default_value if isinstance(default_value, (list, tuple)) else [25.0, 45.0])
+                    for edit_item, value in zip(edits, values):
+                        if projection_changed or not edit_item.text().strip():
+                            edit_item.setText(str(value))
+                elif edits and (projection_changed or not edits[0].text().strip()):
+                    edits[0].setText(str(default_value))
+    with contextlib.suppress(Exception):
+        panel.setVisible(has_visible)
+    with contextlib.suppress(Exception):
+        panel.content.setVisible(has_visible and panel.toggle.isChecked())
+    panel.setToolTip(f"{spec.get('group', '')} | {spec.get('renderer', 'cartopy')}")
 
 
 def _project(controller, proj, lon, lat, lon0=0.0, lat0=0.0, lat1=30.0, lat2=60.0):
@@ -345,28 +459,76 @@ def _draw_segmented_line(ax, x, y, *, color, linewidth, alpha=1.0, linestyle="-"
     plot_line(ax, x2, y2, color=color, linewidth=linewidth, alpha=alpha, linestyle=linestyle, zorder=zorder)
 
 
+def _float_ui_option(page, attr: str, default: float, *, min_value: float | None = None, max_value: float | None = None) -> float:
+    value = default
+    widget = getattr(page, attr, None)
+    with contextlib.suppress(Exception):
+        value = float(widget.text())
+    if min_value is not None:
+        value = max(min_value, value)
+    if max_value is not None:
+        value = min(max_value, value)
+    return value
+
+
+def _combo_value(widget, default: str) -> str:
+    if widget is None:
+        return default
+    with contextlib.suppress(Exception):
+        data = widget.currentData()
+        if data is not None:
+            return str(data)
+    with contextlib.suppress(Exception):
+        return str(widget.currentText())
+    return default
+
+
+def _graticule_ui_options(controller) -> dict:
+    page = controller.window.page_preview
+    style_widget = getattr(page, "cmb_graticule_style", None)
+    font_widget = getattr(page, "cmb_graticule_font", None)
+    style_key = _combo_value(style_widget, "Dashed").strip().lower()
+    linestyle = "-" if style_key in {"solid", "实线"} else (":" if style_key in {"dotted", "点线"} else "--")
+    color_widget = getattr(page, "edit_graticule_color", None)
+    labels_widget = getattr(page, "chk_graticule_labels", None)
+    font_family = _combo_value(font_widget, "Default").strip()
+    return {
+        "lon_interval": _float_ui_option(page, "edit_graticule_lon_interval", 60.0, min_value=5.0, max_value=180.0),
+        "lat_interval": _float_ui_option(page, "edit_graticule_lat_interval", 30.0, min_value=5.0, max_value=90.0),
+        "linewidth": _float_ui_option(page, "edit_graticule_line_width", 0.55, min_value=0.1, max_value=3.0),
+        "tick_length": _float_ui_option(page, "edit_graticule_tick_length", 4.0, min_value=0.0, max_value=20.0),
+        "tick_width": _float_ui_option(page, "edit_graticule_tick_width", 0.8, min_value=0.1, max_value=4.0),
+        "font_size": _float_ui_option(page, "edit_graticule_font_size", 7.0, min_value=5.0, max_value=18.0),
+        "font_family": None if font_family.lower() == "default" else font_family,
+        "linestyle": linestyle,
+        "color": color_widget.text().strip() if color_widget is not None and color_widget.text().strip() else "#8aa4b4",
+        "show_labels": bool(labels_widget is None or labels_widget.isChecked()),
+    }
+
+
 def _draw_enhanced_graticule(controller, *, proj, lon0=0.0, lat0=0.0, lat1=30.0, lat2=60.0) -> None:
     ax = controller._ax
     if ax is None:
         return
+    opts = _graticule_ui_options(controller)
     if proj == "PlateCarree":
         with contextlib.suppress(Exception):
-            ax.set_xticks(np.arange(-180, 181, 60))
-            ax.set_yticks(np.arange(-90, 91, 30))
-            ax.grid(True, color="#9fb6c5", linewidth=0.55, linestyle="--", alpha=0.78, zorder=7)
+            ax.set_xticks(np.arange(-180, 180 + 0.1, opts["lon_interval"]))
+            ax.set_yticks(np.arange(-90, 90 + 0.1, opts["lat_interval"]))
+            ax.grid(True, color=opts["color"], linewidth=opts["linewidth"], linestyle=opts["linestyle"], alpha=0.78, zorder=7)
         return
-    for lat in np.arange(-60, 61, 30):
+    for lat in np.arange(-90 + opts["lat_interval"], 90, opts["lat_interval"]):
         lons = np.linspace(-180, 180, 721)
         lats = np.full_like(lons, lat, dtype=float)
         x, y = _project(controller, proj, lons, lats, lon0=lon0, lat0=lat0, lat1=lat1, lat2=lat2)
         x = apply_proj_scale(x, getattr(controller, "_proj_scale", None), getattr(controller, "_proj_x0", None))
-        _draw_segmented_line(ax, x, y, color="#9fb6c5", linewidth=0.48, alpha=0.72, linestyle="--", zorder=7)
-    for lon in np.arange(-180, 181, 60):
+        _draw_segmented_line(ax, x, y, color=opts["color"], linewidth=opts["linewidth"], alpha=0.72, linestyle=opts["linestyle"], zorder=7)
+    for lon in np.arange(-180, 180 + 0.1, opts["lon_interval"]):
         lats = np.linspace(-88, 88, 721)
         lons = np.full_like(lats, lon, dtype=float)
         x, y = _project(controller, proj, lons, lats, lon0=lon0, lat0=lat0, lat1=lat1, lat2=lat2)
         x = apply_proj_scale(x, getattr(controller, "_proj_scale", None), getattr(controller, "_proj_x0", None))
-        _draw_segmented_line(ax, x, y, color="#9fb6c5", linewidth=0.48, alpha=0.72, linestyle="--", zorder=7)
+        _draw_segmented_line(ax, x, y, color=opts["color"], linewidth=opts["linewidth"], alpha=0.72, linestyle=opts["linestyle"], zorder=7)
 
 
 def _draw_enhanced_coastlines(controller, *, proj, lon0=0.0, lat0=0.0, lat1=30.0, lat2=60.0, bbox=None) -> None:
@@ -477,6 +639,72 @@ def _color_limits(page, grid):
     return cmin, cmax
 
 
+def is_3d_axes(ax) -> bool:
+    return bool(getattr(ax, "name", "") == "3d" or hasattr(ax, "get_zlim3d"))
+
+
+def apply_3d_globe_view(controller, *, zoom: float | None = None, draw: bool = True) -> None:
+    ax = getattr(controller, "_ax", None)
+    if ax is None or not is_3d_axes(ax):
+        return
+    params = dict(getattr(controller, "_preview_globe_params", {}) or {})
+    params.update(dict(getattr(controller, "_preview_globe_control_params", {}) or {}))
+    if zoom is not None:
+        params["zoom"] = max(0.1, min(5.0, float(zoom)))
+    else:
+        params["zoom"] = max(0.1, min(5.0, float(params.get("zoom", 1.0))))
+    projection_mode = str(params.get("projection_mode", "orthographic")).lower()
+    with contextlib.suppress(Exception):
+        if projection_mode.startswith("pers"):
+            try:
+                ax.set_proj_type("persp", focal_length=max(0.2, float(params.get("focal_length", 1.0))))
+            except TypeError:
+                ax.set_proj_type("persp")
+        else:
+            ax.set_proj_type("ortho")
+    with contextlib.suppress(Exception):
+        try:
+            ax.view_init(
+                elev=float(params.get("elevation", 25.0)),
+                azim=float(params.get("azimuth", -60.0)),
+                roll=float(params.get("roll", 0.0)),
+            )
+        except TypeError:
+            ax.view_init(elev=float(params.get("elevation", 25.0)), azim=float(params.get("azimuth", -60.0)))
+    lim = 1.05 / float(params["zoom"])
+    ax.set_xlim3d(-lim, lim)
+    ax.set_ylim3d(-lim, lim)
+    ax.set_zlim3d(-lim, lim)
+    ax.set_box_aspect([1, 1, 1])
+    ax.set_axis_off()
+    with contextlib.suppress(Exception):
+        # Keep the 3D drawing region square inside wide canvases so the globe
+        # is not visually stretched by the surrounding widget geometry.
+        has_colorbar = any(item is not ax for item in ax.figure.axes)
+        ax.set_position([0.07, 0.09, 0.76 if has_colorbar else 0.84, 0.76 if has_colorbar else 0.84])
+    controller._preview_globe_params = params
+    controller._preview_globe_zoom = float(params["zoom"])
+    with contextlib.suppress(Exception):
+        controller._sync_preview_3d_controls_from_params(params)
+    if draw:
+        with contextlib.suppress(Exception):
+            controller._canvas.draw_idle()
+
+
+def _preview_layer_visible(controller, layer_type: str, *, fallback: bool = True) -> bool:
+    with contextlib.suppress(Exception):
+        if hasattr(controller, "_preview_layer_visible"):
+            return bool(controller._preview_layer_visible(layer_type))
+    return bool(fallback)
+
+
+def _preview_layers_by_type(controller, *layer_types: str):
+    with contextlib.suppress(Exception):
+        if hasattr(controller, "_preview_layers_by_type"):
+            return controller._preview_layers_by_type(*layer_types, visible_only=True)
+    return []
+
+
 def _update_preview_status(controller, path, idx, frame, grid, elapsed_ms: float) -> None:
     page = controller.window.page_preview
     active_var_name = frame.get("meta", {}).get("active_var", page.cmb_data_var.currentText().strip() or "ewh")
@@ -547,8 +775,18 @@ def _render_3d_globe(controller) -> None:
 
     start = time.perf_counter()
     page = controller.window.page_preview
+    with contextlib.suppress(Exception):
+        controller.on_log("[PREVIEW] 3D Globe render start", "stdout")
+    params = _projection_params(page, "3D Globe")
+    params.update(dict(getattr(controller, "_preview_globe_control_params", {}) or {}))
+    params["radius"] = 1.0
+    params["shading"] = False
+    params["background_alpha"] = 1.0
+    relief = max(0.0, min(0.05, float(params.get("relief_exaggeration", params.get("vertical_exaggeration", 0.0)) or 0.0)))
+    params["relief_exaggeration"] = relief
     path, idx, frame, grid, lon, lat = _grid_context(controller)
     grid, lon, lat, _bbox = _apply_bbox(controller, grid, lon, lat)
+    lon, grid = _normalize_and_roll_longitude(lon, grid, center=float(params.get("central_longitude", 0.0)))
     lon_step = max(1, int(np.ceil(lon.size / 180)))
     lat_step = max(1, int(np.ceil(lat.size / 90)))
     lon_s = lon[::lon_step]
@@ -569,52 +807,178 @@ def _render_3d_globe(controller) -> None:
         cmin, cmax = -1.0, 1.0
     norm = mpl.colors.Normalize(vmin=cmin, vmax=cmax)
     cmap = mpl.colormaps[page.cmb_cmap.currentText().strip() or "RdBu_r"]
-    amp = np.zeros_like(grid_plot, dtype=float)
-    if cmax != cmin:
-        amp = np.clip((grid_plot - cmin) / (cmax - cmin) - 0.5, -0.5, 0.5)
-    radius = 1.0 + 0.08 * np.nan_to_num(amp, nan=0.0)
-    lon_rad = np.deg2rad(lon2d)
-    lat_rad = np.deg2rad(lat2d)
-    x = radius * np.cos(lat_rad) * np.cos(lon_rad)
-    y = radius * np.cos(lat_rad) * np.sin(lon_rad)
-    z = radius * np.sin(lat_rad)
     fill_value = float(np.nanmean(finite)) if finite.size else 0.0
+    grid_for_surface = np.nan_to_num(grid_plot, nan=fill_value)
+    radius_grid = 1.0
+    if relief > 0:
+        max_abs = float(np.nanmax(np.abs(finite))) if finite.size else 0.0
+        if max_abs > 0:
+            radius_grid = 1.0 + relief * np.clip(grid_for_surface / max_abs, -1.0, 1.0)
+    x, y, z = _lonlat_to_globe_xyz(lon2d, lat2d, params=params, surface=True, radius=radius_grid)
     facecolors = cmap(norm(np.nan_to_num(grid_plot, nan=fill_value)))
     controller._figure.clear()
     ax = controller._figure.add_subplot(111, projection="3d")
     controller._ax = ax
-    ax.plot_surface(x, y, z, facecolors=facecolors, rstride=1, cstride=1, linewidth=0, antialiased=False, shade=False, alpha=0.98)
-    _draw_3d_graticule(ax)
-    _draw_3d_coastlines(controller, ax)
-    ax.set_axis_off()
-    ax.set_box_aspect((1, 1, 1))
-    ax.view_init(elev=24, azim=-65)
+    ax.clear()
+    ax.plot_surface(
+        x,
+        y,
+        z,
+        facecolors=facecolors,
+        rstride=1,
+        cstride=1,
+        linewidth=0,
+        antialiased=False,
+        shade=False,
+        alpha=1.0,
+    )
+    coastline_visible = _preview_layer_visible(controller, "coastline", fallback=getattr(page, "chk_layer_coastlines", None) is None or page.chk_layer_coastlines.isChecked())
+    with contextlib.suppress(Exception):
+        controller.on_log(f"[PREVIEW] 3D coastline visible = {bool(coastline_visible)}", "stdout")
+    if coastline_visible:
+        with contextlib.suppress(Exception):
+            controller.on_log("[PREVIEW] calling _draw_3d_coastlines", "stdout")
+        coastline_segments = _draw_3d_coastlines(controller, ax, params=params)
+        with contextlib.suppress(Exception):
+            controller.on_log(f"[PREVIEW] 3D coastline drawn segments = {coastline_segments}", "stdout")
+    if _preview_layer_visible(controller, "graticule", fallback=getattr(page, "chk_layer_grid", None) is None or page.chk_layer_grid.isChecked()):
+        _draw_3d_graticule(ax, params=params, options=_graticule_ui_options(controller))
+    _draw_3d_boundary_layers(controller, ax, params=params)
+    controller._preview_globe_params = params
     mappable = plt.cm.ScalarMappable(norm=norm, cmap=cmap)
     mappable.set_array([])
-    controller._figure.colorbar(mappable, ax=ax, shrink=0.68, pad=0.03)
+    if _preview_layer_visible(controller, "colorbar", fallback=getattr(page, "chk_show_colorbar", None) is None or page.chk_show_colorbar.isChecked()):
+        controller._figure.colorbar(mappable, ax=ax, shrink=0.68, pad=0.03)
     _polish_rendered_figure(controller, export=False)
+    apply_3d_globe_view(controller)
     _update_preview_status(controller, path, idx, frame, grid, (time.perf_counter() - start) * 1000.0)
     controller._preview_pick_state = None
+    with contextlib.suppress(Exception):
+        controller._sync_preview_toolbar_mode()
     controller._canvas.draw_idle()
 
 
-def _draw_3d_graticule(ax) -> None:
-    for lat in np.arange(-60, 61, 30):
+def _normalize_and_roll_longitude(lon, grid, *, center: float = 0.0):
+    lon = np.asarray(lon, dtype=float).squeeze()
+    grid = np.asarray(grid, dtype=float)
+    lon_centered = ((lon - center + 180.0) % 360.0) - 180.0 + center
+    order = np.argsort(lon_centered)
+    if grid.shape[0] == lon.size:
+        grid = grid[order, :]
+    elif grid.ndim >= 2 and grid.shape[1] == lon.size:
+        grid = grid[:, order].T
+    return lon_centered[order], grid
+
+
+def _lonlat_to_globe_xyz(lons, lats, *, params: dict, surface: bool = False, radius: float | None = None):
+    if radius is None:
+        radius = float(params.get("radius", 1.0))
+        if not surface:
+            radius *= 1.004
+    central_lon = float(params.get("central_longitude", 0.0))
+    central_lat = float(params.get("central_latitude", 0.0))
+    lon_rad = np.deg2rad(np.asarray(lons, dtype=float) - central_lon)
+    lat_rad = np.deg2rad(np.asarray(lats, dtype=float))
+    x = radius * np.cos(lat_rad) * np.cos(lon_rad)
+    y = radius * np.cos(lat_rad) * np.sin(lon_rad)
+    z = radius * np.sin(lat_rad)
+    if central_lat:
+        angle = np.deg2rad(-central_lat)
+        x_rot = x * np.cos(angle) + z * np.sin(angle)
+        z_rot = -x * np.sin(angle) + z * np.cos(angle)
+        x, z = x_rot, z_rot
+    return x, y, z
+
+
+def _surface_radius_max(params: dict) -> float:
+    relief = max(0.0, min(0.05, float(params.get("relief_exaggeration", 0.0) or 0.0)))
+    return 1.0 + relief
+
+
+def _line_radius(params: dict, offset: float) -> float:
+    return _surface_radius_max(params) + float(offset)
+
+
+def _draw_3d_graticule(ax, *, params: dict, options: dict | None = None) -> None:
+    options = options or {
+        "lon_interval": 60.0,
+        "lat_interval": 30.0,
+        "linewidth": 0.48,
+        "linestyle": "--",
+        "color": "#8aa4b4",
+    }
+    radius = _line_radius(params, 0.010)
+    for lat in np.arange(-90 + options["lat_interval"], 90, options["lat_interval"]):
         lons = np.linspace(-180, 180, 361)
         lats = np.full_like(lons, lat, dtype=float)
-        _plot_3d_lonlat(ax, lons, lats, color="#9fb6c5", linewidth=0.45, alpha=0.65, linestyle="--")
-    for lon in np.arange(-180, 181, 60):
-        lats = np.linspace(-85, 85, 241)
+        _plot_3d_lonlat(
+            ax,
+            lons,
+            lats,
+            params=params,
+            radius=radius,
+            color=options["color"],
+            linewidth=options["linewidth"],
+            alpha=0.72,
+            linestyle=options["linestyle"],
+        )
+    for lon in np.arange(-180, 180 + 0.1, options["lon_interval"]):
+        lats = np.linspace(-90, 90, 241)
         lons = np.full_like(lats, lon, dtype=float)
-        _plot_3d_lonlat(ax, lons, lats, color="#9fb6c5", linewidth=0.45, alpha=0.65, linestyle="--")
+        _plot_3d_lonlat(
+            ax,
+            lons,
+            lats,
+            params=params,
+            radius=radius,
+            color=options["color"],
+            linewidth=options["linewidth"],
+            alpha=0.72,
+            linestyle=options["linestyle"],
+        )
 
 
-def _draw_3d_coastlines(controller, ax) -> None:
+def _draw_3d_coastlines(controller, ax, *, params: dict) -> int:
+    drawn = 0
+    radius = _line_radius(params, 0.030 if DEBUG_3D_COASTLINE else 0.012)
+    color = "#000000" if DEBUG_3D_COASTLINE else "#1f2933"
+    linewidth = 1.2 if DEBUG_3D_COASTLINE else 0.55
+    alpha = 1.0 if DEBUG_3D_COASTLINE else 0.85
+    stats: list[dict[str, int]] = []
+    try:
+        for lons, lats in get_coastline_geometries():
+            drawn += _plot_3d_lonlat_segments(
+                ax,
+                lons,
+                lats,
+                params=params,
+                radius=radius,
+                color=color,
+                linewidth=linewidth,
+                alpha=alpha,
+                linestyle="-",
+                stats=stats,
+            )
+    except Exception as exc:
+        with contextlib.suppress(Exception):
+            controller.on_log(f"[PREVIEW] 3D coastline Natural Earth geometry failed: {exc}", "stderr")
+
+    _log_3d_segment_stats(controller, "Natural Earth coastline", stats)
+    if drawn > 0:
+        with contextlib.suppress(Exception):
+            controller.on_log(f"[PREVIEW] 3D coastline rendered from Cartopy/Natural Earth: {drawn} segments", "stdout")
+        return drawn
+
+    # Keep the project-local coastline source only as a supplementary path.
+    # The primary 3D source above mirrors the Cartopy/Natural Earth source used
+    # by 2D GeoAxes coastlines.
     coast_path = ""
     with contextlib.suppress(Exception):
         coast_path = controller._resolve_coastline_path()
     if not coast_path:
-        return
+        with contextlib.suppress(Exception):
+            controller.on_log("[PREVIEW] 3D coastline rendered 0 segments from Cartopy/Natural Earth.", "stderr")
+        return drawn
     try:
         import os
         import shapefile
@@ -634,25 +998,152 @@ def _draw_3d_coastlines(controller, ax) -> None:
             for i in range(len(parts) - 1):
                 seg = pts[parts[i] : parts[i + 1]]
                 if seg.shape[0] >= 2:
-                    _plot_3d_lonlat(ax, seg[:, 0], seg[:, 1], color="#263f4d", linewidth=0.35, alpha=0.9)
-    except Exception:
+                    drawn += _plot_3d_lonlat_segments(
+                        ax,
+                        seg[:, 0],
+                        seg[:, 1],
+                        params=params,
+                        radius=radius,
+                        color=color,
+                        linewidth=linewidth,
+                        alpha=alpha,
+                        linestyle="-",
+                        stats=stats,
+                    )
+        _log_3d_segment_stats(controller, "local coastline", stats)
+        with contextlib.suppress(Exception):
+            controller.on_log(f"[PREVIEW] 3D coastline rendered from local source: {drawn} segments", "stdout")
+    except Exception as exc:
+        with contextlib.suppress(Exception):
+            controller.on_log(f"[PREVIEW] 3D coastline layer failed: {exc}", "stderr")
+    return drawn
+
+
+def get_coastline_geometries(resolution: str = "110m"):
+    """Yield lon/lat coastline line segments from Cartopy Natural Earth data."""
+    import cartopy.feature as cfeature
+
+    feature = cfeature.NaturalEarthFeature(
+        category="physical",
+        name="coastline",
+        scale=resolution,
+        facecolor="none",
+    )
+    for geom in feature.geometries():
+        yield from _iter_geometry_lonlat_lines(geom)
+
+
+def _iter_geometry_lonlat_lines(geom):
+    geom_type = getattr(geom, "geom_type", "")
+    if geom_type == "LineString":
+        coords = np.asarray(getattr(geom, "coords", []), dtype=float)
+        if coords.ndim == 2 and coords.shape[0] >= 2:
+            yield coords[:, 0], coords[:, 1]
         return
+    if geom_type == "MultiLineString":
+        for line in getattr(geom, "geoms", []):
+            yield from _iter_geometry_lonlat_lines(line)
+        return
+    if geom_type == "Polygon":
+        exterior = getattr(geom, "exterior", None)
+        coords = np.asarray(getattr(exterior, "coords", []), dtype=float)
+        if coords.ndim == 2 and coords.shape[0] >= 2:
+            yield coords[:, 0], coords[:, 1]
+        return
+    if geom_type == "MultiPolygon":
+        for polygon in getattr(geom, "geoms", []):
+            yield from _iter_geometry_lonlat_lines(polygon)
 
 
-def _plot_3d_lonlat(ax, lons, lats, *, color, linewidth, alpha=1.0, linestyle="-") -> None:
-    lon_rad = np.deg2rad(np.asarray(lons, dtype=float))
-    lat_rad = np.deg2rad(np.asarray(lats, dtype=float))
-    r = 1.006
-    x = r * np.cos(lat_rad) * np.cos(lon_rad)
-    y = r * np.cos(lat_rad) * np.sin(lon_rad)
-    z = r * np.sin(lat_rad)
+def _draw_3d_boundary_layers(controller, ax, *, params: dict) -> None:
+    radius = _line_radius(params, 0.014)
+    for layer in _preview_layers_by_type(controller, "boundary", "shapefile"):
+        path = str(getattr(layer, "path", "") or "")
+        if not path or Path(path).suffix.lower() not in {".shp", ".bln", ".txt"}:
+            with contextlib.suppress(Exception):
+                controller.on_log(f"[PREVIEW] 3D layer skipped: unsupported boundary layer {getattr(layer, 'name', path)}", "stderr")
+            continue
+        if not Path(path).exists():
+            continue
+        try:
+            boundaries = read_boundary_file(path)
+            for boundary in boundaries:
+                lons = np.asarray(getattr(boundary, "lon", []), dtype=float)
+                lats = np.asarray(getattr(boundary, "lat", []), dtype=float)
+                if lons.size >= 2 and lats.size >= 2:
+                    _plot_3d_lonlat_segments(ax, lons, lats, params=params, radius=radius, color="#b00020", linewidth=0.72, alpha=0.88, linestyle="-")
+        except Exception as exc:
+            with contextlib.suppress(Exception):
+                controller.on_log(f"[PREVIEW] 3D boundary layer failed: {path}: {exc}", "stderr")
+
+
+def _plot_3d_lonlat(ax, lons, lats, *, params: dict, radius: float = 1.004, color, linewidth, alpha=1.0, linestyle="-") -> None:
+    x, y, z = _lonlat_to_globe_xyz(lons, lats, params=params, radius=radius)
     ax.plot3D(x, y, z, color=color, linewidth=linewidth, alpha=alpha, linestyle=linestyle)
+
+
+def _plot_3d_lonlat_segments(ax, lons, lats, *, params: dict, radius: float, color, linewidth: float, alpha: float, linestyle: str = "-", stats: list[dict[str, int]] | None = None) -> int:
+    raw_lons = np.asarray(lons, dtype=float)
+    raw_lats = np.asarray(lats, dtype=float)
+    input_points = int(min(raw_lons.size, raw_lats.size))
+    lons = normalize_lon_for_plot(raw_lons, lon_mode="-180_180")
+    lats = raw_lats
+    if lons.size < 2 or lats.size < 2:
+        if stats is not None:
+            stats.append({"input_points": input_points, "finite_points": 0, "split_segments": 0, "plot_count": 0})
+        return 0
+    finite = np.isfinite(lons) & np.isfinite(lats)
+    if not np.any(finite):
+        if stats is not None:
+            stats.append({"input_points": input_points, "finite_points": 0, "split_segments": 0, "plot_count": 0})
+        return 0
+    lons = lons[finite]
+    lats = lats[finite]
+    split_segments = list(split_dateline(lons, lats, wrap_delta_lon, threshold=180.0, lon0=float(params.get("central_longitude", 0.0))))
+    drawn = 0
+    for seg_lons, seg_lats in split_segments:
+        if len(seg_lons) < 2:
+            continue
+        _plot_3d_lonlat(ax, seg_lons, seg_lats, params=params, radius=radius, color=color, linewidth=linewidth, alpha=alpha, linestyle=linestyle)
+        drawn += 1
+    if stats is not None:
+        stats.append(
+            {
+                "input_points": input_points,
+                "finite_points": int(lons.size),
+                "split_segments": int(len(split_segments)),
+                "plot_count": int(drawn),
+            }
+        )
+    return drawn
+
+
+def _log_3d_segment_stats(controller, label: str, stats: list[dict[str, int]]) -> None:
+    if not stats:
+        with contextlib.suppress(Exception):
+            controller.on_log(f"[PREVIEW] 3D {label} stats: no input segments", "stderr")
+        return
+    totals = {
+        "input_points": sum(item.get("input_points", 0) for item in stats),
+        "finite_points": sum(item.get("finite_points", 0) for item in stats),
+        "split_segments": sum(item.get("split_segments", 0) for item in stats),
+        "plot_count": sum(item.get("plot_count", 0) for item in stats),
+    }
+    with contextlib.suppress(Exception):
+        controller.on_log(
+            "[PREVIEW] 3D "
+            f"{label} stats: input_points={totals['input_points']} "
+            f"finite_points={totals['finite_points']} "
+            f"split_segments={totals['split_segments']} "
+            f"plot3D_calls={totals['plot_count']}",
+            "stdout",
+        )
 
 
 def _post_polish_overlay(controller) -> None:
     page = controller.window.page_preview
     label = page.cmb_projection.currentText().strip()
-    if label == "3D Globe (Surface)":
+    if projection_renderer(label) == "matplotlib_3d":
         return
     proj = _projection_key(controller, label)
     try:
@@ -705,9 +1196,11 @@ def _enhanced_render(self) -> None:
         if not _handle_cpt_combo(self):
             return
         label = self.window.page_preview.cmb_projection.currentText().strip()
-        if label == "3D Globe (Surface)":
+        renderer = projection_renderer(label)
+        proj = _projection_key(self, label)
+        if renderer == "matplotlib_3d":
             _render_3d_globe(self)
-        elif label in FALLBACK_RENDER_PROJECTIONS:
+        elif proj in FALLBACK_RENDER_PROJECTIONS:
             _render_2d_fallback(self)
         else:
             self._preview_original_render()
@@ -878,7 +1371,7 @@ def install_preview_enhancements(window) -> None:
     page = window.page_preview
     controller = window.controller
     cpt_item = _import_cpt_label(window)
-    _set_combo_items(page.cmb_projection, PROJECTION_CHOICES, current="Robinson (Global)")
+    _set_combo_items(page.cmb_projection, PROJECTION_CHOICES, current=projection_key_to_name(page.cmb_projection.currentText() or "Robinson"))
     _set_combo_items(page.cmb_cmap, BASE_CMAPS + [cpt_item], current="RdBu_r")
     page._last_valid_cmap = "RdBu_r"
     page.chk_layer_coastlines.setChecked(True)
@@ -906,5 +1399,8 @@ def install_preview_enhancements(window) -> None:
     page.cmb_data_var.currentIndexChanged.connect(lambda _idx=0: controller.on_preview_var_changed())
     _safe_disconnect(page.cmb_cmap.currentIndexChanged)
     page.cmb_cmap.currentIndexChanged.connect(lambda _idx=0: _on_cmap_changed(controller))
+    _safe_disconnect(page.cmb_projection.currentIndexChanged)
+    page.cmb_projection.currentIndexChanged.connect(lambda _idx=0: _sync_projection_parameter_panel(window))
+    _sync_projection_parameter_panel(window)
     _patch_refresh_translations(window)
     _apply_preview_labels(window)

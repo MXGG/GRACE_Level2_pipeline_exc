@@ -23,6 +23,13 @@ from grace_pipeline.ui.qt.main_window import MainWindow
 from grace_pipeline.ui.qt.preferences import UIPreferences
 from grace_pipeline.ui.qt.app import start_gui
 from grace_pipeline.ui.qt.i18n import translate_text
+from grace_pipeline.ui.qt.preview_enhancements import _sync_projection_parameter_panel
+from grace_pipeline.ui.qt.projection_registry import (
+    is_global_extent,
+    projection_default_extent,
+    projection_supports_global_extent,
+    visible_projection_params,
+)
 
 
 class PreviewUiTest(unittest.TestCase):
@@ -106,6 +113,36 @@ class PreviewUiTest(unittest.TestCase):
         self.window.apply_ui_preferences(UIPreferences(theme="blue", language="en"), persist=False)
         self.app.processEvents()
         self.assertEqual(self.page.btn_plot.text(), "Render Preview")
+
+    def test_projection_parameter_panel_tracks_selected_projection(self):
+        self.page.cmb_projection.setCurrentText("Robinson")
+        _sync_projection_parameter_panel(self.window)
+        self.assertTrue(self.page.projection_param_widgets["central_longitude"]["field"].isVisible())
+        self.assertFalse(self.page.projection_param_widgets["extent"]["field"].isVisible())
+
+        self.page.cmb_projection.setCurrentText("Lambert Conformal")
+        _sync_projection_parameter_panel(self.window)
+        self.assertTrue(self.page.projection_param_widgets["central_longitude"]["field"].isVisible())
+        self.assertTrue(self.page.projection_param_widgets["central_latitude"]["field"].isVisible())
+        self.assertTrue(self.page.projection_param_widgets["standard_parallels"]["field"].isVisible())
+        self.assertTrue(self.page.projection_param_widgets["extent"]["field"].isVisible())
+        self.assertFalse(self.page.projection_param_widgets["azimuth"]["field"].isVisible())
+
+        self.page.cmb_projection.setCurrentText("3D Globe")
+        _sync_projection_parameter_panel(self.window)
+        self.assertEqual(
+            visible_projection_params("3D Globe"),
+            ["central_longitude", "central_latitude", "azimuth", "elevation", "zoom"],
+        )
+        self.assertTrue(self.page.projection_param_widgets["azimuth"]["field"].isVisible())
+        self.assertFalse(self.page.projection_param_widgets["extent"]["field"].isVisible())
+
+    def test_projection_scope_rules_protect_regional_projections(self):
+        self.assertFalse(projection_supports_global_extent("Albers Equal Area"))
+        self.assertTrue(is_global_extent([-180.0, 180.0, -90.0, 90.0]))
+        self.assertEqual(projection_default_extent("North Polar Stereographic"), [-180.0, 180.0, 50.0, 90.0])
+        self.assertEqual(projection_default_extent("South Polar Stereographic"), [-180.0, 180.0, -90.0, -50.0])
+        self.assertEqual(projection_default_extent("Gnomonic"), [-90.0, 90.0, -60.0, 60.0])
 
     def test_full_gui_refresh_survives_enhancement_patches(self):
         window = start_gui([])
@@ -243,7 +280,7 @@ class PreviewUiTest(unittest.TestCase):
     def test_regional_stack_renders_without_global_pole_extension(self):
         regional_stack = self._create_regional_stack()
         self.page.edit_dataset_source.setText(str(regional_stack))
-        self.page.cmb_projection.setCurrentText("Robinson (Global)")
+        self.page.cmb_projection.setCurrentText("Robinson")
         self.page.chk_auto_region.setChecked(True)
 
         self.window.controller.on_load_stack_info()
@@ -256,6 +293,48 @@ class PreviewUiTest(unittest.TestCase):
         self.assertGreater(float(np.nanmin(finite_y)), 10.0)
         self.assertLess(float(np.nanmax(finite_y)), 50.0)
         self.assertLess(float(np.diff(self.window.controller._ax.get_ylim())[0]), 1.5)
+
+    def test_3d_globe_renders_visible_graticule_layer(self):
+        window = start_gui([])
+        self.addCleanup(lambda: window.exit_application())
+        self.app.processEvents()
+        window.set_active_page("preview")
+        page = window.page_preview
+        sample_stack = self._create_sample_stack()
+        page.edit_dataset_source.setText(str(sample_stack))
+        page.cmb_projection.setCurrentText("3D Globe")
+
+        window.controller.on_load_stack_info()
+        window.controller.on_render_preview()
+        self.app.processEvents()
+
+        self.assertEqual(getattr(window.controller._ax, "name", ""), "3d")
+        self.assertGreater(len(getattr(window.controller._ax, "lines", [])), 20)
+        self.assertEqual(len(window.controller._figure.axes), 2)
+        page.plot_toolbar_host.setVisible(True)
+        window.controller._sync_preview_toolbar_mode()
+        self.assertTrue(window.controller._nav_toolbar.isVisible())
+        self.assertTrue(window.controller.preview_3d_controls.isVisible())
+        self.assertTrue(window.controller.btn_preview_3d_view.isVisible())
+        self.assertIn("3D View", window.controller.btn_preview_3d_view.text())
+        before_limits = [
+            tuple(round(v, 6) for v in window.controller._ax.get_xlim3d()),
+            tuple(round(v, 6) for v in window.controller._ax.get_ylim3d()),
+            tuple(round(v, 6) for v in window.controller._ax.get_zlim3d()),
+        ]
+        self.assertEqual(before_limits[0], before_limits[1])
+        self.assertEqual(before_limits[1], before_limits[2])
+
+        window.controller._set_preview_3d_zoom(1.6, rerender=False)
+        self.app.processEvents()
+        after_limits = [
+            tuple(round(v, 6) for v in window.controller._ax.get_xlim3d()),
+            tuple(round(v, 6) for v in window.controller._ax.get_ylim3d()),
+            tuple(round(v, 6) for v in window.controller._ax.get_zlim3d()),
+        ]
+        self.assertEqual(after_limits[0], after_limits[1])
+        self.assertEqual(after_limits[1], after_limits[2])
+        self.assertLess(after_limits[0][1] - after_limits[0][0], before_limits[0][1] - before_limits[0][0])
 
     def test_responsive_layout_respects_small_available_geometry(self):
         self.window._current_screen_metrics = lambda: (1100, 700, 1.0)

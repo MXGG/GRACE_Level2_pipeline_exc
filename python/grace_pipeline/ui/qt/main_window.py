@@ -28,6 +28,7 @@ from PySide6.QtWidgets import (
     QTableWidget,
     QTextEdit,
     QToolButton,
+    QTreeWidget,
     QVBoxLayout,
     QWidget,
 )
@@ -672,8 +673,12 @@ QLabel#MetricValue {{
 }}
 QCheckBox::indicator,
 QRadioButton::indicator {{
-    width: {base + 4}px;
-    height: {base + 4}px;
+    width: 16px;
+    height: 16px;
+}}
+QCheckBox[switchRole="true"]::indicator {{
+    width: 38px;
+    height: 20px;
 }}
 """
 
@@ -719,6 +724,8 @@ QRadioButton::indicator {{
                 if isinstance(widget, QTableWidget):
                     self._translate_table_headers(widget)
                     self._translate_table_items(widget)
+                if isinstance(widget, QTreeWidget):
+                    self._translate_tree_headers(widget)
             except RuntimeError as exc:
                 if _is_deleted_qt_object_error(exc):
                     continue
@@ -873,6 +880,26 @@ QRadioButton::indicator {{
                 if current != translated:
                     item.setText(translated)
                 item._tr_last_text = translated
+
+    def _translate_tree_headers(self, widget: QTreeWidget):
+        if not _qt_object_is_alive(widget):
+            return
+        current_headers = []
+        header = widget.headerItem()
+        for index in range(widget.columnCount()):
+            current_headers.append(header.text(index) if header is not None else "")
+        base_headers = getattr(widget, "_tr_base_headers", None)
+        last_headers = getattr(widget, "_tr_last_headers", None)
+        if base_headers is None or len(base_headers) != widget.columnCount():
+            base_headers = list(current_headers)
+        elif current_headers != last_headers and current_headers != base_headers:
+            base_headers = list(current_headers)
+        widget._tr_base_headers = list(base_headers)
+        translated_headers = [self.translate_text(text) for text in base_headers]
+        for index, text in enumerate(translated_headers):
+            if header is not None and header.text(index) != text:
+                header.setText(index, text)
+        widget._tr_last_headers = translated_headers
 
     def _on_screen_changed(self, *_args):
         self._bind_screen_signals()

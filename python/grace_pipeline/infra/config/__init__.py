@@ -2,6 +2,7 @@
 
 from grace_pipeline.core.config import (
     Config,
+    CoefficientExportConfig,
     DDKFilterConfig,
     GaussianFilterConfig,
     GridConfig,
@@ -25,6 +26,7 @@ from grace_pipeline.core.config import (
 
 __all__ = [
     "Config",
+    "CoefficientExportConfig",
     "PathConfig",
     "TimeConfig",
     "GridConfig",

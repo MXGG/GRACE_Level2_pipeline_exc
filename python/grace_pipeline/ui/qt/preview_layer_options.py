@@ -17,6 +17,8 @@ def install_preview_layer_options(window) -> None:
 
     page = window.page_preview
     _ensure_display_option_controls(window)
+    if hasattr(page, "table_overlay_layers"):
+        return
     row = getattr(page, "preview_display_options_row", None)
     card = getattr(page, "card_layers", None)
     if row is None or card is None:

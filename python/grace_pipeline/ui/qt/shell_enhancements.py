@@ -192,6 +192,10 @@ def _compact_metric(title: str, value_widget: QWidget, hint_widget: QWidget | No
 
 def install_dashboard_overview(window) -> None:
     page = window.page_dashboard
+    # DashboardPage now owns the workflow overview layout. Older shell
+    # enhancement code rebuilt the page into the legacy system-status view.
+    if hasattr(page, "workflow_steps") and hasattr(page, "output_tree"):
+        return
     if getattr(page, "_enhanced_dashboard_installed", False):
         return
     _detach_dashboard_widgets(page)

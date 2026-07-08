@@ -21,12 +21,14 @@ from PySide6.QtWidgets import (
     QSplitter,
     QTableWidget,
     QTextEdit,
+    QTreeWidget,
     QVBoxLayout,
     QWidget,
 )
 
 from grace_pipeline.ui.qt.mock_data import BASIN_ROWS, PAGE_SUBTITLES
 from grace_pipeline.ui.qt.path_defaults import DEFAULT_DATA_PATHS
+from grace_pipeline.ui.qt.projection_registry import PROJECTION_DISPLAY_NAMES
 from grace_pipeline.ui.qt.widgets import CardFrame, CollapsibleSection, PlaceholderCanvas, YearMonthEdit, build_badge, build_page_header, populate_table
 
 
@@ -59,6 +61,12 @@ def _make_combo(values: list[str], current: str | None = None) -> QComboBox:
     if current and current in values:
         combo.setCurrentText(current)
     return combo
+
+
+def _mark_switch(checkbox: QCheckBox) -> QCheckBox:
+    checkbox.setProperty("switchRole", True)
+    checkbox.setCursor(Qt.PointingHandCursor)
+    return checkbox
 
 
 def _make_choice_combo(items: list[tuple[str, str]], current_data: str | None = None) -> QComboBox:
@@ -121,6 +129,21 @@ def _make_edit_browse_widget(edit: QLineEdit, browse: QPushButton) -> QWidget:
     browse.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
     layout.addWidget(edit, 1)
     layout.addWidget(browse)
+    return row
+
+
+def _make_inline_status_field(label: str, value: QLabel) -> QWidget:
+    row = QWidget()
+    row.setObjectName("InlineStatusField")
+    row.setMinimumWidth(0)
+    layout = QHBoxLayout(row)
+    layout.setContentsMargins(0, 0, 0, 0)
+    layout.setSpacing(8)
+    title = _make_row_label(label)
+    value.setObjectName("InlineStatusValue")
+    value.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+    layout.addWidget(title, 0)
+    layout.addWidget(value, 1)
     return row
 
 
@@ -196,117 +219,79 @@ class ScrollPage(QWidget):
 class DashboardPage(ScrollPage):
     def __init__(self):
         super().__init__("dashboard")
-        self.add_header("Dashboard")
+        self.body.setSpacing(18)
+        self.page_title = QLabel("Workflow Overview")
+        self.page_title.setObjectName("PageTitle")
+        self.page_title.setStyleSheet("font-size: 26px; font-weight: 700;")
+        self.body.addWidget(self.page_title)
 
-        grid = QGridLayout()
-        grid.setHorizontalSpacing(18)
-        grid.setVerticalSpacing(18)
+        self.lbl_project_name = QLabel("In-Memory Config")
+        self.lbl_last_edited = QLabel("--")
+        self.lbl_uid = QLabel("--")
+        self.badge_summary_state = build_badge("Ready to Process", "success")
 
-        self.card_summary = CardFrame("Project Configuration Summary")
-        summary_row = QHBoxLayout()
-        self.lbl_project_name = QLabel("Unsaved configuration")
-        self.lbl_last_edited = QLabel("Not saved")
-        self.lbl_uid = QLabel("pending")
-        self.badge_summary_state = build_badge("Idle", "muted")
-        summary_row.addWidget(self._value_box("Project Name", self.lbl_project_name))
-        summary_row.addWidget(self._value_box("Last Edited", self.lbl_last_edited))
-        summary_row.addWidget(self._value_box("UID", self.lbl_uid))
-        summary_row.addWidget(self.badge_summary_state)
-        self.card_summary.body.addLayout(summary_row)
-
-        self.card_commands = CardFrame("Pipeline Controls")
-        self.btn_run_full = QPushButton("Run Filters")
-        self.btn_run_full.setObjectName("PrimaryButton")
-        self.btn_pause_run = QPushButton("Pause")
-        self.btn_pause_run.setObjectName("GhostButton")
-        self.btn_stop_run = QPushButton("Stop")
-        self.btn_stop_run.setObjectName("DangerGhostButton")
-        self.btn_load_config = QPushButton("Load Config")
-        self.btn_load_config.setObjectName("GhostButton")
-        self.btn_save_config = QPushButton("Save Config")
-        self.btn_save_config.setObjectName("GhostButton")
-        self.btn_validate_paths = QPushButton("Validate Paths")
-        self.btn_validate_paths.setObjectName("GhostButton")
-        self.btn_open_data_paths = QPushButton("Data Paths")
-        self.btn_open_data_paths.setObjectName("GhostButton")
-        self.btn_open_processing = QPushButton("Processing Setup")
-        self.btn_open_processing.setObjectName("GhostButton")
-        self.btn_open_preview = QPushButton("Preview Results")
-        self.btn_open_preview.setObjectName("GhostButton")
-        self.btn_console_run = QPushButton("Console")
-        self.btn_console_run.setObjectName("GhostButton")
-        for button in (
-            self.btn_run_full,
-            self.btn_pause_run,
-            self.btn_stop_run,
-            self.btn_load_config,
-            self.btn_save_config,
-            self.btn_validate_paths,
-            self.btn_open_data_paths,
-            self.btn_open_processing,
-            self.btn_open_preview,
-            self.btn_console_run,
-        ):
-            button.setMinimumHeight(36)
-        control_layout = QVBoxLayout()
-        control_layout.setContentsMargins(0, 0, 0, 0)
-        control_layout.setSpacing(10)
-        setup_row = QHBoxLayout()
-        setup_row.setContentsMargins(0, 0, 0, 0)
-        setup_row.setSpacing(8)
-        setup_row.addWidget(self.btn_open_data_paths)
-        setup_row.addWidget(self.btn_validate_paths)
-        setup_row.addWidget(self.btn_open_processing)
-        setup_row.addStretch(1)
-        run_row = QHBoxLayout()
-        run_row.setContentsMargins(0, 0, 0, 0)
-        run_row.setSpacing(8)
-        run_row.addWidget(self.btn_run_full, 2)
-        run_row.addWidget(self.btn_pause_run, 1)
-        run_row.addWidget(self.btn_stop_run, 1)
-        run_row.addWidget(self.btn_console_run, 1)
-        run_row.addWidget(self.btn_open_preview, 1)
-        control_layout.addLayout(setup_row)
-        control_layout.addLayout(run_row)
-        self.card_commands.body.addLayout(control_layout)
-        self.card_commands.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
-
-        self.card_output_root = CardFrame("Output Root")
-        self.lbl_output_root = QLabel("Output root: not resolved")
-        self.lbl_output_root.setObjectName("MetricValue")
-        self.lbl_output_root.setWordWrap(True)
-        self.lbl_output_root.setStyleSheet("font-size: 22px; font-weight: 700;")
-        self.card_output_root.body.addWidget(self.lbl_output_root)
-        self.lbl_output_hint = QLabel("Local execution | Output directories resolved from active config.")
-        self.lbl_output_hint.setWordWrap(True)
-        self.card_output_root.body.addWidget(self.lbl_output_hint)
-        self.lbl_output_route = QLabel("Local runs: outputs/local/... | HPC pulls: outputs/remote/<jobid>/...")
-        self.lbl_output_route.setObjectName("MonoText")
-        self.lbl_output_route.setWordWrap(True)
-        self.card_output_root.body.addWidget(self.lbl_output_route)
-
-        self.card_data_availability = CardFrame("Data Availability")
+        stat_grid = QGridLayout()
+        stat_grid.setHorizontalSpacing(12)
+        stat_grid.setVerticalSpacing(12)
+        self.lbl_config_status_value, self.lbl_config_status_detail, self.card_config_status = self._status_card("Configuration Status")
         self.lbl_data_count = QLabel("0")
-        self.lbl_data_count.setObjectName("MetricValue")
-        self.lbl_time_span = QLabel("GFC data files | not scanned")
-        self.card_data_availability.body.addWidget(self.lbl_data_count)
-        self.card_data_availability.body.addWidget(self.lbl_time_span)
+        self.lbl_data_count.setObjectName("DashboardStatValue")
+        self.lbl_time_span = QLabel("GFC data files | not detected")
+        self.lbl_time_span.setWordWrap(True)
+        self.card_data_availability = self._status_card_from_widgets("Available Months", self.lbl_data_count, self.lbl_time_span)
+        self.lbl_filter_method_value, self.lbl_filter_method_detail, self.card_filter_method = self._status_card("Primary Filter")
+        self.lbl_output_state_value, self.lbl_output_hint, self.card_output_state = self._status_card("Output Directory")
+        self.lbl_preview_artifact = QLabel("Waiting for pipeline outputs")
+        self.lbl_preview_artifact.setObjectName("DashboardStatValue")
+        self.lbl_preview_artifact.setWordWrap(True)
+        self.lbl_preview_artifact_detail = QLabel("No recent artifact")
+        self.lbl_preview_artifact_detail.setWordWrap(True)
+        self.card_latest_artifact = self._status_card_from_widgets("Latest Artifact", self.lbl_preview_artifact, self.lbl_preview_artifact_detail)
+        for idx, card in enumerate((self.card_config_status, self.card_data_availability, self.card_filter_method, self.card_output_state, self.card_latest_artifact)):
+            stat_grid.addWidget(card, idx // 3, idx % 3)
+            stat_grid.setColumnStretch(idx % 3, 1)
+        self.body.addLayout(stat_grid)
+
+        self.card_workflow = CardFrame("Processing Workflow")
+        self.workflow_steps: dict[str, dict[str, QLabel | QPushButton | QFrame]] = {}
+        workflow_grid = QGridLayout()
+        workflow_grid.setContentsMargins(0, 0, 0, 0)
+        workflow_grid.setHorizontalSpacing(10)
+        workflow_grid.setVerticalSpacing(10)
+        step_specs = [
+            ("data_paths", "Data Paths", "Pending", "Inputs and output root"),
+            ("preprocess", "Preprocessing", "Configured", "Low-degree and GIA"),
+            ("processing", "Filter Processing", "Configured", "Gaussian / 60 / 1.0 deg"),
+            ("leakage", "Leakage Correction", "Disabled", "Optional regional correction"),
+            ("basin", "Basin Analysis", "Pending", "Boundary and statistics"),
+            ("preview", "Preview Export", "Pending", "Map and figure output"),
+        ]
+        for index, (key, title, status, summary) in enumerate(step_specs):
+            frame, status_label, summary_label, button = self._workflow_step(title, status, summary)
+            workflow_grid.addWidget(frame, index // 2, index % 2)
+            workflow_grid.setColumnStretch(index % 2, 1)
+            self.workflow_steps[key] = {"frame": frame, "status": status_label, "summary": summary_label, "button": button}
+        self.card_workflow.body.addLayout(workflow_grid)
+        self.body.addWidget(self.card_workflow)
+
+        middle_grid = QGridLayout()
+        middle_grid.setHorizontalSpacing(18)
+        middle_grid.setVerticalSpacing(18)
 
         self.card_active_run = CardFrame("Current Run")
         self.card_active_run.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
         self.lbl_dashboard_status = QLabel("Ready")
-        self.lbl_dashboard_status.setObjectName("ValueText")
-        self.lbl_dashboard_status.setStyleSheet("font-size: 18px; font-weight: 700;")
-        self.lbl_dashboard_stage = QLabel("No pipeline activity yet.")
+        self.lbl_dashboard_status.setObjectName("DashboardRunStatus")
+        self.lbl_dashboard_stage = QLabel("No active task. Check configuration, then start processing when ready.")
         self.lbl_dashboard_stage.setWordWrap(True)
-        self.lbl_dashboard_counts = QLabel("0 / 0")
+        self.lbl_dashboard_counts = QLabel("")
         self.lbl_dashboard_counts.setObjectName("MonoText")
         self.lbl_active_run_name = self.lbl_dashboard_status
         self.lbl_active_task = self.lbl_dashboard_stage
         self.lbl_active_counts = self.lbl_dashboard_counts
-        self.lbl_active_filters = QLabel("Filters: not evaluated yet.")
+        self.lbl_active_filters = QLabel("Filter: Gaussian")
         self.lbl_active_filters.setWordWrap(True)
-        self.lbl_active_io = QLabel("I/O: waiting for the first run.")
+        self.lbl_active_io = QLabel("")
         self.lbl_active_io.setWordWrap(True)
         self.bar_active_run = QProgressBar()
         self.bar_active_run.setRange(0, 100)
@@ -314,88 +299,215 @@ class DashboardPage(ScrollPage):
         self.bar_active_run.setFormat("%p%")
         self.bar_active_run.setTextVisible(False)
         self.bar_active_run.setProperty("active", False)
-        self.card_active_run.body.addWidget(_make_field_row("Status", self.lbl_dashboard_status, label_width=72))
+        self.bar_active_run.hide()
+        run_state_row = QWidget()
+        run_state_layout = QHBoxLayout(run_state_row)
+        run_state_layout.setContentsMargins(0, 0, 0, 0)
+        run_state_layout.setSpacing(10)
+        run_state_layout.addWidget(_make_row_label("Status"))
+        run_state_layout.addWidget(self.lbl_dashboard_status, 0)
+        run_state_layout.addWidget(self.lbl_dashboard_stage, 1)
+        self.card_active_run.body.addWidget(run_state_row)
         self.card_active_run.body.addWidget(self.bar_active_run)
-        self.card_active_run.body.addWidget(_make_field_row("Progress", self.lbl_dashboard_counts, label_width=72))
-        self.card_active_run.body.addWidget(_make_field_row("Stage", self.lbl_dashboard_stage, label_width=72))
-        self.card_active_run.body.addWidget(_make_field_row("Filters", self.lbl_active_filters, label_width=72))
+        compact_run_grid = QGridLayout()
+        compact_run_grid.setContentsMargins(0, 0, 0, 0)
+        compact_run_grid.setHorizontalSpacing(12)
+        compact_run_grid.setVerticalSpacing(4)
+        compact_run_grid.addWidget(_make_row_label("Progress"), 0, 0)
+        compact_run_grid.addWidget(self.lbl_dashboard_counts, 0, 1)
+        compact_run_grid.addWidget(_make_row_label("Filter"), 1, 0)
+        compact_run_grid.addWidget(self.lbl_active_filters, 1, 1)
+        compact_run_grid.setColumnStretch(1, 1)
+        self.card_active_run.body.addLayout(compact_run_grid)
+        action_row = QWidget()
+        action_layout = QHBoxLayout(action_row)
+        action_layout.setContentsMargins(0, 0, 0, 0)
+        action_layout.setSpacing(8)
+        self.btn_run_full = QPushButton("Start Pipeline")
+        self.btn_run_full.setObjectName("PrimaryButton")
+        self.btn_validate_paths = QPushButton("Check Config")
+        self.btn_validate_paths.setObjectName("GhostButton")
+        self.btn_console_run = QPushButton("Open Log")
+        self.btn_console_run.setObjectName("GhostButton")
+        self.btn_pause_run = QPushButton("Pause")
+        self.btn_pause_run.setObjectName("GhostButton")
+        self.btn_stop_run = QPushButton("Stop")
+        self.btn_stop_run.setObjectName("DangerGhostButton")
+        self.btn_pause_run.hide()
+        self.btn_stop_run.hide()
+        for button in (self.btn_run_full, self.btn_validate_paths, self.btn_console_run, self.btn_pause_run, self.btn_stop_run):
+            button.setMinimumHeight(34)
+            action_layout.addWidget(button)
+        action_layout.addStretch(1)
+        self.card_active_run.body.addWidget(action_row)
 
-        self.card_output_preview = CardFrame("Run Output Preview")
-        self.lbl_preview_artifact = QLabel("Latest Artifact: waiting for pipeline outputs.")
-        self.lbl_preview_artifact.setWordWrap(True)
-        self.lbl_preview_root = QLabel("Output Root: not resolved yet.")
-        self.lbl_preview_root.setWordWrap(True)
-        self.lbl_preview_output = QLabel("Local Output: not resolved yet.")
-        self.lbl_preview_output.setWordWrap(True)
-        self.lbl_preview_stacks = QLabel("Stacks: not resolved yet.")
-        self.lbl_preview_stacks.setWordWrap(True)
-        self.lbl_preview_monthly = QLabel("Monthly MAT: not resolved yet.")
-        self.lbl_preview_monthly.setWordWrap(True)
-        self.lbl_preview_plots = QLabel("Plots: not resolved yet.")
-        self.lbl_preview_plots.setWordWrap(True)
-        self.lbl_preview_logs = QLabel("Logs: not resolved yet.")
-        self.lbl_preview_logs.setWordWrap(True)
-        self.card_output_preview.body.addWidget(self.lbl_preview_artifact)
-        self.card_output_preview.body.addWidget(self.lbl_preview_root)
-        self.card_output_preview.body.addWidget(self.lbl_preview_output)
-        self.card_output_preview.body.addWidget(self.lbl_preview_stacks)
-        self.card_output_preview.body.addWidget(self.lbl_preview_monthly)
-        self.card_output_preview.body.addWidget(self.lbl_preview_plots)
-        self.card_output_preview.body.addWidget(self.lbl_preview_logs)
+        self.card_output_preview = CardFrame("Output Results")
+        root_row = QWidget()
+        root_layout = QHBoxLayout(root_row)
+        root_layout.setContentsMargins(0, 0, 0, 0)
+        root_layout.setSpacing(8)
+        self.lbl_output_root = QLabel("Output root: not resolved")
+        self.lbl_output_root.setObjectName("DashboardPath")
+        self.lbl_output_root.setWordWrap(True)
+        self.btn_copy_output_root = QPushButton("Copy")
+        self.btn_copy_output_root.setObjectName("GhostButton")
+        self.btn_open_output_root = QPushButton("Open")
+        self.btn_open_output_root.setObjectName("GhostButton")
+        root_layout.addWidget(_make_row_label("Output Root"))
+        root_layout.addWidget(self.lbl_output_root, 1)
+        root_layout.addWidget(self.btn_copy_output_root)
+        root_layout.addWidget(self.btn_open_output_root)
+        self.card_output_preview.body.addWidget(root_row)
+        count_grid = QGridLayout()
+        count_grid.setHorizontalSpacing(10)
+        count_grid.setVerticalSpacing(8)
+        self.lbl_count_monthly = QLabel("0")
+        self.lbl_count_stacks = QLabel("0")
+        self.lbl_count_plots = QLabel("0")
+        self.lbl_count_logs = QLabel("0")
+        self.lbl_count_leakage = QLabel("0")
+        self.lbl_count_basin = QLabel("0")
+        for index, (label, widget) in enumerate((
+            ("Monthly MAT", self.lbl_count_monthly),
+            ("Stacks", self.lbl_count_stacks),
+            ("Plots", self.lbl_count_plots),
+            ("Logs", self.lbl_count_logs),
+            ("Leakage", self.lbl_count_leakage),
+            ("Basin", self.lbl_count_basin),
+        )):
+            count_grid.addWidget(self._mini_count(label, widget), index // 3, index % 3)
+        self.card_output_preview.body.addLayout(count_grid)
+        self.output_tree = QTreeWidget()
+        self.output_tree.setObjectName("OutputTree")
+        self.output_tree.setHeaderLabels(["Directory", "Count"])
+        self.output_tree.setRootIsDecorated(True)
+        self.output_tree.setAlternatingRowColors(True)
+        self.output_tree.setUniformRowHeights(True)
+        self.output_tree.setMinimumHeight(136)
+        self.output_tree.setMaximumHeight(170)
+        self.output_tree.setColumnWidth(0, 260)
+        self.card_output_preview.body.addWidget(self.output_tree)
+        self.lbl_output_tree = QLabel("")
+        self.lbl_output_tree.setObjectName("MonoText")
+        self.lbl_output_tree.setWordWrap(True)
+        self.lbl_output_tree.hide()
+        tree_row = QWidget()
+        tree_layout = QHBoxLayout(tree_row)
+        tree_layout.setContentsMargins(0, 0, 0, 0)
+        tree_layout.addStretch(1)
+        self.btn_copy_selected_output_path = QPushButton("Copy Path")
+        self.btn_copy_selected_output_path.setObjectName("GhostButton")
+        self.btn_copy_output_tree = QPushButton("Copy Structure")
+        self.btn_copy_output_tree.setObjectName("GhostButton")
+        tree_layout.addWidget(self.btn_copy_selected_output_path)
+        tree_layout.addWidget(self.btn_copy_output_tree)
+        self.card_output_preview.body.addWidget(tree_row)
 
-        grid.addWidget(self.card_summary, 0, 0, 1, 2)
-        grid.addWidget(self.card_commands, 1, 0)
-        grid.addWidget(self.card_active_run, 1, 1, alignment=Qt.AlignTop)
-        grid.addWidget(self.card_output_root, 2, 0)
-        grid.addWidget(self.card_data_availability, 2, 1)
-        grid.addWidget(self.card_output_preview, 3, 0, 1, 2)
-        grid.setColumnStretch(0, 1)
-        grid.setColumnStretch(1, 1)
+        middle_grid.addWidget(self.card_active_run, 0, 0)
+        middle_grid.addWidget(self.card_output_preview, 1, 0)
+        middle_grid.setColumnStretch(0, 1)
+        self.body.addLayout(middle_grid)
 
-        wrapper = QWidget()
-        wrapper.setLayout(grid)
-        self.body.addWidget(wrapper)
+        self.card_runtime = CardFrame("Runtime Environment")
+        runtime_grid = QGridLayout()
+        runtime_grid.setContentsMargins(0, 0, 0, 0)
+        runtime_grid.setHorizontalSpacing(18)
+        runtime_grid.setVerticalSpacing(8)
+        self.lbl_runtime_version = QLabel("v0.1")
+        self.lbl_runtime_env = QLabel("Python / Windows")
+        self.lbl_runtime_user = QLabel("User: --")
+        self.lbl_runtime_memory = QLabel("Memory: --")
+        self.lbl_runtime_config = QLabel("Config: --")
+        self.lbl_runtime_time = QLabel("System time: --")
+        for index, (label, widget) in enumerate((
+            ("Program Version", self.lbl_runtime_version),
+            ("Runtime", self.lbl_runtime_env),
+            ("Current User", self.lbl_runtime_user),
+            ("Memory Usage", self.lbl_runtime_memory),
+            ("Configuration", self.lbl_runtime_config),
+            ("System Time", self.lbl_runtime_time),
+        )):
+            runtime_grid.addWidget(_make_row_label(label), index // 3 * 2, index % 3)
+            runtime_grid.addWidget(widget, index // 3 * 2 + 1, index % 3)
+        self.card_runtime.body.addLayout(runtime_grid)
+        self.body.addWidget(self.card_runtime)
+
+        self.btn_load_config = QPushButton("Load Config")
+        self.btn_save_config = QPushButton("Save Config")
+        self.btn_open_data_paths = self.workflow_steps["data_paths"]["button"]
+        self.btn_open_processing = self.workflow_steps["processing"]["button"]
+        self.btn_open_preview = self.workflow_steps["preview"]["button"]
+        self.btn_open_leakage = self.workflow_steps["leakage"]["button"]
+        self.btn_open_basin = self.workflow_steps["basin"]["button"]
+
+        self.card_summary = self.card_runtime
+        self.card_commands = self.card_active_run
+        self.card_output_root = self.card_output_preview
+        self.lbl_output_route = QLabel("")
+        self.lbl_output_route.hide()
+        self.lbl_preview_root = self.lbl_output_root
+        self.lbl_preview_output = QLabel("")
+        self.lbl_preview_stacks = QLabel("")
+        self.lbl_preview_monthly = QLabel("")
+        self.lbl_preview_plots = QLabel("")
+        self.lbl_preview_logs = QLabel("")
+        for label in (self.lbl_preview_output, self.lbl_preview_stacks, self.lbl_preview_monthly, self.lbl_preview_plots, self.lbl_preview_logs):
+            label.hide()
+
         self.body.addStretch(1)
 
     @staticmethod
-    def _value_box(label_text: str, value_widget: QWidget) -> QWidget:
+    def _status_card(title: str) -> tuple[QLabel, QLabel, QFrame]:
+        value = QLabel("--")
+        value.setObjectName("DashboardStatValue")
+        detail = QLabel("")
+        detail.setWordWrap(True)
+        return value, detail, DashboardPage._status_card_from_widgets(title, value, detail)
+
+    @staticmethod
+    def _status_card_from_widgets(title: str, value_widget: QLabel, detail_widget: QLabel) -> QFrame:
+        frame = QFrame()
+        frame.setObjectName("DashboardStatCard")
+        layout = QVBoxLayout(frame)
+        layout.setContentsMargins(12, 10, 12, 10)
+        layout.setSpacing(6)
+        layout.addWidget(_make_row_label(title))
+        layout.addWidget(value_widget)
+        layout.addWidget(detail_widget)
+        frame.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
+        return frame
+
+    @staticmethod
+    def _mini_count(label_text: str, value_widget: QLabel) -> QWidget:
+        value_widget.setObjectName("DashboardCountValue")
         box = QWidget()
         layout = QVBoxLayout(box)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(4)
+        layout.setContentsMargins(8, 6, 8, 6)
+        layout.setSpacing(2)
         layout.addWidget(_make_row_label(label_text))
         layout.addWidget(value_widget)
         return box
 
     @staticmethod
-    def _action_zone(title: str, detail: str, buttons: list[QPushButton]) -> QWidget:
+    def _workflow_step(title: str, status: str, summary: str) -> tuple[QFrame, QLabel, QLabel, QPushButton]:
         frame = QFrame()
-        frame.setObjectName("ActionZone")
-        frame.setToolTip(detail)
+        frame.setObjectName("WorkflowStep")
         layout = QVBoxLayout(frame)
-        layout.setContentsMargins(10, 8, 10, 8)
-        layout.setSpacing(8)
-        title_label = _make_row_label(title)
-        row = QWidget()
-        row.setObjectName("ActionZoneBody")
-        row_layout = QGridLayout(row)
-        row_layout.setContentsMargins(0, 0, 0, 0)
-        row_layout.setHorizontalSpacing(6)
-        row_layout.setVerticalSpacing(6)
-        full_width = len(buttons) == 3
-        for idx, button in enumerate(buttons):
-            if full_width and idx == 0:
-                row_layout.addWidget(button, 0, 0, 1, 2)
-            elif full_width:
-                row_layout.addWidget(button, 1, idx - 1)
-            else:
-                row_layout.addWidget(button, idx // 2, idx % 2)
-            button.setToolTip(detail)
-        for col in range(2):
-            row_layout.setColumnStretch(col, 1)
+        layout.setContentsMargins(12, 10, 12, 10)
+        layout.setSpacing(7)
+        title_label = QLabel(title)
+        title_label.setObjectName("WorkflowStepTitle")
+        status_label = build_badge(status, "muted")
+        summary_label = QLabel(summary)
+        summary_label.setWordWrap(True)
+        button = QPushButton("Open")
+        button.setObjectName("GhostButton")
+        button.setMinimumHeight(30)
         layout.addWidget(title_label)
-        layout.addWidget(row)
-        return frame
+        layout.addWidget(status_label, 0, Qt.AlignLeft)
+        layout.addWidget(summary_label)
+        layout.addWidget(button, 0, Qt.AlignRight)
+        return frame, status_label, summary_label, button
 
 
 class DataPathsPage(ScrollPage):
@@ -424,7 +536,7 @@ class DataPathsPage(ScrollPage):
         self.edit_download_start_ym = _make_month_edit("")
         self.edit_download_end_ym = _make_month_edit("")
         self.edit_download_dir = _make_line_edit(str(DEFAULT_DATA_PATHS["GFC"]))
-        self.btn_download_dir_browse = QPushButton("Choose Folder...")
+        self.btn_download_dir_browse = QPushButton("Choose Folder")
         self.btn_download_dir_browse.setObjectName("PathButton")
         self.btn_download_dir_browse.setToolTip("Choose download folder")
         self.btn_download_gfc_range = QPushButton("Download")
@@ -437,23 +549,24 @@ class DataPathsPage(ScrollPage):
         gfc_action_row.setMinimumWidth(0)
         gfc_action_row.setObjectName("DownloadControlStrip")
         gfc_action_layout = QGridLayout(gfc_action_row)
-        gfc_action_layout.setContentsMargins(0, 0, 0, 0)
-        gfc_action_layout.setHorizontalSpacing(14)
+        gfc_action_layout.setContentsMargins(10, 8, 10, 8)
+        gfc_action_layout.setHorizontalSpacing(8)
         gfc_action_layout.setVerticalSpacing(8)
         for edit in (self.edit_download_start_ym, self.edit_download_end_ym):
             edit.setMinimumWidth(92)
             edit.setMaximumWidth(120)
-        self.cmb_download_product.setMinimumWidth(118)
-        self.cmb_download_product.setMaximumWidth(150)
+        self.cmb_download_product.setMinimumWidth(112)
+        self.cmb_download_product.setMaximumWidth(132)
         self.cmb_gfc_center.setMinimumWidth(72)
-        self.cmb_gfc_center.setMaximumWidth(88)
+        self.cmb_gfc_center.setMaximumWidth(80)
         self.cmb_mascon_resolution.setMinimumWidth(72)
         self.cmb_mascon_resolution.setMaximumWidth(88)
-        self.edit_download_dir.setMinimumWidth(260)
-        self.btn_download_dir_browse.setMinimumWidth(118)
-        self.btn_download_dir_browse.setMaximumWidth(148)
-        self.btn_download_gfc_range.setMinimumWidth(110)
-        self.btn_download_gfc_range.setMaximumWidth(132)
+        self.edit_download_dir.setMinimumWidth(220)
+        self.btn_download_dir_browse.setText("Folder...")
+        self.btn_download_dir_browse.setMinimumWidth(112)
+        self.btn_download_dir_browse.setMaximumWidth(132)
+        self.btn_download_gfc_range.setMinimumWidth(96)
+        self.btn_download_gfc_range.setMaximumWidth(112)
         self.btn_open_download_site.setMinimumWidth(56)
         self.btn_open_download_site.setMaximumWidth(68)
         self.btn_open_download_site.setVisible(False)
@@ -679,7 +792,7 @@ class ProcessingSetupPage(ScrollPage):
         self.slider_degree_order.setValue(60)
         self.lbl_degree_order = QLabel("60")
         self.lbl_degree_order.setObjectName("MonoText")
-        self.chk_remove_mean = QCheckBox("Enable Mean / Anomaly Removal")
+        self.chk_remove_mean = _mark_switch(QCheckBox("Enable Mean / Anomaly Removal"))
         self.chk_remove_mean.setChecked(True)
         self.cmb_anomaly_baseline = _make_choice_combo(
             [
@@ -691,7 +804,7 @@ class ProcessingSetupPage(ScrollPage):
         )
         self.edit_mean_start_ym = _make_month_edit("2004-01")
         self.edit_mean_end_ym = _make_month_edit("2009-12")
-        self.chk_lowdeg_enable = QCheckBox("Enable Low-Degree Corrections")
+        self.chk_lowdeg_enable = _mark_switch(QCheckBox("Enable Low-Degree Corrections"))
         self.chk_lowdeg_enable.setChecked(True)
         self.chk_replace_degree1 = QCheckBox("Degree-1 geocenter")
         self.chk_replace_degree1.setChecked(True)
@@ -702,27 +815,27 @@ class ProcessingSetupPage(ScrollPage):
         self.lowdeg_panel = QWidget()
         self.lowdeg_panel.setObjectName("FieldBlock")
         lowdeg_layout = QGridLayout(self.lowdeg_panel)
-        lowdeg_layout.setContentsMargins(0, 0, 0, 0)
-        lowdeg_layout.setHorizontalSpacing(10)
+        lowdeg_layout.setContentsMargins(42, 0, 0, 0)
+        lowdeg_layout.setHorizontalSpacing(24)
         lowdeg_layout.setVerticalSpacing(8)
         lowdeg_layout.addWidget(self.chk_replace_degree1, 0, 0)
         lowdeg_layout.addWidget(self.chk_replace_c20, 0, 1)
         lowdeg_layout.addWidget(self.chk_replace_c30, 1, 0, 1, 2)
-        self.chk_apply_gia = QCheckBox("Apply GIA Correction")
+        self.chk_apply_gia = _mark_switch(QCheckBox("Apply GIA Correction"))
         self.chk_apply_gia.setChecked(False)
         self.lbl_correction_note = QLabel(
             "Low-degree replacements use TN-13 and TN-14 reference files from Data Paths. C30 is applied only to GRACE-FO months."
         )
         self.lbl_correction_note.setWordWrap(True)
         self.card_inversion.body.addWidget(_make_field_row("Maximum Degree / Order", self.slider_degree_order, self.lbl_degree_order))
-        self.card_inversion.body.addWidget(_make_field_row("Mean / Anomaly", self.chk_remove_mean))
+        self.card_inversion.body.addWidget(self.chk_remove_mean)
         self.row_anomaly_baseline = _make_field_row("Anomaly Baseline", self.cmb_anomaly_baseline)
         self.card_inversion.body.addWidget(self.row_anomaly_baseline)
         self.row_mean_baseline_range = _make_dual_field("Baseline Start Month", self.edit_mean_start_ym, "Baseline End Month", self.edit_mean_end_ym)
         self.card_inversion.body.addWidget(self.row_mean_baseline_range)
-        self.card_inversion.body.addWidget(_make_field_row("Low-Degree", self.chk_lowdeg_enable))
+        self.card_inversion.body.addWidget(self.chk_lowdeg_enable)
         self.card_inversion.body.addWidget(self.lowdeg_panel)
-        self.card_inversion.body.addWidget(_make_field_row("GIA", self.chk_apply_gia))
+        self.card_inversion.body.addWidget(self.chk_apply_gia)
         self.card_inversion.body.addWidget(self.lbl_correction_note)
 
         self.card_grid_settings = CardFrame("Spatial Grid")
@@ -784,16 +897,20 @@ class ProcessingSetupPage(ScrollPage):
         ]
         for btn in filter_buttons:
             btn.setChecked(btn is self.btn_filter_gaussian)
+            btn.setCursor(Qt.PointingHandCursor)
 
         self._selected_filter_panel = "gaussian"
         filter_workspace = QWidget()
         filter_workspace.setObjectName("FilterWorkspace")
         filter_workspace_layout = QHBoxLayout(filter_workspace)
         filter_workspace_layout.setContentsMargins(0, 0, 0, 0)
-        filter_workspace_layout.setSpacing(16)
+        filter_workspace_layout.setSpacing(14)
 
         method_list = QFrame()
         method_list.setObjectName("FilterMethodList")
+        method_list.setMinimumWidth(190)
+        method_list.setMaximumWidth(240)
+        method_list.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Maximum)
         method_list_layout = QVBoxLayout(method_list)
         method_list_layout.setContentsMargins(12, 10, 12, 10)
         method_list_layout.setSpacing(8)
@@ -801,19 +918,22 @@ class ProcessingSetupPage(ScrollPage):
         for btn in filter_buttons:
             btn.setProperty("filterMethod", True)
             method_list_layout.addWidget(btn)
-        method_list_layout.addStretch(1)
+        method_list_layout.addSpacing(4)
         filter_workspace_layout.addWidget(method_list, 0)
 
         self.filter_parameter_area = QFrame()
         self.filter_parameter_area.setObjectName("FilterParameterPanel")
         self.filter_parameter_area.setMinimumWidth(340)
+        self.filter_parameter_area.setMaximumWidth(720)
+        self.filter_parameter_area.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
         filter_parameter_layout = QVBoxLayout(self.filter_parameter_area)
         filter_parameter_layout.setContentsMargins(16, 14, 16, 14)
         filter_parameter_layout.setSpacing(10)
         self.lbl_filter_parameter_title = QLabel("Parameter Settings")
         self.lbl_filter_parameter_title.setObjectName("FilterParameterTitle")
         filter_parameter_layout.addWidget(self.lbl_filter_parameter_title)
-        filter_workspace_layout.addWidget(self.filter_parameter_area, 1)
+        filter_workspace_layout.addWidget(self.filter_parameter_area, 1, Qt.AlignTop)
+        filter_workspace_layout.addStretch(1)
         self.card_filters.body.addWidget(filter_workspace)
 
         self.edit_isotropic_radius_km = _make_line_edit("300")
@@ -987,23 +1107,62 @@ class ProcessingSetupPage(ScrollPage):
         self.card_grid_settings.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
         self.card_inversion.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
         self.card_filters.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
+        self.card_filters.setMinimumWidth(520)
         self.card_sh_tools.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
 
         self.chk_export_mat = QCheckBox("MAT")
         self.chk_export_mat.setChecked(True)
-        self.chk_export_txt = QCheckBox("TXT")
-        self.chk_export_nc = QCheckBox("NetCDF")
+        self.chk_export_nc = QCheckBox("NetCDF4")
         self.chk_export_hdf5 = QCheckBox("HDF5")
+        self.chk_export_geotiff = QCheckBox("GeoTIFF")
+        self.chk_export_gfc = QCheckBox("C/S coefficients (.gfc)")
+        self.cmb_gfc_content = _make_combo(["anomaly", "full"], "anomaly")
+        self.edit_gfc_lmax = _make_line_edit("", "processing Lmax")
+        self.chk_export_json_summary = QCheckBox("JSON Summary")
+        self.chk_export_json_summary.setChecked(True)
+        self.chk_export_csv = QCheckBox("CSV")
+        self.chk_export_txt = QCheckBox("TXT legacy")
         export_panel = QFrame()
         export_panel.setObjectName("FilterExportPanel")
-        export_layout = QHBoxLayout(export_panel)
+        export_layout = QVBoxLayout(export_panel)
         export_layout.setContentsMargins(12, 10, 12, 10)
-        export_layout.setSpacing(18)
-        export_title = _make_row_label("Output Formats")
-        export_layout.addWidget(export_title)
-        for checkbox in (self.chk_export_mat, self.chk_export_txt, self.chk_export_nc, self.chk_export_hdf5):
-            export_layout.addWidget(checkbox)
-        export_layout.addStretch(1)
+        export_layout.setSpacing(8)
+
+        def _product_row(title: str, widgets: list[QWidget]) -> QWidget:
+            row = QWidget()
+            row_layout = QHBoxLayout(row)
+            row_layout.setContentsMargins(0, 0, 0, 0)
+            row_layout.setSpacing(14)
+            row_layout.addWidget(_make_row_label(title, 160))
+            for widget in widgets:
+                row_layout.addWidget(widget)
+            row_layout.addStretch(1)
+            return row
+
+        export_layout.addWidget(
+            _product_row(
+                "Grid Products",
+                [self.chk_export_mat, self.chk_export_nc, self.chk_export_hdf5, self.chk_export_geotiff],
+            )
+        )
+        gfc_options = QWidget()
+        gfc_options_layout = QHBoxLayout(gfc_options)
+        gfc_options_layout.setContentsMargins(0, 0, 0, 0)
+        gfc_options_layout.setSpacing(8)
+        self.cmb_gfc_content.setMaximumWidth(130)
+        self.edit_gfc_lmax.setMaximumWidth(140)
+        gfc_options_layout.addWidget(self.chk_export_gfc)
+        gfc_options_layout.addWidget(_make_row_label("Content"))
+        gfc_options_layout.addWidget(self.cmb_gfc_content)
+        gfc_options_layout.addWidget(_make_row_label("Max Degree"))
+        gfc_options_layout.addWidget(self.edit_gfc_lmax)
+        export_layout.addWidget(_product_row("Coefficient Products", [gfc_options]))
+        export_layout.addWidget(
+            _product_row(
+                "Summary / Tables",
+                [self.chk_export_json_summary, self.chk_export_csv, self.chk_export_txt],
+            )
+        )
         self.card_filters.body.addWidget(export_panel)
         self.card_export_formats = export_panel
 
@@ -1396,6 +1555,9 @@ class BasinPage(ScrollPage):
         self.slider_basin_time_index.setValue(0)
         self.lbl_basin_time_slice = QLabel("Time slice: 1 / 1")
         self.lbl_basin_time_slice.setWordWrap(True)
+        self.lbl_basin_map_dataset = QLabel("—")
+        self.lbl_basin_map_cursor = QLabel("—")
+        self.lbl_basin_map_value = QLabel("—")
         self.basin_preview_toolbar_host = QWidget()
         self.basin_preview_toolbar_host.setObjectName("InlineToolbar")
         self.basin_preview_plot_host = QFrame()
@@ -1412,6 +1574,16 @@ class BasinPage(ScrollPage):
         self.card_preview.body.addWidget(self.lbl_basin_time_slice)
         self.card_preview.body.addWidget(self.basin_preview_toolbar_host)
         self.card_preview.body.addWidget(self.basin_preview_plot_host)
+        self.card_preview.body.addWidget(
+            _make_compact_field_grid(
+                [
+                    ("Map Status", self.lbl_basin_map_dataset),
+                    ("Cursor", self.lbl_basin_map_cursor),
+                    ("Value", self.lbl_basin_map_value),
+                ],
+                columns=3,
+            )
+        )
         self.card_preview.body.addWidget(self.btn_refresh_basin_preview)
 
         self.card_output = CardFrame("4. Basin Products and Output")
@@ -1554,8 +1726,8 @@ class PreviewPage(QWidget):
         side_layout.setContentsMargins(16, 14, 16, 14)
         side_layout.setSpacing(10)
 
-        controls_title = QLabel("Preview Controls")
-        controls_title.setObjectName("CardTitle")
+        controls_title = QLabel("Preview")
+        controls_title.setObjectName("SidebarTitle")
         side_layout.addWidget(controls_title)
 
         self.edit_dataset_source = _make_line_edit("stack_v2_grace_jpl.nc")
@@ -1569,7 +1741,7 @@ class PreviewPage(QWidget):
         self.lbl_stack_info.setWordWrap(True)
         self.lbl_stack_info.setMinimumWidth(0)
         self.lbl_stack_info.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Maximum)
-        self.dataset_source_block = _make_stacked_field("Dataset Source", self.edit_dataset_source)
+        self.dataset_source_block = _make_stacked_field("Data Source", self.edit_dataset_source)
         dataset_actions = QWidget()
         dataset_actions.setObjectName("InlineField")
         dataset_actions.setMinimumWidth(0)
@@ -1582,10 +1754,10 @@ class PreviewPage(QWidget):
         dataset_actions_layout.addWidget(self.btn_load_stack, 1)
         side_layout.addWidget(self.dataset_source_block)
         side_layout.addWidget(dataset_actions)
-        side_layout.addWidget(_make_stacked_field("Stack Status", self.lbl_stack_info))
+        side_layout.addWidget(_make_inline_status_field("Data Status", self.lbl_stack_info))
 
         self.cmb_data_var = _make_combo(["ewh"], "ewh")
-        side_layout.addWidget(_make_stacked_field("Data Variable", self.cmb_data_var))
+        side_layout.addWidget(_make_stacked_field("Plot Variable", self.cmb_data_var))
 
         self.slider_time_index = QSlider(Qt.Horizontal)
         self.slider_time_index.setRange(0, 100)
@@ -1602,76 +1774,174 @@ class PreviewPage(QWidget):
         time_index_layout.setSpacing(4)
         time_index_layout.addWidget(self.lbl_time_index)
         time_index_layout.addWidget(self.slider_time_index)
-        side_layout.addWidget(_make_stacked_field("Time Index", time_index_widget))
+        side_layout.addWidget(_make_stacked_field("Time Slice", time_index_widget))
 
-        self.cmb_projection = _make_combo(
-            [
-                "Robinson (Global)",
-                "Plate Carree",
-                "Orthographic",
-                "Mollweide",
-                "Mercator",
-                "Miller",
-                "Sinusoidal",
-                "Equal Earth",
-                "Winkel Tripel",
-                "Eckert IV",
-                "Azimuthal Equidistant",
-                "Stereographic",
-                "Lambert Conformal",
-                "Albers Equal Area",
-            ],
-            "Robinson (Global)",
-        )
-        side_layout.addWidget(_make_stacked_field("Projection", self.cmb_projection))
+        self.card_projection_settings = CardFrame("Projection Settings")
+        self.cmb_projection = _make_combo(PROJECTION_DISPLAY_NAMES, "Robinson")
+        self.card_projection_settings.body.addWidget(_make_stacked_field("Projection", self.cmb_projection))
+        self.projection_params_panel = CollapsibleSection("Projection Parameters", expanded=True)
+        self.projection_param_widgets: dict[str, dict[str, object]] = {}
+
+        def _add_scalar_projection_param(param_key: str, label: str, value: str) -> None:
+            edit = _make_line_edit(value)
+            field = _make_stacked_field(label, edit)
+            self.projection_param_widgets[param_key] = {"type": "float", "field": field, "edit": edit}
+            self.projection_params_panel.body.addWidget(field)
+
+        def _add_pair_projection_param(param_key: str, label: str, left_label: str, right_label: str, left_value: str, right_value: str) -> None:
+            left_edit = _make_line_edit(left_value)
+            right_edit = _make_line_edit(right_value)
+            field = _make_stacked_field(label, _make_dual_field(left_label, left_edit, right_label, right_edit))
+            self.projection_param_widgets[param_key] = {
+                "type": "float_pair",
+                "field": field,
+                "edits": [left_edit, right_edit],
+            }
+            self.projection_params_panel.body.addWidget(field)
+
+        def _add_extent_projection_param() -> None:
+            lon_min = _make_line_edit("-180")
+            lon_max = _make_line_edit("180")
+            lat_min = _make_line_edit("-90")
+            lat_max = _make_line_edit("90")
+            extent_widget = QWidget()
+            extent_layout = QVBoxLayout(extent_widget)
+            extent_layout.setContentsMargins(0, 0, 0, 0)
+            extent_layout.setSpacing(8)
+            extent_layout.addWidget(_make_dual_field("Lon Min", lon_min, "Lon Max", lon_max))
+            extent_layout.addWidget(_make_dual_field("Lat Min", lat_min, "Lat Max", lat_max))
+            field = _make_stacked_field("Extent", extent_widget)
+            self.projection_param_widgets["extent"] = {
+                "type": "extent",
+                "field": field,
+                "edits": [lon_min, lon_max, lat_min, lat_max],
+            }
+            self.projection_params_panel.body.addWidget(field)
+
+        _add_scalar_projection_param("central_longitude", "Central longitude", "0")
+        _add_scalar_projection_param("central_latitude", "Central latitude", "0")
+        _add_pair_projection_param("standard_parallels", "Standard parallels", "Lat 1", "Lat 2", "25", "45")
+        _add_extent_projection_param()
+        _add_scalar_projection_param("azimuth", "Azimuth", "-60")
+        _add_scalar_projection_param("elevation", "Elevation", "25")
+        _add_scalar_projection_param("zoom", "Zoom", "1.0")
+        self.card_projection_settings.body.addWidget(self.projection_params_panel)
+        side_layout.addWidget(self.card_projection_settings)
         self.cmb_cmap = _make_combo(
             ["RdBu_r", "viridis", "coolwarm", "Spectral_r", "terrain", "turbo", "plasma", "cividis"],
             "RdBu_r",
         )
         self.edit_cmin = _make_line_edit("", "auto")
         self.edit_cmax = _make_line_edit("", "auto")
-        side_layout.addWidget(_make_stacked_field("Colormap", self.cmb_cmap))
-        side_layout.addWidget(_make_dual_field("Color Min", self.edit_cmin, "Color Max", self.edit_cmax))
+        self.card_color_scale = CardFrame("Color Scale")
+        self.card_color_scale.body.addWidget(_make_stacked_field("Colormap", self.cmb_cmap))
+        self.card_color_scale.body.addWidget(_make_dual_field("Minimum", self.edit_cmin, "Maximum", self.edit_cmax))
+        self.chk_show_colorbar = QCheckBox("Show Color Bar")
+        self.chk_show_colorbar.setChecked(True)
+        self.card_color_scale.body.addWidget(self.chk_show_colorbar)
+        side_layout.addWidget(self.card_color_scale)
 
-        self.chk_auto_region = QCheckBox("Use Detected Extent")
+        self.chk_auto_region = QCheckBox("Use Data Extent")
         self.chk_auto_region.setChecked(True)
         self.edit_region_lon_min = _make_line_edit("-180")
         self.edit_region_lon_max = _make_line_edit("180")
         self.edit_region_lat_min = _make_line_edit("-90")
         self.edit_region_lat_max = _make_line_edit("90")
-        side_layout.addWidget(self.chk_auto_region)
-        side_layout.addWidget(_make_dual_field("Lon Min", self.edit_region_lon_min, "Lon Max", self.edit_region_lon_max))
-        side_layout.addWidget(_make_dual_field("Lat Min", self.edit_region_lat_min, "Lat Max", self.edit_region_lat_max))
+        self.card_spatial_extent = CardFrame("Spatial Grid Configuration")
+        self.card_spatial_extent.body.addWidget(self.chk_auto_region)
+        self.card_spatial_extent.body.addWidget(_make_dual_field("Lon Min", self.edit_region_lon_min, "Lon Max", self.edit_region_lon_max))
+        self.card_spatial_extent.body.addWidget(_make_dual_field("Lat Min", self.edit_region_lat_min, "Lat Max", self.edit_region_lat_max))
 
-        self.card_layers = CardFrame("Layer Stack")
+        self.chk_show_graticule = QCheckBox("Enable Graticule")
+        self.chk_show_graticule.setChecked(True)
+        self.chk_graticule_labels = QCheckBox("Show Labels")
+        self.chk_graticule_labels.setChecked(True)
+        self.edit_graticule_lon_interval = _make_line_edit("60")
+        self.edit_graticule_lat_interval = _make_line_edit("30")
+        self.edit_graticule_line_width = _make_line_edit("0.55")
+        self.edit_graticule_tick_length = _make_line_edit("4")
+        self.edit_graticule_tick_width = _make_line_edit("0.8")
+        self.edit_graticule_font_size = _make_line_edit("7")
+        self.cmb_graticule_font = _make_combo(
+            ["Default", "Arial", "Times New Roman", "Microsoft YaHei", "SimSun", "DejaVu Sans", "Computer Modern"],
+            "Default",
+        )
+        self.cmb_graticule_style = _make_combo(["Dashed", "Solid", "Dotted"], "Dashed")
+        self.cmb_graticule_tickdir = _make_combo(["Out", "In", "Both"], "Out")
+        self.cmb_graticule_box = _make_combo(["Plain", "Fancy", "Off"], "Plain")
+        self.edit_graticule_color = _make_line_edit("#8aa4b4")
+        self.graticule_options_panel = QWidget()
+        graticule_grid = QGridLayout(self.graticule_options_panel)
+        graticule_grid.setContentsMargins(0, 0, 0, 0)
+        graticule_grid.setHorizontalSpacing(10)
+        graticule_grid.setVerticalSpacing(8)
+        graticule_grid.addWidget(_make_stacked_field("Longitude Interval", self.edit_graticule_lon_interval), 0, 0)
+        graticule_grid.addWidget(_make_stacked_field("Latitude Interval", self.edit_graticule_lat_interval), 0, 1)
+        graticule_grid.addWidget(_make_stacked_field("Line Width", self.edit_graticule_line_width), 1, 0)
+        graticule_grid.addWidget(_make_stacked_field("Label Font Size", self.edit_graticule_font_size), 1, 1)
+        graticule_grid.addWidget(_make_stacked_field("Font Family", self.cmb_graticule_font), 2, 0)
+        graticule_grid.addWidget(_make_stacked_field("Line Style", self.cmb_graticule_style), 2, 1)
+        graticule_grid.addWidget(_make_stacked_field("Tick Direction", self.cmb_graticule_tickdir), 3, 0)
+        graticule_grid.addWidget(_make_stacked_field("Box Style", self.cmb_graticule_box), 3, 1)
+        graticule_grid.addWidget(_make_stacked_field("Tick Length", self.edit_graticule_tick_length), 4, 0)
+        graticule_grid.addWidget(_make_stacked_field("Tick Width", self.edit_graticule_tick_width), 4, 1)
+        graticule_grid.addWidget(_make_stacked_field("Line Color", self.edit_graticule_color), 5, 0)
+        graticule_grid.addWidget(self.chk_graticule_labels, 5, 1)
+        self.card_spatial_extent.body.addWidget(self.chk_show_graticule)
+        self.card_spatial_extent.body.addWidget(self.graticule_options_panel)
+        self.chk_show_graticule.toggled.connect(self.graticule_options_panel.setVisible)
+        side_layout.addWidget(self.card_spatial_extent)
+
+        self.card_layers = CardFrame("Layers")
         self.chk_layer_data = QCheckBox("Data: Mass Anomaly")
         self.chk_layer_data.setChecked(True)
+        self.chk_layer_data.hide()
         self.chk_layer_coastlines = QCheckBox("Coastlines")
         self.chk_layer_coastlines.setChecked(True)
-        self.chk_layer_boundaries = QCheckBox("Boundary Overlay")
-        self.chk_layer_boundaries.setChecked(False)
+        self.chk_layer_coastlines.hide()
+        self.chk_layer_boundaries = QCheckBox("Boundary / Grid Files")
+        self.chk_layer_boundaries.setChecked(True)
+        self.chk_layer_boundaries.hide()
         self.chk_layer_grid = QCheckBox("Grid Lines")
         self.chk_layer_grid.setChecked(True)
+        self.chk_layer_grid.hide()
         self.chk_layer_rivers = QCheckBox("Additional Custom SHP")
         self.chk_layer_rivers.setChecked(False)
-        self.edit_boundary_overlay = _make_line_edit("", "Optional basin/custom boundary .shp/.txt/.bln")
-        self.btn_boundary_overlay_browse = QPushButton("Browse")
+        self.chk_layer_rivers.hide()
+        self.edit_boundary_overlay = _make_line_edit("", "Optional boundary/grid file")
+        self.edit_boundary_overlay.hide()
+        self.btn_boundary_overlay_browse = QPushButton("Add")
         self.btn_boundary_overlay_browse.setObjectName("GhostButton")
-        self.edit_custom_overlay = _make_line_edit("", "Optional extra shapefile overlay")
+        self.edit_custom_overlay = _make_line_edit("", "Optional extra overlay")
+        self.edit_custom_overlay.hide()
         self.btn_custom_overlay_browse = QPushButton("Browse")
         self.btn_custom_overlay_browse.setObjectName("GhostButton")
-        for chk in (
-            self.chk_layer_data,
-            self.chk_layer_coastlines,
-            self.chk_layer_boundaries,
-            self.chk_layer_grid,
-            self.chk_layer_rivers,
-        ):
-            self.card_layers.body.addWidget(chk)
-            if chk is self.chk_layer_boundaries:
-                self.card_layers.body.addWidget(_make_stacked_field("Boundary File", _make_edit_browse_widget(self.edit_boundary_overlay, self.btn_boundary_overlay_browse)))
-            elif chk is self.chk_layer_rivers:
-                self.card_layers.body.addWidget(_make_stacked_field("Custom SHP", _make_edit_browse_widget(self.edit_custom_overlay, self.btn_custom_overlay_browse)))
+        self.btn_custom_overlay_browse.hide()
+        self.table_overlay_layers = QTableWidget(0, 4)
+        self.table_overlay_layers.setObjectName("OverlayLayerTable")
+        self.table_overlay_layers.setHorizontalHeaderLabels(["", "Layer", "Type", "Actions"])
+        self.table_overlay_layers.verticalHeader().setVisible(False)
+        self.table_overlay_layers.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.table_overlay_layers.setSelectionMode(QAbstractItemView.SingleSelection)
+        self.table_overlay_layers.setMinimumHeight(190)
+        self.table_overlay_layers.setMaximumHeight(280)
+        self.table_overlay_layers.setColumnWidth(0, 34)
+        self.table_overlay_layers.setColumnWidth(1, 132)
+        self.table_overlay_layers.setColumnWidth(2, 70)
+        self.table_overlay_layers.setColumnWidth(3, 116)
+        self.table_overlay_layers.horizontalHeader().setStretchLastSection(False)
+        layer_actions = QWidget()
+        layer_actions.setObjectName("InlineField")
+        layer_actions_layout = QHBoxLayout(layer_actions)
+        layer_actions_layout.setContentsMargins(0, 0, 0, 0)
+        layer_actions_layout.setSpacing(6)
+        self.btn_overlay_add = QPushButton("Import Layer")
+        self.btn_overlay_add.setObjectName("GhostButton")
+        self.btn_overlay_add.setMinimumWidth(96)
+        layer_actions_layout.addWidget(self.btn_overlay_add)
+        layer_actions_layout.addStretch(1)
+        self.card_layers.body.addWidget(self.table_overlay_layers)
+        self.card_layers.body.addWidget(layer_actions)
         side_layout.addWidget(self.card_layers)
         side_layout.addStretch(1)
         self.sidebar_scroll.setWidget(self.sidebar)

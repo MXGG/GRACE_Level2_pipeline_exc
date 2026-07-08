@@ -28,8 +28,10 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+from matplotlib.patches import Rectangle
 
 from grace_pipeline.infra.config import get_root_dir
+from grace_pipeline.ui.qt import preview_enhancements as pe
 from grace_pipeline.ui.qt.preview_title_status import restore_preview_header
 
 ROOT_DIR = get_root_dir().resolve()
@@ -64,23 +66,25 @@ def _apply_export_layout(controller, *, show_colorbar: bool) -> None:
         return
     is_3d = getattr(ax, "name", "") == "3d" or hasattr(ax, "get_zlim3d")
     if is_3d:
-        ax.set_position([0.030, 0.045, 0.80 if show_colorbar else 0.94, 0.90])
+        ax.set_position([0.040, 0.070, 0.80 if show_colorbar else 0.91, 0.80])
         with contextlib.suppress(Exception):
-            ax.set_xlim(-1.10, 1.10)
-            ax.set_ylim(-1.10, 1.10)
-            ax.set_zlim(-1.10, 1.10)
-            ax.set_box_aspect((1, 1, 1))
+            pe.apply_3d_globe_view(controller)
     else:
-        ax.set_position([0.025, 0.055, 0.82 if show_colorbar else 0.94, 0.88])
+        ax.set_position([0.045, 0.075, 0.80 if show_colorbar else 0.90, 0.79])
     for cax in caxes:
         cax.set_visible(show_colorbar)
         if show_colorbar:
-            cax.set_position([0.870, 0.18, 0.022, 0.66])
+            cax.set_position([0.875, 0.18, 0.022, 0.60])
             with contextlib.suppress(Exception):
                 cax.set_ylabel(controller.window.page_preview.cmb_data_var.currentText().strip() or "value", fontsize=16, labelpad=10)
                 cax.tick_params(labelsize=13)
     with contextlib.suppress(Exception):
         ax.set_title("")
+    if not is_3d:
+        with contextlib.suppress(Exception):
+            ax.set_xlabel("Longitude", fontsize=13)
+            ax.set_ylabel("Latitude", fontsize=13)
+            ax.grid(True, color="#d8e3eb", linewidth=0.55, alpha=0.9)
 
 
 def _snapshot_font_style(fig) -> list[tuple[object, object]]:
@@ -117,6 +121,83 @@ def _restore_font_style(snapshot) -> None:
     for obj, size in snapshot:
         with contextlib.suppress(Exception):
             obj.set_fontsize(size)
+
+
+def _export_title(controller) -> str:
+    page = controller.window.page_preview
+    region = ""
+    for layer in getattr(controller, "preview_layers", []) or []:
+        if not getattr(layer, "visible", False):
+            continue
+        if getattr(layer, "type", "") in {"basin", "boundary", "shapefile"}:
+            region = str(getattr(layer, "name", "") or "").strip()
+            if region:
+                break
+    with contextlib.suppress(Exception):
+        if not region:
+            overlay_path = page.edit_boundary_overlay.text().strip() or page.edit_custom_overlay.text().strip()
+            if overlay_path:
+                region = Path(overlay_path).stem
+    dataset = ""
+    with contextlib.suppress(Exception):
+        dataset = Path(page.edit_dataset_source.text().strip()).name
+    if not dataset:
+        dataset = "GRACE Level-2 Preview"
+    variable = page.cmb_data_var.currentText().strip() or "value"
+    time_text = ""
+    with contextlib.suppress(Exception):
+        idx = int(page.slider_time_index.value())
+        time_text = controller._preview_time_text(idx)
+    if not time_text:
+        with contextlib.suppress(Exception):
+            label = page.lbl_time_index.text().strip()
+            time_text = label.split("|", 1)[-1].strip() if "|" in label else ""
+    parts = [part for part in (region, dataset, time_text, variable) if part]
+    return " | ".join(parts) or dataset
+
+
+def _add_export_frame(controller):
+    fig = getattr(controller, "_figure", None)
+    if fig is None:
+        return []
+    title = _export_title(controller)
+    artists = []
+    artists.append(
+        fig.text(
+            0.035,
+            0.965,
+            title,
+            ha="left",
+            va="top",
+            fontsize=13,
+            fontweight="bold",
+            color="#1f3547",
+        )
+    )
+    artists.append(
+        fig.text(
+            0.035,
+            0.925,
+            "Coordinate grid: Longitude / Latitude",
+            ha="left",
+            va="top",
+            fontsize=9,
+            color="#5b6770",
+        )
+    )
+    border = Rectangle(
+        (0.012, 0.012),
+        0.976,
+        0.976,
+        transform=fig.transFigure,
+        fill=False,
+        edgecolor="#b9c9d6",
+        linewidth=1.2,
+        zorder=1000,
+    )
+    fig.add_artist(border)
+    artists.append(border)
+    return artists
 
 
 def _export_dialog(controller):
@@ -239,6 +320,7 @@ def _high_quality_export(self) -> None:
     old_positions = {item: item.get_position().frozen() for item in fig.axes}
     old_visible = {item: item.get_visible() for item in fig.axes}
     font_snapshot = []
+    frame_artists = []
     progress = None
     tmp_path = out_path.with_name(f".{out_path.stem}.tmp{out_path.suffix}")
 
@@ -250,6 +332,7 @@ def _high_quality_export(self) -> None:
         show_colorbar = bool(getattr(page, "chk_show_colorbar", None) is None or page.chk_show_colorbar.isChecked())
         _apply_export_layout(self, show_colorbar=show_colorbar)
         font_snapshot = _apply_export_font_style(fig)
+        frame_artists = _add_export_frame(self)
         QApplication.processEvents()
 
         save_kwargs = {
@@ -281,6 +364,9 @@ def _high_quality_export(self) -> None:
             tmp_path.unlink(missing_ok=True)
         self._show_error(_tr(self.window, "Export Figure", "导出图像"), str(exc))
     finally:
+        for artist in frame_artists:
+            with contextlib.suppress(Exception):
+                artist.remove()
         _restore_font_style(font_snapshot)
         for item, pos in old_positions.items():
             with contextlib.suppress(Exception):

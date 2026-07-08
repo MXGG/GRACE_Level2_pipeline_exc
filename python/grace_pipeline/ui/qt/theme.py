@@ -275,6 +275,11 @@ def _mono_stack(mono_font: str | None = None) -> str:
 def build_stylesheet(colors: dict[str, str], ui_font: str | None = None, mono_font: str | None = None) -> str:
     ui_stack = _font_stack(ui_font)
     mono_stack = _mono_stack(mono_font)
+    icon_dir = (Path(__file__).with_name("assets") / "icons").as_posix()
+    check_icon = f"{icon_dir}/check_white.svg"
+    radio_icon = f"{icon_dir}/radio_dot_brown.svg"
+    switch_off_icon = f"{icon_dir}/switch_off.svg"
+    switch_on_icon = f"{icon_dir}/switch_on.svg"
     return f"""
 QWidget {{
     background: {colors["background"]};
@@ -293,42 +298,88 @@ QCheckBox,
 QRadioButton {{
     spacing: 8px;
     padding: 2px 0;
+    color: {colors["text"]};
+    font-size: 13px;
 }}
 
-QCheckBox::indicator,
+QCheckBox::indicator {{
+    width: 16px;
+    height: 16px;
+    border: 1px solid #C9B79C;
+    border-radius: 3px;
+    background: #FFFFFF;
+}}
+
+QCheckBox::indicator:hover {{
+    border: 1px solid #B98A4A;
+    background: #FAF4EC;
+}}
+
+QCheckBox::indicator:checked {{
+    background: #A46A2A;
+    border: 1px solid #A46A2A;
+    image: url("{check_icon}");
+}}
+
+QCheckBox::indicator:disabled {{
+    background: #F5F3EF;
+    border: 1px solid #DDD6CC;
+}}
+
 QRadioButton::indicator {{
     width: 16px;
     height: 16px;
-    border: 1px solid {colors["border_strong"]};
-    border-radius: 4px;
-    background: {colors["surface"]};
-}}
-
-QRadioButton::indicator {{
+    border: 1px solid #C9B79C;
     border-radius: 8px;
+    background: #FFFFFF;
 }}
 
-QCheckBox::indicator:hover,
 QRadioButton::indicator:hover {{
-    border-color: {colors["primary"]};
+    border: 1px solid #B98A4A;
+    background: #FAF4EC;
 }}
 
-QCheckBox::indicator:checked,
 QRadioButton::indicator:checked {{
-    background: {colors["primary"]};
-    border: 1px solid {colors["primary"]};
+    border: 1px solid #A46A2A;
+    background: #FFFFFF;
+    image: url("{radio_icon}");
 }}
 
-QCheckBox::indicator:checked:disabled,
-QRadioButton::indicator:checked:disabled {{
-    background: {colors["disabled_bg"]};
-    border-color: {colors["disabled_border"]};
-}}
-
-QCheckBox::indicator:disabled,
 QRadioButton::indicator:disabled {{
-    background: {colors["surface_low"]};
-    border-color: {colors["ghost_disabled_border"]};
+    background: #F5F3EF;
+    border: 1px solid #DDD6CC;
+}}
+
+QCheckBox[switchRole="true"] {{
+    spacing: 10px;
+    min-height: 24px;
+}}
+
+QCheckBox[switchRole="true"]::indicator {{
+    width: 38px;
+    height: 20px;
+    border: none;
+    border-radius: 0px;
+    background: transparent;
+    image: url("{switch_off_icon}");
+}}
+
+QCheckBox[switchRole="true"]::indicator:hover {{
+    border: none;
+    background: transparent;
+    image: url("{switch_off_icon}");
+}}
+
+QCheckBox[switchRole="true"]::indicator:checked {{
+    border: none;
+    background: transparent;
+    image: url("{switch_on_icon}");
+}}
+
+QCheckBox[switchRole="true"]::indicator:disabled {{
+    border: none;
+    background: transparent;
+    image: url("{switch_off_icon}");
 }}
 
 QMainWindow {{
@@ -502,6 +553,28 @@ QPushButton#DangerGhostButton:disabled {{
     border-color: {colors["border"]};
 }}
 
+QPushButton#LayerIconButton {{
+    background: {colors["surface"]};
+    color: {colors["text_muted"]};
+    border: 1px solid {colors["border"]};
+    border-radius: 3px;
+    padding: 0px;
+    font-size: 13px;
+    font-weight: 700;
+}}
+
+QPushButton#LayerIconButton:hover {{
+    background: {colors["primary_soft"]};
+    color: {colors["primary"]};
+    border-color: {colors["border_strong"]};
+}}
+
+QPushButton#LayerIconButton:disabled {{
+    background: {colors["surface_low"]};
+    color: {colors["ghost_disabled_text"]};
+    border-color: {colors["ghost_disabled_border"]};
+}}
+
 QFrame#PageRoot {{
     background: {colors["background"]};
 }}
@@ -524,6 +597,79 @@ QFrame#WorkflowStep {{
     border-radius: 4px;
 }}
 
+QFrame#WorkflowStep[variant="success"] {{
+    border-color: {colors["success"]};
+    background: {colors["success_bg"]};
+}}
+
+QFrame#WorkflowStep[variant="warning"] {{
+    border-color: {colors["warning"]};
+    background: {colors["warning_bg"]};
+}}
+
+QFrame#DashboardStatCard {{
+    background: {colors["surface"]};
+    border: 1px solid {colors["border"]};
+    border-radius: 6px;
+}}
+
+QLabel#DashboardStatValue {{
+    color: {colors["text"]};
+    font-size: 19px;
+    font-weight: 700;
+}}
+
+QLabel#DashboardRunStatus {{
+    color: {colors["text"]};
+    font-size: 18px;
+    font-weight: 700;
+}}
+
+QLabel#DashboardPath {{
+    color: {colors["text"]};
+    font-size: 14px;
+    font-weight: 700;
+}}
+
+QLabel#DashboardCountValue {{
+    color: {colors["primary"]};
+    font-size: 17px;
+    font-weight: 700;
+}}
+
+QLabel#WorkflowStepTitle {{
+    color: {colors["text"]};
+    font-size: 13px;
+    font-weight: 700;
+}}
+
+QTreeWidget#OutputTree {{
+    background: {colors["surface"]};
+    border: 1px solid {colors["border"]};
+    border-radius: 4px;
+    alternate-background-color: {colors["surface_low"]};
+    color: {colors["text"]};
+}}
+
+QTreeWidget#OutputTree::item {{
+    min-height: 23px;
+    padding: 2px 4px;
+}}
+
+QTreeWidget#OutputTree::item:selected {{
+    background: {colors["primary_soft"]};
+    color: {colors["primary"]};
+}}
+
+QTreeWidget#OutputTree QHeaderView::section {{
+    background: {colors["surface_low"]};
+    color: {colors["text_muted"]};
+    border: 0px;
+    border-bottom: 1px solid {colors["border"]};
+    padding: 5px 6px;
+    font-weight: 700;
+}}
+
 QFrame#FilterMethodList {{
     background: {colors["surface_low"]};
     border: 1px solid {colors["border"]};
@@ -534,6 +680,17 @@ QFrame#FilterParameterPanel {{
     background: {colors["surface"]};
     border: 1px solid {colors["border"]};
     border-radius: 4px;
+}}
+
+QWidget#DownloadControlStrip {{
+    background: {colors["surface_low"]};
+    border: 1px solid {colors["border"]};
+    border-radius: 4px;
+}}
+
+QWidget#DownloadControlStrip QLineEdit,
+QWidget#DownloadControlStrip QComboBox {{
+    background: {colors["surface"]};
 }}
 
 QLabel#FilterParameterTitle {{
@@ -565,6 +722,22 @@ QLabel#WorkflowStepNumber {{
     padding: 2px 7px;
     font-size: 11px;
     font-weight: 700;
+}}
+
+QPushButton#PlotToolButton {{
+    background: {colors["surface"]};
+    color: {colors["text"]};
+    border: 1px solid {colors["border_strong"]};
+    border-radius: 4px;
+    padding: 0px;
+    font-size: 16px;
+    font-weight: 700;
+}}
+
+QPushButton#PlotToolButton:hover {{
+    background: {colors["primary_soft"]};
+    color: {colors["primary"]};
+    border-color: {colors["primary"]};
 }}
 
 QFrame#CardHeader {{
@@ -870,6 +1043,50 @@ QFrame#PreviewSidebar QCheckBox {{
 QFrame#PreviewSidebar QCheckBox::indicator {{
     width: 16px;
     height: 16px;
+}}
+
+QLabel#SidebarTitle {{
+    color: {colors["text"]};
+    font-size: 16px;
+    font-weight: 700;
+}}
+
+QWidget#InlineStatusField {{
+    background: {colors["surface_low"]};
+    border: 1px solid {colors["border"]};
+    border-radius: 4px;
+    padding: 7px 8px;
+}}
+
+QLabel#InlineStatusValue {{
+    color: {colors["text"]};
+    font-weight: 600;
+}}
+
+QTableWidget#OverlayLayerTable {{
+    background: {colors["surface"]};
+    border: 1px solid {colors["border"]};
+    border-radius: 4px;
+    gridline-color: {colors["border"]};
+    selection-background-color: {colors["primary_soft"]};
+    selection-color: {colors["text"]};
+}}
+
+QTableWidget#OverlayLayerTable QHeaderView::section {{
+    background: {colors["surface_low"]};
+    color: {colors["text_muted"]};
+    border: none;
+    border-bottom: 1px solid {colors["border"]};
+    padding: 6px 4px;
+    font-weight: 600;
+}}
+
+QTableWidget#OverlayLayerTable::item {{
+    padding: 4px 6px;
+}}
+
+QWidget#LayerActionCell {{
+    background: transparent;
 }}
 
 QFrame#PreviewSidebar QComboBox QAbstractItemView,

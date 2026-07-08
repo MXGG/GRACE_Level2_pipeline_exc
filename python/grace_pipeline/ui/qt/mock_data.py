@@ -15,7 +15,7 @@ NAV_ITEMS = [
 
 
 PAGE_TITLES = {
-    "dashboard": "Dashboard",
+    "dashboard": "Workflow Overview",
     "data_paths": "Data Paths",
     "processing": "Filter Processing",
     "leakage": "Leakage Correction",

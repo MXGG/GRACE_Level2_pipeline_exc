@@ -60,6 +60,8 @@ def _compact_dashboard(window) -> None:
     page = getattr(window, "page_dashboard", None)
     if page is None:
         return
+    if hasattr(page, "workflow_steps") and hasattr(page, "output_tree"):
+        return
 
     # Remove dashboard shortcut buttons. The same actions remain available from
     # the navigation rail or the top toolbar, so this avoids duplicated controls.

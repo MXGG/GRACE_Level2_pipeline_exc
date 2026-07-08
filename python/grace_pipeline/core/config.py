@@ -307,12 +307,39 @@ class FilterConfig:
 
 
 @dataclass
+class CoefficientExportConfig:
+    enabled: bool = False
+    format: str = "icgem_gfc"
+    coefficient_content: str = "anomaly"
+    max_degree: Optional[int] = None
+    norm: str = "fully_normalized"
+    errors: str = "no"
+    tide_system: str = "zero_tide"
+    earth_gravity_constant: float = 3.986004415e14
+    radius: float = 6.37813646e6
+    earth_density: float = 5517.0
+    water_density: float = 1000.0
+    unit_for_grid_inverse: str = "mmEWH"
+    allow_grid_to_cs: bool = True
+    require_global_grid: bool = True
+    roundtrip_check: bool = True
+    output_dir: str = "monthly_gfc"
+    filename_template: str = "GRACE_L2_{center}_{year_month}_{method}_L{max_degree}_{content}.gfc"
+
+
+@dataclass
 class IOConfig:
+    output_formats: list = field(default_factory=lambda: ["mat"])
     save_monthly_mat: bool = True
     save_stack_mat: bool = True
     save_stack_hdf5: bool = False
+    save_netcdf: bool = False
+    save_geotiff: bool = False
     export_txt: bool = False
+    export_csv: bool = False
+    export_json_summary: bool = True
     txt_format: str = "lonlatval"
+    coefficient_export: CoefficientExportConfig = field(default_factory=CoefficientExportConfig)
     resume: bool = False
     return_stacks: bool = False
     return_basin: bool = False
@@ -363,7 +390,36 @@ DEFAULT_CONFIG: Dict[str, Any] = {
     "basin": {"analysis_enable": False, "boundary_file": "", "name": ""},
     "leakage": {"enable": False},
     "metrics": {"enable": False, "compute_spectrum": False},
-    "io": {"save_monthly_mat": True, "save_stack_mat": True, "export_txt": False, "resume": False, "return_stacks": False, "return_basin": False, "return_metrics": False},
+    "io": {
+        "output_formats": ["mat"],
+        "save_monthly_mat": True,
+        "save_stack_mat": True,
+        "save_stack_hdf5": False,
+        "save_netcdf": False,
+        "save_geotiff": False,
+        "export_txt": False,
+        "export_csv": False,
+        "export_json_summary": True,
+        "txt_format": "lonlatval",
+        "coefficient_export": {
+            "enabled": False,
+            "format": "icgem_gfc",
+            "coefficient_content": "anomaly",
+            "max_degree": None,
+            "norm": "fully_normalized",
+            "errors": "no",
+            "tide_system": "zero_tide",
+            "unit_for_grid_inverse": "mmEWH",
+            "allow_grid_to_cs": True,
+            "require_global_grid": True,
+            "roundtrip_check": True,
+            "output_dir": "monthly_gfc"
+        },
+        "resume": False,
+        "return_stacks": False,
+        "return_basin": False,
+        "return_metrics": False
+    },
     "plot": {"quicklook": False, "metrics_ts": False, "metrics_maps": False, "stack_mean": False, "stack_trend_amp": False, "basin_overlay": False},
     "parallel": {"enable": True, "nWorkers": 4},
 }
@@ -442,12 +498,50 @@ class Config:
         self.filter.fan = filter_cfg.get("fan", {})
 
         io_cfg = cfg.get("io", {})
+        coeff_raw = io_cfg.get("coefficient_export", {}) if isinstance(io_cfg, dict) else {}
+        if not isinstance(coeff_raw, dict):
+            coeff_raw = {}
+        coeff_lmax = coeff_raw.get("max_degree", None)
+        if coeff_lmax in ("", 0):
+            coeff_lmax = None
+        elif coeff_lmax is not None:
+            coeff_lmax = int(coeff_lmax)
         self.io = IOConfig(
+            output_formats=list(io_cfg.get("output_formats", ["mat"]) or ["mat"]),
             save_monthly_mat=io_cfg.get("save_monthly_mat", True),
             save_stack_mat=io_cfg.get("save_stack_mat", True),
             save_stack_hdf5=io_cfg.get("save_stack_hdf5", False),
+            save_netcdf=io_cfg.get("save_netcdf", False),
+            save_geotiff=io_cfg.get("save_geotiff", False),
             export_txt=io_cfg.get("export_txt", False),
+            export_csv=io_cfg.get("export_csv", False),
+            export_json_summary=io_cfg.get("export_json_summary", True),
             txt_format=io_cfg.get("txt_format", "lonlatval"),
+            coefficient_export=CoefficientExportConfig(
+                enabled=bool(coeff_raw.get("enabled", False)),
+                format=str(coeff_raw.get("format", "icgem_gfc") or "icgem_gfc"),
+                coefficient_content=str(coeff_raw.get("coefficient_content", "anomaly") or "anomaly"),
+                max_degree=coeff_lmax,
+                norm=str(coeff_raw.get("norm", "fully_normalized") or "fully_normalized"),
+                errors=str(coeff_raw.get("errors", "no") or "no"),
+                tide_system=str(coeff_raw.get("tide_system", "zero_tide") or "zero_tide"),
+                earth_gravity_constant=float(coeff_raw.get("earth_gravity_constant", 3.986004415e14)),
+                radius=float(coeff_raw.get("radius", 6.37813646e6)),
+                earth_density=float(coeff_raw.get("earth_density", 5517.0)),
+                water_density=float(coeff_raw.get("water_density", 1000.0)),
+                unit_for_grid_inverse=str(coeff_raw.get("unit_for_grid_inverse", self.grid.unit) or self.grid.unit),
+                allow_grid_to_cs=bool(coeff_raw.get("allow_grid_to_cs", True)),
+                require_global_grid=bool(coeff_raw.get("require_global_grid", True)),
+                roundtrip_check=bool(coeff_raw.get("roundtrip_check", True)),
+                output_dir=str(coeff_raw.get("output_dir", "monthly_gfc") or "monthly_gfc"),
+                filename_template=str(
+                    coeff_raw.get(
+                        "filename_template",
+                        "GRACE_L2_{center}_{year_month}_{method}_L{max_degree}_{content}.gfc",
+                    )
+                    or "GRACE_L2_{center}_{year_month}_{method}_L{max_degree}_{content}.gfc"
+                ),
+            ),
             resume=io_cfg.get("resume", False),
             return_stacks=io_cfg.get("return_stacks", False),
             return_basin=io_cfg.get("return_basin", False),

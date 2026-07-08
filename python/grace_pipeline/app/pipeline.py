@@ -9,6 +9,7 @@ import os
 import sys
 import importlib.util
 import json
+import re
 from datetime import datetime
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -46,8 +47,18 @@ from grace_pipeline.infra.config import Config, load_config
 from grace_pipeline.infra.datasets.grid import ensure_latlon_order, make_lonlat_vec
 from grace_pipeline.infra.datasets.time_index import TimeEntry, build_time_index, summarize_time_coverage
 from grace_pipeline.infra.io import Product, save_product
+from grace_pipeline.io.coefficients import (
+    FilteredMonthlyProduct,
+    coefficient_config_to_summary,
+    export_monthly_coefficients,
+    update_coefficient_summary,
+    write_summary_json,
+)
 from grace_pipeline.io.stack import Stack, save_stack, save_stack_hdf5
 from grace_pipeline.infra.runtime import ProgressBar, ensure_dir, limit_blas_threads
+
+
+_COEFFICIENT_PRODUCTS_KEY = "__coefficient_products__"
 
 
 def _get_frozen_max_workers(cfg: Config) -> int:
@@ -351,11 +362,16 @@ class OutputPaths:
     root: str
     monthly_mat: str
     monthly_txt: str
+    monthly_gfc: str
+    netcdf: str
+    hdf5: str
+    geotiff: str
     stacks: str
     metrics: str
     basin: str
     plots: str
     logs: str
+    summary: str
     tmp: str
     cache: str
 
@@ -454,19 +470,24 @@ def init_paths(cfg: Config) -> OutputPaths:
         root=out_root,
         monthly_mat=os.path.join(out_root, 'monthly_mat'),
         monthly_txt=os.path.join(out_root, 'monthly_txt'),
+        monthly_gfc=os.path.join(out_root, 'monthly_gfc'),
+        netcdf=os.path.join(out_root, 'netcdf'),
+        hdf5=os.path.join(out_root, 'hdf5'),
+        geotiff=os.path.join(out_root, 'geotiff'),
         stacks=os.path.join(out_root, 'stacks'),
         metrics=os.path.join(out_root, 'metrics'),
         basin=os.path.join(out_root, 'basin'),
         plots=os.path.join(out_root, 'plots'),
         logs=os.path.join(out_root, 'logs'),
+        summary=os.path.join(out_root, 'summary'),
         tmp=os.path.join(out_root, 'tmp'),
         cache=os.path.join(out_root, 'CACHE'),
     )
     
     # Create directories
-    for path in [paths.root, paths.monthly_mat, paths.monthly_txt,
-                 paths.stacks, paths.metrics, paths.basin,
-                 paths.plots, paths.logs, paths.tmp, paths.cache]:
+    for path in [paths.root, paths.monthly_mat, paths.monthly_txt, paths.monthly_gfc,
+                 paths.netcdf, paths.hdf5, paths.geotiff, paths.stacks, paths.metrics,
+                 paths.basin, paths.plots, paths.logs, paths.summary, paths.tmp, paths.cache]:
         ensure_dir(path)
     
     return paths
@@ -500,11 +521,11 @@ def compute_plan(cfg: Config) -> Dict[str, Any]:
         'hankel_input_tag': 'P4M6',
         'mean_mode': get_mean_mode(cfg),
     }
-    
+
     filter_cfg = cfg.filter
     ddk_tags = _resolve_ddk_types()
     plan["ddk_tags"] = ddk_tags
-    
+
     # Add filters based on configuration
     if filter_cfg.gaussian.enable:
         plan['order'].append('GAUSS')
@@ -548,6 +569,87 @@ def compute_plan(cfg: Config) -> Dict[str, Any]:
     return plan
 
 
+def _coefficient_export_enabled(cfg: Config) -> bool:
+    return bool(getattr(getattr(cfg, "io", None), "coefficient_export", None) and cfg.io.coefficient_export.enabled)
+
+
+def _infer_center_from_time_entry(time_entry: TimeEntry) -> str:
+    for attr in ("center", "agency"):
+        value = getattr(time_entry, attr, "")
+        if value:
+            return str(value).upper()
+    candidate = str(getattr(time_entry, "gfc_file", "") or getattr(time_entry, "path", "") or "")
+    upper = Path(candidate).name.upper()
+    for center in ("CSR", "GFZ", "JPL", "CNES", "ITSG"):
+        if center in upper:
+            return center
+    return "CSR"
+
+
+def _release_from_time_entry(time_entry: TimeEntry) -> str:
+    candidate = str(getattr(time_entry, "gfc_file", "") or getattr(time_entry, "path", "") or "")
+    match = re.search(r"RL\d{2,4}", candidate, re.IGNORECASE)
+    return match.group(0).upper() if match else ""
+
+
+def _common_coefficient_metadata(cfg: Config, plan: Dict[str, Any]) -> Dict[str, Any]:
+    lowdeg = getattr(cfg.inversion, "lowdeg", {}) or {}
+    low_parts = []
+    if lowdeg.get("replace_degree1", lowdeg.get("replace_C10", False)):
+        low_parts.append("degree1")
+    if lowdeg.get("replace_C20", False):
+        low_parts.append("c20")
+    if lowdeg.get("replace_C30", False):
+        low_parts.append("c30")
+    baseline = ""
+    if getattr(cfg.inversion, "remove_mean", False):
+        baseline = f"{getattr(cfg.inversion, 'mean_start_ym', '')}_to_{getattr(cfg.inversion, 'mean_end_ym', '')}".strip("_to_")
+    gia_model = ""
+    try:
+        if cfg.inversion.gia.get("enable", False):
+            gia_model = Path(str(cfg.inversion.gia.get("file", ""))).name
+    except Exception:
+        gia_model = ""
+    return {
+        "baseline": baseline,
+        "low_degree_replacement": ",".join(low_parts),
+        "gia_model": gia_model,
+        "mean_mode": plan.get("mean_mode", ""),
+    }
+
+
+def _make_coefficient_product(
+    cfg: Config,
+    time_entry: TimeEntry,
+    tag: str,
+    *,
+    source_domain: str,
+    clm: Optional[np.ndarray] = None,
+    slm: Optional[np.ndarray] = None,
+    grid: Optional[np.ndarray] = None,
+    lon_vec: Optional[np.ndarray] = None,
+    lat_vec: Optional[np.ndarray] = None,
+    metadata: Optional[Dict[str, Any]] = None,
+) -> FilteredMonthlyProduct:
+    return FilteredMonthlyProduct(
+        year_month=str(time_entry.ym),
+        center=_infer_center_from_time_entry(time_entry),
+        release=_release_from_time_entry(time_entry),
+        method=str(tag),
+        source_domain=source_domain,
+        cs_available=clm is not None and slm is not None,
+        clm=clm,
+        slm=slm,
+        grid_available=grid is not None,
+        grid=grid,
+        grid_unit=str(getattr(cfg.grid, "unit", "mmEWH") or "mmEWH"),
+        lon=lon_vec,
+        lat=lat_vec,
+        max_degree=int(getattr(cfg.inversion, "Lmax", 60)),
+        metadata=dict(metadata or {}),
+    )
+
+
 def process_month(
     cfg: Config,
     time_entry: TimeEntry,
@@ -571,6 +673,9 @@ def process_month(
     """
     Lmax = cfg.inversion.Lmax
     products = {}
+    coeff_products: Dict[str, FilteredMonthlyProduct] = {}
+    coeff_enabled = _coefficient_export_enabled(cfg)
+    coeff_meta = _common_coefficient_metadata(cfg, plan) if coeff_enabled else {}
     
     # 1. Read GSM coefficients
     try:
@@ -604,11 +709,19 @@ def process_month(
     if cfg.filter.gaussian.enable:
         C_g, S_g, _ = filter_sh_gaussian(C, S, Lmax, cfg.filter.gaussian.radius_km)
         products['GAUSS'] = ewh_synthesis(C_g, S_g, Lmax, lon_vec, lat_vec)
+        if coeff_enabled:
+            coeff_products['GAUSS'] = _make_coefficient_product(
+                cfg, time_entry, 'GAUSS', source_domain="spherical_harmonic", clm=C_g, slm=S_g, metadata=coeff_meta
+            )
     
     # P4M6
     if cfg.filter.p4m6.enable:
         C_p, S_p, _ = filter_sh_p4m6(C, S, Lmax, cfg.filter.p4m6.poly_deg, cfg.filter.p4m6.m_start)
         products['P4M6'] = ewh_synthesis(C_p, S_p, Lmax, lon_vec, lat_vec)
+        if coeff_enabled:
+            coeff_products['P4M6'] = _make_coefficient_product(
+                cfg, time_entry, 'P4M6', source_domain="spherical_harmonic", clm=C_p, slm=S_p, metadata=coeff_meta
+            )
     
     # DDK
     if cfg.filter.ddk.enable:
@@ -624,6 +737,10 @@ def process_month(
                 grid_ddk = np.full_like(raw_grid, np.nan)
             else:
                 grid_ddk = ewh_synthesis(C_d, S_d, Lmax, lon_vec, lat_vec)
+                if coeff_enabled:
+                    coeff_products[ddk_tag] = _make_coefficient_product(
+                        cfg, time_entry, ddk_tag, source_domain="spherical_harmonic", clm=C_d, slm=S_d, metadata=coeff_meta
+                    )
                 # Sanity check: avoid silently passing RAW as DDK
                 try:
                     diff = np.nanstd(grid_ddk - raw_grid)
@@ -632,6 +749,7 @@ def process_month(
                             print(f"[WARN] {ddk_tag} output appears identical to RAW. Check DDK kernel/data_dir.")
                             warned_same.add(ddk_tag)
                         grid_ddk = np.full_like(raw_grid, np.nan)
+                        coeff_products.pop(ddk_tag, None)
                 except Exception:
                     pass
             products[ddk_tag] = grid_ddk
@@ -644,6 +762,10 @@ def process_month(
         r2 = cfg.filter.fan.get('radius2_km', 300)
         C_f, S_f, _ = filter_sh_fan(C, S, Lmax, r1, r2)
         products['FAN'] = ewh_synthesis(C_f, S_f, Lmax, lon_vec, lat_vec)
+        if coeff_enabled:
+            coeff_products['FAN'] = _make_coefficient_product(
+                cfg, time_entry, 'FAN', source_domain="spherical_harmonic", clm=C_f, slm=S_f, metadata=coeff_meta
+            )
     
     # Combo: GAUSS + P4M6
     combinations = getattr(cfg.filter, "combinations", {}) or {}
@@ -660,6 +782,10 @@ def process_month(
         C_gp, S_gp, _ = filter_sh_p4m6(C, S, Lmax, cfg.filter.p4m6.poly_deg, cfg.filter.p4m6.m_start)
         C_gp, S_gp, _ = filter_sh_gaussian(C_gp, S_gp, Lmax, cfg.filter.gaussian.radius_km)
         products['GAUSS+P4M6'] = ewh_synthesis(C_gp, S_gp, Lmax, lon_vec, lat_vec)
+        if coeff_enabled:
+            coeff_products['GAUSS+P4M6'] = _make_coefficient_product(
+                cfg, time_entry, 'GAUSS+P4M6', source_domain="spherical_harmonic", clm=C_gp, slm=S_gp, metadata=coeff_meta
+            )
     
     # Combo: FAN + P4M6
     if combo_fan_pnmn:
@@ -668,6 +794,10 @@ def process_month(
         r2 = cfg.filter.fan.get('radius2_km', 300) if hasattr(cfg.filter, 'fan') else 300
         C_fp, S_fp, _ = filter_sh_fan(C_fp, S_fp, Lmax, r1, r2)
         products['FAN+P4M6'] = ewh_synthesis(C_fp, S_fp, Lmax, lon_vec, lat_vec)
+        if coeff_enabled:
+            coeff_products['FAN+P4M6'] = _make_coefficient_product(
+                cfg, time_entry, 'FAN+P4M6', source_domain="spherical_harmonic", clm=C_fp, slm=S_fp, metadata=coeff_meta
+            )
     
     # Combo: P4M6 + DDK
     if cfg.filter.p4m6.enable and cfg.filter.ddk.enable:
@@ -678,6 +808,16 @@ def process_month(
                 grid_pd = np.full_like(raw_grid, np.nan)
             else:
                 grid_pd = ewh_synthesis(C_pd_i, S_pd_i, Lmax, lon_vec, lat_vec)
+                if coeff_enabled:
+                    coeff_products[f"P4M6+{ddk_tag}"] = _make_coefficient_product(
+                        cfg,
+                        time_entry,
+                        f"P4M6+{ddk_tag}",
+                        source_domain="spherical_harmonic",
+                        clm=C_pd_i,
+                        slm=S_pd_i,
+                        metadata=coeff_meta,
+                    )
             products[f"P4M6+{ddk_tag}"] = grid_pd
 
     # HSAF (non-stack mode)
@@ -728,7 +868,22 @@ def process_month(
             except Exception:
                 pass
             products['HSAF'] = grid_hsaf
-    
+            if coeff_enabled:
+                metadata = dict(coeff_meta)
+                metadata["note"] = "HSAF coefficients are reconstructed from filtered global EWH grid."
+                coeff_products['HSAF'] = _make_coefficient_product(
+                    cfg,
+                    time_entry,
+                    'HSAF',
+                    source_domain="grid",
+                    grid=grid_hsaf,
+                    lon_vec=lon_vec,
+                    lat_vec=lat_vec,
+                    metadata=metadata,
+                )
+
+    if coeff_products:
+        products[_COEFFICIENT_PRODUCTS_KEY] = coeff_products
     return products
 
 
@@ -844,12 +999,22 @@ def run_pipeline(cfg_or_path=None, pause_event=None, stop_event=None, progress_c
     if cfg.inversion.remove_mean:
         print(f"[INV] Computing mean SH coefficients (mode={plan.get('mean_mode', 'fixed_range')})...")
         mean_sh = compute_mean_sh(cfg, time_entries)
-    
+
+    coefficient_summary: Optional[Dict[str, Any]] = None
+    if _coefficient_export_enabled(cfg):
+        coefficient_summary = coefficient_config_to_summary(
+            cfg.io.coefficient_export,
+            Path(paths.monthly_gfc),
+            int(getattr(cfg.inversion, "Lmax", 60)),
+        )
+
     def _save_monthly_products(products, ym):
         if not products:
             return
         try:
             for tag, grid in products.items():
+                if tag == _COEFFICIENT_PRODUCTS_KEY:
+                    continue
                 if cfg.io.save_monthly_mat:
                     out_dir = os.path.join(paths.monthly_mat, tag)
                     save_product(Product(tag=tag, ym=ym, ewh=grid, lon=lon_vec, lat=lat_vec), out_dir, format='mat')
@@ -858,6 +1023,21 @@ def run_pipeline(cfg_or_path=None, pause_event=None, stop_event=None, progress_c
                     save_product(Product(tag=tag, ym=ym, ewh=grid, lon=lon_vec, lat=lat_vec), out_dir, format='txt')
         except Exception as e:
             print(f"[WARN] Monthly save failed for {ym}: {e}")
+
+    def _export_coefficient_products(coeff_products: Dict[str, FilteredMonthlyProduct], ym: str) -> None:
+        if not coeff_products or coefficient_summary is None:
+            return
+        for tag, product in coeff_products.items():
+            try:
+                manifest = export_monthly_coefficients(
+                    product,
+                    cfg.io.coefficient_export,
+                    Path(paths.monthly_gfc),
+                )
+                if manifest:
+                    update_coefficient_summary(coefficient_summary, manifest)
+            except Exception as exc:
+                print(f"[WARN] C/S coefficient export failed for {ym} {tag}: {exc}")
 
     def _stack_tags_to_store() -> set:
         tags = set()
@@ -951,6 +1131,7 @@ def run_pipeline(cfg_or_path=None, pause_event=None, stop_event=None, progress_c
                 k = futures[future]
                 try:
                     products = future.result()
+                    coeff_products = products.pop(_COEFFICIENT_PRODUCTS_KEY, {})
                     for tag, grid in products.items():
                         if tag in stacks:
                             stacks[tag][:, :, k] = np.asarray(grid, dtype=stack_dtype)
@@ -958,6 +1139,7 @@ def run_pipeline(cfg_or_path=None, pause_event=None, stop_event=None, progress_c
                         _save_monthly_products(products, time_entries[k].ym)
                     except Exception:
                         pass
+                    _export_coefficient_products(coeff_products, time_entries[k].ym)
                     products.clear()
                 except Exception as e:
                     print(f"[ERROR] Month {time_entries[k].ym}: {e}")
@@ -985,6 +1167,7 @@ def run_pipeline(cfg_or_path=None, pause_event=None, stop_event=None, progress_c
                 break
             try:
                 products = process_month(cfg, te, mean_sh, plan, lon_vec, lat_vec)
+                coeff_products = products.pop(_COEFFICIENT_PRODUCTS_KEY, {})
                 for tag, grid in products.items():
                     if tag in stacks:
                         stacks[tag][:, :, k] = np.asarray(grid, dtype=stack_dtype)
@@ -992,6 +1175,7 @@ def run_pipeline(cfg_or_path=None, pause_event=None, stop_event=None, progress_c
                     _save_monthly_products(products, te.ym)
                 except Exception:
                     pass
+                _export_coefficient_products(coeff_products, te.ym)
                 products.clear()
             except Exception as e:
                 print(f"[ERROR] Month {te.ym}: {e}")
@@ -1121,13 +1305,33 @@ def run_pipeline(cfg_or_path=None, pause_event=None, stop_event=None, progress_c
     
     # If HSAF stack mode produced HSAF stack, export monthly files
     if plan.get('hankel_stack_mode', False) and 'HSAF' in stacks:
-        if cfg.io.save_monthly_mat or cfg.io.export_txt:
+        if cfg.io.save_monthly_mat or cfg.io.export_txt or _coefficient_export_enabled(cfg):
             print("[HSAF] Writing monthly products from stack...")
             export_started = time.perf_counter()
+            hsaf_coeff_meta = _common_coefficient_metadata(cfg, plan) if _coefficient_export_enabled(cfg) else {}
+            if hsaf_coeff_meta:
+                hsaf_coeff_meta["note"] = "HSAF coefficients are reconstructed from filtered global EWH grid."
             for k, te in enumerate(time_entries):
                 try:
                     grid = stacks['HSAF'][:, :, k]
-                    _save_monthly_products({'HSAF': grid}, te.ym)
+                    if cfg.io.save_monthly_mat or cfg.io.export_txt:
+                        _save_monthly_products({'HSAF': grid}, te.ym)
+                    if _coefficient_export_enabled(cfg):
+                        _export_coefficient_products(
+                            {
+                                "HSAF": _make_coefficient_product(
+                                    cfg,
+                                    te,
+                                    "HSAF",
+                                    source_domain="grid",
+                                    grid=grid,
+                                    lon_vec=lon_vec,
+                                    lat_vec=lat_vec,
+                                    metadata=hsaf_coeff_meta,
+                                )
+                            },
+                            te.ym,
+                        )
                 except Exception as e:
                     print(f"[WARN] HSAF monthly export failed for {te.ym}: {e}")
                 else:
@@ -1217,6 +1421,13 @@ def run_pipeline(cfg_or_path=None, pause_event=None, stop_event=None, progress_c
             _emit_progress(progress_offset + idx, total_units, f"Saving stack outputs {idx}/{stack_count}", f"{idx}/{stack_count}")
         print(f"[SAVE] All stacks saved in {time.perf_counter() - save_started:.1f}s.")
         progress_offset += stack_count
+
+    if coefficient_summary is not None and bool(getattr(cfg.io, "export_json_summary", True)):
+        try:
+            summary_path = write_summary_json(Path(paths.summary), coefficient_summary)
+            print(f"[OUTPUT] Coefficient summary: {summary_path}")
+        except Exception as exc:
+            print(f"[WARN] Failed to write coefficient summary: {exc}")
 
     _emit_progress(total_units, total_units, "Pipeline complete", f"{Nt}/{Nt}")
     print("\n[PIPELINE] Finished.")

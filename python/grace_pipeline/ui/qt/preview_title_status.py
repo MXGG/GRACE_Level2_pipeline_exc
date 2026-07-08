@@ -12,6 +12,7 @@ import contextlib
 from pathlib import Path
 from types import MethodType
 
+from grace_pipeline.ui.qt.projection_registry import projection_key_to_name, projection_renderer
 from grace_pipeline.ui.qt.qt_safe import is_deleted_qt_object_error, qt_object_is_alive
 
 
@@ -21,15 +22,11 @@ def _is_zh(window) -> bool:
 
 def _projection_title(window) -> str:
     page = window.page_preview
-    projection = page.cmb_projection.currentText().strip() or "Map"
+    projection = projection_key_to_name(page.cmb_projection.currentText().strip() or "Robinson")
     if _is_zh(window):
-        if projection == "3D Globe (Surface)":
-            return "三维球面"
-        if projection.endswith("(Global)"):
-            projection = projection.replace("(Global)", "").strip()
+        if projection_renderer(projection) == "matplotlib_3d":
+            return "三维地球"
         return f"{projection} 投影"
-    if projection == "3D Globe (Surface)":
-        return "3D Globe"
     return projection
 
 

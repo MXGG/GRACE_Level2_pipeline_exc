@@ -236,9 +236,8 @@ class DataPathsUiTest(unittest.TestCase):
         self.assertIn("[HSAF][stack] 32/163 slices processed...", self.window.console_text.toPlainText())
         self.assertEqual(self.window.page_dashboard.lbl_dashboard_counts.text(), "32 / 163")
         self.assertEqual(self.window.page_dashboard.lbl_dashboard_stage.text(), "HSAF stack 32/163")
-        self.assertIn("Output Root:", self.window.page_dashboard.lbl_preview_root.text())
-        self.assertIn("Stacks:", self.window.page_dashboard.lbl_preview_stacks.text())
-        self.assertIn("Logs:", self.window.page_dashboard.lbl_preview_logs.text())
+        self.assertEqual(str(ROOT / "outputs"), self.window.page_dashboard.lbl_preview_root.text())
+        self.assertGreater(self.window.page_dashboard.output_tree.topLevelItemCount(), 0)
 
     def test_pipeline_progress_prefers_stage_counts_over_internal_work_units(self):
         original_run_pipeline = qt_controller.run_pipeline
