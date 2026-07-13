@@ -557,7 +557,10 @@ class GuiEmbeddedToolsTest(unittest.TestCase):
 
             self.window.controller.on_load_stack_info()
             self.app.processEvents()
-            self.assertIn("time=2002-04..2007-05", self.window.page_preview.lbl_stack_info.text())
+            self.assertIn(
+                "Time coverage: 2002-04–2007-05",
+                self.window.page_preview.lbl_stack_info.text(),
+            )
             self.assertIn("1 / 2 | 2002-04", self.window.page_preview.lbl_time_index.text())
 
             self.window.page_preview.slider_time_index.setValue(1)

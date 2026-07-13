@@ -7,6 +7,25 @@ from pathlib import Path
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QFont, QFontDatabase, QGuiApplication
 
+SEMANTIC_COLOR_TOKENS = (
+    "app_bg",
+    "sidebar_bg",
+    "content_bg",
+    "card_bg",
+    "card_header_bg",
+    "card_border",
+    "field_bg",
+    "field_border",
+    "field_focus_border",
+    "status_bg",
+    "primary",
+    "primary_soft",
+    "hover_bg",
+    "selected_bg",
+    "read_only_bg",
+    "table_header_bg",
+)
+
 
 LIGHT_COLOR = {
     "background": "#f7f9fc",
@@ -24,7 +43,7 @@ LIGHT_COLOR = {
     "primary": "#005db5",
     "primary_dim": "#0052a0",
     "primary_soft": "#d6e3ff",
-    "success": "#4caf50",
+    "success": "#2f855a",
     "warning": "#f2a100",
     "danger": "#c44f4f",
     "console_bg": "#121b2f",
@@ -38,21 +57,47 @@ LIGHT_COLOR = {
     "danger_surface": "#fff5f5",
     "danger_surface_hover": "#ffecec",
     "danger_border": "#f4d0d0",
-    "success_bg": "#dbf5de",
-    "success_text": "#23773e",
-    "warning_bg": "#fff0cf",
+    "success_bg": "#eef8f1",
+    "success_text": "#20613f",
+    "warning_bg": "#fff7e5",
     "warning_text": "#9b6a00",
-    "danger_bg": "#ffe4e4",
+    "danger_bg": "#fff0f0",
     "danger_text": "#a33434",
-    "disabled_bg": "#b9cde5",
-    "disabled_text": "#f5f8fc",
-    "disabled_border": "#b9cde5",
+    "disabled_bg": "#e8eff4",
+    "disabled_text": "#7d898f",
+    "disabled_border": "#d7e1e8",
     "ghost_disabled_text": "#95a0a7",
     "ghost_disabled_border": "#dde5eb",
     "placeholder_bg": "#eef4f8",
     "input_bg": "#FFFFFF",
     "input_border": "#D5DEE0",
     "text_disabled": "#9CA3AF",
+    "control_bg": "#FFFFFF",
+    "control_hover_bg": "#eef4f8",
+    "control_border": "#a8b3bb",
+    "control_checked": "#005db5",
+    "control_checked_hover": "#0052a0",
+    "control_disabled_bg": "#f0f4f8",
+    "control_disabled_border": "#d7e1e8",
+    "focus_ring": "#005db5",
+    # Semantic visual-hierarchy tokens.  Keep these names stable: pages and
+    # components should describe their role rather than borrow an unrelated
+    # surface colour.
+    "app_bg": "#edf2f7",
+    "sidebar_bg": "#f3f6f9",
+    "content_bg": "#f7f9fc",
+    "card_bg": "#ffffff",
+    "card_header_bg": "#f5f8fb",
+    "card_border": "#d7e1e8",
+    "field_bg": "#ffffff",
+    "field_border": "#cbd5df",
+    "field_focus_border": "#005db5",
+    "status_bg": "#f8fafc",
+    "primary_soft": "#d6e3ff",
+    "hover_bg": "#f1f5f9",
+    "selected_bg": "#e5eefb",
+    "read_only_bg": "#f6f8fa",
+    "table_header_bg": "#f5f8fb",
 }
 
 
@@ -101,6 +146,29 @@ DARK_COLOR = {
     "input_bg": "#0F172A",
     "input_border": "#334155",
     "text_disabled": "#64748B",
+    "control_bg": "#142235",
+    "control_hover_bg": "#1a2b42",
+    "control_border": "#577393",
+    "control_checked": "#59a4ff",
+    "control_checked_hover": "#458fdf",
+    "control_disabled_bg": "#1a2b42",
+    "control_disabled_border": "#2d4663",
+    "focus_ring": "#59a4ff",
+    "app_bg": "#091321",
+    "sidebar_bg": "#111d2d",
+    "content_bg": "#0d1726",
+    "card_bg": "#142235",
+    "card_header_bg": "#182940",
+    "card_border": "#2d4663",
+    "field_bg": "#0f172a",
+    "field_border": "#3c526b",
+    "field_focus_border": "#59a4ff",
+    "status_bg": "#101b2b",
+    "primary_soft": "#173660",
+    "hover_bg": "#1a2b42",
+    "selected_bg": "#173660",
+    "read_only_bg": "#111d2d",
+    "table_header_bg": "#182940",
 }
 
 
@@ -183,20 +251,59 @@ def palette_for_theme(theme_mode: str = "system", app=None) -> dict[str, str]:
                 "primary": "#0068b7",
                 "primary_dim": "#005799",
                 "primary_soft": "#d7eaff",
+                "app_bg": "#edf4fb",
+                "sidebar_bg": "#f1f6fb",
+                "content_bg": "#f6f9fd",
+                "card_bg": "#ffffff",
+                "card_header_bg": "#f2f7fc",
+                "card_border": "#cedbe7",
+                "field_bg": "#ffffff",
+                "field_border": "#c7d6e5",
+                "field_focus_border": "#0068b7",
+                "status_bg": "#f8fafc",
+                "hover_bg": "#edf5fc",
+                "selected_bg": "#dfedfb",
+                "read_only_bg": "#f7f9fb",
+                "table_header_bg": "#f2f7fc",
             }
         )
     elif theme_mode == "green":
         colors.update(
             {
-                "background": "#f4faf6",
-                "surface_low": "#EEF7F1",
-                "nav_surface": "#F0F7F2",
-                "nav_footer": "#E2F0E8",
-                "top_surface": "#FFFFFF",
-                "border": "#D6E5DC",
-                "primary": "#1F7A4D",
-                "primary_dim": "#16653F",
-                "primary_soft": "#DDF3E5",
+                "background": "#f3f7f5",
+                "surface": "#ffffff",
+                "surface_low": "#f6f9f7",
+                "surface_mid": "#eaf1ed",
+                "surface_high": "#dce9e2",
+                "nav_surface": "#f5f8f6",
+                "nav_footer": "#e8f1ec",
+                "top_surface": "#ffffff",
+                "border": "#d5e1da",
+                "border_strong": "#9fb5a9",
+                "text": "#223129",
+                "text_muted": "#58685f",
+                "primary": "#176b45",
+                "primary_dim": "#0f5636",
+                "primary_soft": "#e1f0e8",
+                "success": "#2f855a",
+                "success_bg": "#edf7f0",
+                "success_text": "#20613f",
+                "placeholder_bg": "#f0f5f2",
+                "input_border": "#cad8d0",
+                "app_bg": "#edf3ef",
+                "sidebar_bg": "#f3f7f4",
+                "content_bg": "#f7f9f8",
+                "card_bg": "#ffffff",
+                "card_header_bg": "#f3f8f5",
+                "card_border": "#d5e1da",
+                "field_bg": "#ffffff",
+                "field_border": "#cad8d0",
+                "field_focus_border": "#176b45",
+                "status_bg": "#f8faf9",
+                "hover_bg": "#f0f6f2",
+                "selected_bg": "#e2f1e8",
+                "read_only_bg": "#f7f9f8",
+                "table_header_bg": "#f3f8f5",
             }
         )
     elif theme_mode == "sepia":
@@ -212,6 +319,20 @@ def palette_for_theme(theme_mode: str = "system", app=None) -> dict[str, str]:
                 "primary": "#8a5a24",
                 "primary_dim": "#744819",
                 "primary_soft": "#f1dfc4",
+                "app_bg": "#f2eee8",
+                "sidebar_bg": "#f8f5f0",
+                "content_bg": "#fbf9f6",
+                "card_bg": "#ffffff",
+                "card_header_bg": "#fbf5ec",
+                "card_border": "#dfd1c1",
+                "field_bg": "#ffffff",
+                "field_border": "#d5c7b8",
+                "field_focus_border": "#8a5a24",
+                "status_bg": "#faf9f7",
+                "hover_bg": "#f8f3ed",
+                "selected_bg": "#f4e6d2",
+                "read_only_bg": "#f8f7f5",
+                "table_header_bg": "#fbf5ec",
             }
         )
     elif theme_mode == "violet":
@@ -225,6 +346,20 @@ def palette_for_theme(theme_mode: str = "system", app=None) -> dict[str, str]:
                 "primary": "#6d4db8",
                 "primary_dim": "#583b9b",
                 "primary_soft": "#e5dcff",
+                "app_bg": "#f1eef8",
+                "sidebar_bg": "#f6f3fb",
+                "content_bg": "#f9f8fc",
+                "card_bg": "#ffffff",
+                "card_header_bg": "#f6f3fb",
+                "card_border": "#ddd5ec",
+                "field_bg": "#ffffff",
+                "field_border": "#d3cbe2",
+                "field_focus_border": "#6d4db8",
+                "status_bg": "#f9f9fb",
+                "hover_bg": "#f3effa",
+                "selected_bg": "#e9e2f8",
+                "read_only_bg": "#f8f8fa",
+                "table_header_bg": "#f6f3fb",
             }
         )
     elif theme_mode == "graphite":
@@ -242,8 +377,44 @@ def palette_for_theme(theme_mode: str = "system", app=None) -> dict[str, str]:
                 "primary": "#8fb8ff",
                 "primary_dim": "#72a2ef",
                 "primary_soft": "#24364f",
+                "app_bg": "#0d1013",
+                "sidebar_bg": "#15191d",
+                "content_bg": "#111519",
+                "card_bg": "#1a1f24",
+                "card_header_bg": "#20262c",
+                "card_border": "#333c45",
+                "field_bg": "#111418",
+                "field_border": "#46515c",
+                "field_focus_border": "#8fb8ff",
+                "status_bg": "#171b20",
+                "hover_bg": "#22282e",
+                "selected_bg": "#24364f",
+                "read_only_bg": "#15191d",
+                "table_header_bg": "#20262c",
             }
         )
+    colors.update(
+        {
+            "input_bg": colors["field_bg"],
+            "input_border": colors["field_border"],
+            "control_bg": colors["field_bg"],
+            "control_hover_bg": colors["hover_bg"],
+            "control_border": colors["field_border"],
+            "control_checked": colors["primary"],
+            "control_checked_hover": colors["primary_dim"],
+            "control_disabled_bg": colors["read_only_bg"],
+            "control_disabled_border": colors["field_border"],
+            "focus_ring": colors["field_focus_border"],
+            "disabled_bg": colors["surface_mid"],
+            "disabled_text": colors["text_disabled"],
+            "disabled_border": colors["border"],
+            "ghost_disabled_text": colors["text_disabled"],
+            "ghost_disabled_border": colors["border"],
+            "button_secondary_bg": colors["card_bg"],
+            "button_secondary_hover": colors["hover_bg"],
+            "button_secondary_border": colors["border_strong"],
+        }
+    )
     return colors
 
 
@@ -272,20 +443,24 @@ def _mono_stack(mono_font: str | None = None) -> str:
     return f'"{preferred}", "Consolas", "JetBrains Mono", monospace'
 
 
-def build_stylesheet(colors: dict[str, str], ui_font: str | None = None, mono_font: str | None = None) -> str:
+def build_stylesheet(
+    colors: dict[str, str], ui_font: str | None = None, mono_font: str | None = None
+) -> str:
     ui_stack = _font_stack(ui_font)
     mono_stack = _mono_stack(mono_font)
     icon_dir = (Path(__file__).with_name("assets") / "icons").as_posix()
     check_icon = f"{icon_dir}/check_white.svg"
-    radio_icon = f"{icon_dir}/radio_dot_brown.svg"
-    switch_off_icon = f"{icon_dir}/switch_off.svg"
-    switch_on_icon = f"{icon_dir}/switch_on.svg"
     return f"""
 QWidget {{
-    background: {colors["background"]};
     color: {colors["text"]};
     font-family: {ui_stack};
     font-size: 13px;
+}}
+
+QMainWindow,
+QDialog,
+QMessageBox {{
+    background: {colors["app_bg"]};
 }}
 
 QLabel,
@@ -302,52 +477,101 @@ QRadioButton {{
     font-size: 13px;
 }}
 
+QPushButton {{
+    background: {colors["button_secondary_bg"]};
+    color: {colors["text"]};
+    border: 1px solid {colors["button_secondary_border"]};
+    border-radius: 5px;
+    padding: 8px 14px;
+    font-weight: 600;
+}}
+
+QPushButton:hover {{
+    background: {colors["button_secondary_hover"]};
+    color: {colors["primary"]};
+    border-color: {colors["primary"]};
+}}
+
+QPushButton:pressed {{
+    background: {colors["surface_mid"]};
+    border-color: {colors["primary_dim"]};
+}}
+
+QPushButton:disabled {{
+    background: {colors["disabled_bg"]};
+    color: {colors["disabled_text"]};
+    border-color: {colors["disabled_border"]};
+}}
+
+QToolButton {{
+    background: {colors["button_secondary_bg"]};
+    color: {colors["text"]};
+    border: 1px solid {colors["button_secondary_border"]};
+    border-radius: 5px;
+    padding: 5px 8px;
+}}
+
+QToolButton:hover {{
+    background: {colors["button_secondary_hover"]};
+    color: {colors["primary"]};
+    border-color: {colors["primary"]};
+}}
+
+QToolButton:disabled {{
+    background: {colors["disabled_bg"]};
+    color: {colors["disabled_text"]};
+    border-color: {colors["disabled_border"]};
+}}
+
 QCheckBox::indicator {{
     width: 16px;
     height: 16px;
-    border: 1px solid #C9B79C;
+    border: 1px solid {colors["control_border"]};
     border-radius: 3px;
-    background: #FFFFFF;
+    background: {colors["control_bg"]};
 }}
 
 QCheckBox::indicator:hover {{
-    border: 1px solid #B98A4A;
-    background: #FAF4EC;
+    border-color: {colors["control_checked"]};
+    background: {colors["control_hover_bg"]};
 }}
 
 QCheckBox::indicator:checked {{
-    background: #A46A2A;
-    border: 1px solid #A46A2A;
+    background: {colors["control_checked"]};
+    border-color: {colors["control_checked"]};
     image: url("{check_icon}");
 }}
 
 QCheckBox::indicator:disabled {{
-    background: #F5F3EF;
-    border: 1px solid #DDD6CC;
+    background: {colors["control_disabled_bg"]};
+    border-color: {colors["control_disabled_border"]};
+    image: none;
 }}
 
 QRadioButton::indicator {{
     width: 16px;
     height: 16px;
-    border: 1px solid #C9B79C;
+    border: 1px solid {colors["control_border"]};
     border-radius: 8px;
-    background: #FFFFFF;
+    background: {colors["control_bg"]};
 }}
 
 QRadioButton::indicator:hover {{
-    border: 1px solid #B98A4A;
-    background: #FAF4EC;
+    border-color: {colors["control_checked"]};
+    background: {colors["control_hover_bg"]};
 }}
 
 QRadioButton::indicator:checked {{
-    border: 1px solid #A46A2A;
-    background: #FFFFFF;
-    image: url("{radio_icon}");
+    width: 8px;
+    height: 8px;
+    border: 5px solid {colors["control_checked"]};
+    border-radius: 9px;
+    background: {colors["control_bg"]};
 }}
 
 QRadioButton::indicator:disabled {{
-    background: #F5F3EF;
-    border: 1px solid #DDD6CC;
+    background: {colors["control_disabled_bg"]};
+    border-color: {colors["control_disabled_border"]};
 }}
 
 QCheckBox[switchRole="true"] {{
@@ -362,42 +586,78 @@ QCheckBox[switchRole="true"]::indicator {{
     max-width: 46px;
     min-height: 24px;
     max-height: 24px;
-    border: 1px solid #C9B79C;
+    border: 1px solid {colors["control_border"]};
     border-radius: 12px;
-    background: #F5F3EF;
-    image: url("{switch_off_icon}");
+    background: {colors["control_disabled_bg"]};
+    image: none;
 }}
 
 QCheckBox[switchRole="true"]::indicator:hover {{
-    border: 1px solid #B98A4A;
-    background: #FAF4EC;
-    image: url("{switch_off_icon}");
+    border-color: {colors["control_checked"]};
+    background: {colors["control_hover_bg"]};
 }}
 
 QCheckBox[switchRole="true"]::indicator:checked {{
-    border: 1px solid #A46A2A;
-    background: #A46A2A;
-    image: url("{switch_on_icon}");
+    border-color: {colors["control_checked"]};
+    background: {colors["control_checked"]};
+    image: url("{check_icon}");
+}}
+
+QCheckBox[switchRole="true"]::indicator:checked:hover {{
+    border-color: {colors["control_checked_hover"]};
+    background: {colors["control_checked_hover"]};
 }}
 
 QCheckBox[switchRole="true"]::indicator:disabled {{
-    border: 1px solid #DDD6CC;
-    background: #F5F3EF;
-    image: url("{switch_off_icon}");
+    border-color: {colors["control_disabled_border"]};
+    background: {colors["control_disabled_bg"]};
+    image: none;
+}}
+
+QCheckBox::indicator:focus,
+QRadioButton::indicator:focus {{
+    border-color: {colors["focus_ring"]};
 }}
 
 QMainWindow {{
-    background: {colors["background"]};
+    background: {colors["app_bg"]};
 }}
 
 QFrame#NavigationRail {{
-    background: {colors["nav_surface"]};
-    border-right: 1px solid {colors["border"]};
+    background: {colors["sidebar_bg"]};
+    border-right: 1px solid {colors["card_border"]};
+}}
+
+QWidget#NavBrand,
+QWidget#NavItems {{
+    background: transparent;
+}}
+
+QLabel#NavBrandTitle {{
+    color: {colors["text"]};
+    font-size: 28px;
+    font-weight: 700;
+}}
+
+QLabel#NavBrandMark {{
+    background: {colors["primary_soft"]};
+    color: {colors["primary"]};
+    border: 1px solid {colors["border"]};
+    border-radius: 8px;
+    font-size: 15px;
+    font-weight: 800;
 }}
 
 QFrame#NavFooter {{
     background: {colors["nav_footer"]};
     border-top: 1px solid {colors["border"]};
+}}
+
+QLabel#NavAvatar {{
+    background: {colors["primary"]};
+    color: white;
+    border-radius: 15px;
+    font-weight: 700;
 }}
 
 QPushButton#NavButton {{
@@ -412,21 +672,37 @@ QPushButton#NavButton {{
     font-weight: 500;
 }}
 
+QPushButton#NavButton[compact="true"] {{
+    padding: 12px 0px;
+    text-align: center;
+}}
+
 QPushButton#NavButton:hover {{
-    background: {colors["placeholder_bg"]};
+    background: {colors["hover_bg"]};
     color: {colors["text"]};
 }}
 
 QPushButton#NavButton:checked {{
-    background: {colors["primary_soft"]};
+    background: {colors["selected_bg"]};
     border-left: 3px solid {colors["primary"]};
     color: {colors["primary"]};
     font-weight: 600;
 }}
 
+QPushButton#NavButton:focus {{
+    background: {colors["control_hover_bg"]};
+    border-right: 2px solid {colors["focus_ring"]};
+}}
+
+QPushButton#NavButton:disabled {{
+    background: transparent;
+    color: {colors["text_disabled"]};
+    border-left-color: transparent;
+}}
+
 QFrame#TopBar {{
-    background: {colors["top_surface"]};
-    border-bottom: 1px solid {colors["border"]};
+    background: {colors["card_bg"]};
+    border-bottom: 1px solid {colors["card_border"]};
 }}
 
 QLabel#AppTitle {{
@@ -446,86 +722,97 @@ QPushButton#PrimaryButton {{
     background: {colors["primary"]};
     color: white;
     border: 1px solid {colors["primary"]};
-    border-radius: 3px;
+    border-radius: 5px;
     padding: 8px 16px;
     font-weight: 600;
 }}
 
 QPushButton#PrimaryButton:hover {{
     background: {colors["primary_dim"]};
+    color: white;
+    border-color: {colors["primary_dim"]};
 }}
 
 QPushButton#PrimaryButton:disabled {{
     background: {colors["disabled_bg"]};
-    color: {colors["text"]};
-    border-color: {colors["border_strong"]};
+    color: {colors["disabled_text"]};
+    border-color: {colors["disabled_border"]};
 }}
 
 QPushButton#GhostButton {{
-    background: transparent;
-    color: {colors["text_muted"]};
-    border: 1px solid {colors["border"]};
-    border-radius: 3px;
+    background: {colors["button_secondary_bg"]};
+    color: {colors["text"]};
+    border: 1px solid {colors["button_secondary_border"]};
+    border-radius: 5px;
     padding: 8px 14px;
     font-weight: 600;
 }}
 
 QPushButton#GhostButton:hover {{
-    background: {colors["surface_low"]};
-    color: {colors["text"]};
+    background: {colors["button_secondary_hover"]};
+    color: {colors["primary"]};
+    border-color: {colors["primary"]};
 }}
 
 QPushButton#GhostButton:checked {{
-    background: {colors["surface_low"]};
-    color: {colors["text"]};
-    border-color: {colors["border_strong"]};
+    background: {colors["primary_soft"]};
+    color: {colors["primary"]};
+    border-color: {colors["primary"]};
 }}
 
 QPushButton#GhostButton:disabled {{
-    background: {colors["surface_low"]};
-    color: {colors["text_muted"]};
-    border-color: {colors["border"]};
+    background: {colors["disabled_bg"]};
+    color: {colors["disabled_text"]};
+    border-color: {colors["disabled_border"]};
 }}
 
 QPushButton#SoftButton {{
-    background: {colors["primary_soft"]};
+    background: {colors["surface"]};
     color: {colors["primary"]};
-    border: 1px solid {colors["primary_soft"]};
-    border-radius: 3px;
+    border: 1px solid {colors["primary"]};
+    border-radius: 5px;
     padding: 8px 14px;
     font-weight: 600;
 }}
 
 QPushButton#SoftButton:hover {{
-    background: {colors["placeholder_bg"]};
-    border-color: {colors["primary_soft"]};
+    background: {colors["primary_soft"]};
+    color: {colors["primary_dim"]};
+    border-color: {colors["primary_dim"]};
+}}
+
+QPushButton#SoftButton:disabled {{
+    background: {colors["disabled_bg"]};
+    color: {colors["disabled_text"]};
+    border-color: {colors["disabled_border"]};
 }}
 
 QPushButton#PathButton {{
     background: {colors["surface"]};
     color: {colors["text"]};
-    border: 1px solid {colors["border"]};
-    border-radius: 3px;
+    border: 1px solid {colors["button_secondary_border"]};
+    border-radius: 5px;
     padding: 8px 13px;
     font-weight: 600;
 }}
 
 QPushButton#PathButton:hover {{
-    background: {colors["surface_low"]};
-    border-color: {colors["border_strong"]};
+    background: {colors["button_secondary_hover"]};
+    color: {colors["primary"]};
+    border-color: {colors["primary"]};
 }}
 
 QPushButton#PathButton:disabled {{
-    background: {colors["surface_low"]};
-    color: {colors["text_muted"]};
-    border-color: {colors["border"]};
+    background: {colors["disabled_bg"]};
+    color: {colors["disabled_text"]};
+    border-color: {colors["disabled_border"]};
 }}
 
 QToolButton#IconButton {{
-    background: transparent;
+    background: {colors["surface"]};
     color: {colors["text_muted"]};
     border: 1px solid {colors["border"]};
-    border-radius: 4px;
+    border-radius: 5px;
     padding: 6px 9px;
     font-size: 18px;
     font-weight: 700;
@@ -538,11 +825,22 @@ QToolButton#IconButton:checked {{
     border-color: {colors["border_strong"]};
 }}
 
+QToolButton#IconButton:focus {{
+    border-color: {colors["focus_ring"]};
+    background: {colors["control_hover_bg"]};
+}}
+
+QToolButton#IconButton:disabled {{
+    background: {colors["control_disabled_bg"]};
+    color: {colors["text_disabled"]};
+    border-color: {colors["control_disabled_border"]};
+}}
+
 QPushButton#DangerGhostButton {{
     background: {colors["danger_surface"]};
     color: {colors["danger"]};
     border: 1px solid {colors["danger_border"]};
-    border-radius: 3px;
+    border-radius: 5px;
     padding: 8px 14px;
     font-weight: 600;
 }}
@@ -561,7 +859,7 @@ QPushButton#LayerIconButton {{
     background: {colors["surface"]};
     color: {colors["text_muted"]};
     border: 1px solid {colors["border"]};
-    border-radius: 3px;
+    border-radius: 5px;
     padding: 0px;
     font-size: 13px;
     font-weight: 700;
@@ -580,25 +878,63 @@ QPushButton#LayerIconButton:disabled {{
 }}
 
 QFrame#PageRoot {{
-    background: {colors["background"]};
+    background: {colors["content_bg"]};
+}}
+
+QWidget#PreviewPage {{
+    background: {colors["app_bg"]};
+}}
+
+QFrame#PreviewContent {{
+    background: {colors["content_bg"]};
+}}
+
+QFrame#PreviewMapCard {{
+    background: {colors["card_bg"]};
+    border: 1px solid {colors["card_border"]};
+    border-radius: 6px;
+}}
+
+QFrame#PreviewCanvasHost {{
+    background: {colors["field_bg"]};
+    border: none;
+    border-radius: 4px;
+}}
+
+QFrame#EmbeddedSection {{
+    background: transparent;
+    border: 1px solid {colors["card_border"]};
+    border-radius: 4px;
+}}
+
+QFrame#EmbeddedSectionHeader {{
+    background: {colors["read_only_bg"]};
+    border: none;
+    border-bottom: 1px solid {colors["card_border"]};
+}}
+
+QWidget#EmbeddedSectionContent,
+QFrame#EmbeddedSectionContent {{
+    background: transparent;
+    border: none;
 }}
 
 QFrame#PageCard {{
-    background: {colors["surface"]};
-    border: 1px solid {colors["border"]};
-    border-radius: 4px;
+    background: {colors["card_bg"]};
+    border: 1px solid {colors["card_border"]};
+    border-radius: 6px;
 }}
 
 QFrame#ActionZone {{
-    background: {colors["surface"]};
-    border: 1px solid {colors["border"]};
-    border-radius: 4px;
+    background: {colors["card_bg"]};
+    border: 1px solid {colors["card_border"]};
+    border-radius: 6px;
 }}
 
 QFrame#WorkflowStep {{
-    background: {colors["surface_low"]};
-    border: 1px solid {colors["border"]};
-    border-radius: 4px;
+    background: {colors["read_only_bg"]};
+    border: 1px solid {colors["card_border"]};
+    border-radius: 6px;
 }}
 
 QFrame#WorkflowStep[variant="success"] {{
@@ -612,8 +948,8 @@ QFrame#WorkflowStep[variant="warning"] {{
 }}
 
 QFrame#DashboardStatCard {{
-    background: {colors["surface"]};
-    border: 1px solid {colors["border"]};
+    background: {colors["card_bg"]};
+    border: 1px solid {colors["card_border"]};
     border-radius: 6px;
 }}
 
@@ -648,8 +984,8 @@ QLabel#WorkflowStepTitle {{
 }}
 
 QTreeWidget#OutputTree {{
-    background: {colors["surface"]};
-    border: 1px solid {colors["border"]};
+    background: {colors["card_bg"]};
+    border: 1px solid {colors["card_border"]};
     border-radius: 4px;
     alternate-background-color: {colors["surface_low"]};
     color: {colors["text"]};
@@ -666,7 +1002,7 @@ QTreeWidget#OutputTree::item:selected {{
 }}
 
 QTreeWidget#OutputTree QHeaderView::section {{
-    background: {colors["surface_low"]};
+    background: {colors["table_header_bg"]};
     color: {colors["text_muted"]};
     border: 0px;
     border-bottom: 1px solid {colors["border"]};
@@ -675,26 +1011,26 @@ QTreeWidget#OutputTree QHeaderView::section {{
 }}
 
 QFrame#FilterMethodList {{
-    background: {colors["surface_low"]};
-    border: 1px solid {colors["border"]};
+    background: {colors["read_only_bg"]};
+    border: 1px solid {colors["card_border"]};
     border-radius: 4px;
 }}
 
 QFrame#FilterParameterPanel {{
-    background: {colors["surface"]};
-    border: 1px solid {colors["border"]};
+    background: {colors["card_bg"]};
+    border: 1px solid {colors["card_border"]};
     border-radius: 4px;
 }}
 
 QWidget#DownloadControlStrip {{
-    background: {colors["surface_low"]};
-    border: 1px solid {colors["border"]};
-    border-radius: 4px;
+    background: transparent;
+    border: none;
+    border-radius: 0px;
 }}
 
 QWidget#DownloadControlStrip QLineEdit,
 QWidget#DownloadControlStrip QComboBox {{
-    background: {colors["surface"]};
+    background: {colors["field_bg"]};
 }}
 
 QLabel#FilterParameterTitle {{
@@ -745,8 +1081,25 @@ QPushButton#PlotToolButton:hover {{
 }}
 
 QFrame#CardHeader {{
-    background: {colors["surface_low"]};
-    border-bottom: 1px solid {colors["border"]};
+    background: {colors["card_header_bg"]};
+    border-bottom: 1px solid {colors["card_border"]};
+}}
+
+QToolButton#SectionToggle {{
+    background: transparent;
+    color: {colors["text"]};
+    border: none;
+    border-radius: 4px;
+    padding: 2px 4px;
+    font-weight: 700;
+    text-align: left;
+}}
+
+QToolButton#SectionToggle:hover,
+QToolButton#SectionToggle:checked {{
+    background: {colors["primary_soft"]};
+    color: {colors["primary"]};
+    border: none;
 }}
 
 QLabel#CardTitle {{
@@ -833,9 +1186,53 @@ QLabel#ValueText {{
     font-size: 13px;
 }}
 
+QLabel#ProgressValue {{
+    color: {colors["primary"]};
+    font-weight: 700;
+}}
+
 QLabel#PreviewStatusValue {{
-    color: {colors["text"]};
-    font-size: 13px;
+    color: {colors["text_muted"]};
+    font-size: 12px;
+}}
+
+QFrame#PreviewStatusBar,
+QFrame#StatusBar,
+QFrame[statusRole="true"] {{
+    background: {colors["status_bg"]};
+    border: none;
+    border-top: 1px solid {colors["card_border"]};
+    border-radius: 0px;
+}}
+
+QFrame#StatusBarHeader {{
+    background: transparent;
+    border: none;
+    border-bottom: 0px;
+}}
+
+QLabel#StatusBarTitle {{
+    background: transparent;
+    color: {colors["text_muted"]};
+    font-size: 11px;
+    font-weight: 600;
+}}
+
+QFrame#PreviewStatusBar QWidget,
+QFrame#PreviewStatusBar QLabel,
+QFrame#StatusBar QWidget,
+QFrame#StatusBar QLabel,
+QFrame[statusRole="true"] QWidget,
+QFrame[statusRole="true"] QLabel {{
+    background: transparent;
+}}
+
+QFrame#PreviewStatusBar QLabel#LabelCaps,
+QFrame#StatusBar QLabel#LabelCaps,
+QFrame[statusRole="true"] QLabel#LabelCaps {{
+    color: {colors["text_muted"]};
+    font-size: 11px;
+    font-weight: 600;
 }}
 
 QLabel#MonoText {{
@@ -885,66 +1282,129 @@ QFrame#TopProgressPanel {{
 }}
 
 QTableWidget {{
-    background: {colors["surface"]};
-    alternate-background-color: {colors["surface_low"]};
-    gridline-color: {colors["border"]};
+    background: {colors["card_bg"]};
+    alternate-background-color: {colors["read_only_bg"]};
+    gridline-color: {colors["card_border"]};
     border: none;
 }}
 
 QHeaderView::section {{
-    background: {colors["surface_low"]};
+    background: {colors["table_header_bg"]};
     color: {colors["text_muted"]};
     border: none;
-    border-bottom: 1px solid {colors["border"]};
+    border-bottom: 1px solid {colors["card_border"]};
     padding: 8px;
     font-size: 11px;
     font-weight: 700;
 }}
 
-QLineEdit, QComboBox, QPlainTextEdit, QTextEdit {{
-    background: {colors.get("input_bg", colors["surface"])};
-    border: 1px solid {colors.get("input_border", colors["border"])};
+QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox, QPlainTextEdit, QTextEdit {{
+    background: {colors["field_bg"]};
+    border: 1px solid {colors["field_border"]};
     border-radius: 3px;
     padding: 8px;
 }}
 
-QLineEdit:focus, QComboBox:focus, QPlainTextEdit:focus, QTextEdit:focus {{
-    border-color: {colors["primary"]};
+QLineEdit:focus, QComboBox:focus, QSpinBox:focus, QDoubleSpinBox:focus,
+QPlainTextEdit:focus, QTextEdit:focus {{
+    border-color: {colors["field_focus_border"]};
+}}
+
+QLineEdit:read-only,
+QPlainTextEdit:read-only,
+QTextEdit:read-only,
+QLineEdit[readOnly="true"],
+QPlainTextEdit[readOnly="true"],
+QTextEdit[readOnly="true"] {{
+    background: {colors["read_only_bg"]};
+    color: {colors["text_muted"]};
+    border-color: {colors["field_border"]};
+}}
+
+QLineEdit:disabled, QComboBox:disabled, QSpinBox:disabled, QDoubleSpinBox:disabled,
+QPlainTextEdit:disabled, QTextEdit:disabled {{
+    background: {colors["read_only_bg"]};
+    color: {colors["text_disabled"]};
+    border-color: {colors["field_border"]};
+}}
+
+QPushButton#PrimaryButton:focus,
+QPushButton#GhostButton:focus,
+QPushButton#SoftButton:focus,
+QPushButton#PathButton:focus,
+QPushButton#DangerGhostButton:focus,
+QPushButton#LayerIconButton:focus,
+QPushButton#PlotToolButton:focus {{
+    border-color: {colors["field_focus_border"]};
 }}
 
 QComboBox QAbstractItemView {{
-    background: {colors["surface"]};
+    background: {colors["field_bg"]};
     color: {colors["text"]};
-    border: 1px solid {colors["border"]};
-    selection-background-color: {colors["primary_soft"]};
+    border: 1px solid {colors["field_border"]};
+    selection-background-color: {colors["selected_bg"]};
     selection-color: {colors["text"]};
 }}
 
 QComboBox QAbstractItemView::item {{
-    background: {colors["surface"]};
+    background: {colors["field_bg"]};
     color: {colors["text"]};
     min-height: 24px;
     padding: 4px 8px;
 }}
 
 QComboBox QAbstractItemView::item:selected {{
-    background: {colors["primary_soft"]};
+    background: {colors["selected_bg"]};
+    color: {colors["primary"]};
+}}
+
+QMenu {{
+    background: {colors["card_bg"]};
     color: {colors["text"]};
+    border: 1px solid {colors["border_strong"]};
+    border-radius: 6px;
+    padding: 6px;
+}}
+
+QMenu::item {{
+    background: transparent;
+    color: {colors["text"]};
+    border-radius: 4px;
+    padding: 7px 28px 7px 10px;
+}}
+
+QMenu::item:selected {{
+    background: {colors["selected_bg"]};
+    color: {colors["primary"]};
+}}
+
+QMenu::item:disabled {{
+    color: {colors["text_disabled"]};
+}}
+
+QMenu::separator {{
+    height: 1px;
+    background: {colors["border"]};
+    margin: 5px 8px;
 }}
 
 QFrame#PreviewSidebar {{
-    background: {colors["surface"]};
-    border-right: 1px solid {colors["border"]};
+    background: {colors["sidebar_bg"]};
+    border-right: 1px solid {colors["card_border"]};
+}}
+
+QWidget#PreviewSidebarContent {{
+    background: {colors["sidebar_bg"]};
 }}
 
 QFrame#PreviewSidebarFooter {{
-    background: {colors["surface"]};
-    border-top: 1px solid {colors["border"]};
+    background: {colors["sidebar_bg"]};
+    border-top: 1px solid {colors["card_border"]};
 }}
 
 QFrame#PreviewToolbarHost {{
     background: {colors["toolbar_bg"]};
-    border: 1px solid {colors["border"]};
+    border: 1px solid {colors["card_border"]};
     border-radius: 4px;
 }}
 
@@ -956,7 +1416,7 @@ QFrame#PreviewToolbarHost QToolButton {{
 }}
 
 QFrame#PreviewToolbarHost QToolButton:hover {{
-    background: {colors["surface_low"]};
+    background: {colors["hover_bg"]};
     color: {colors["text"]};
 }}
 
@@ -969,6 +1429,23 @@ QFrame#ConsoleHeader {{
     background: {colors["console_bg"]};
     border: 1px solid {colors["console_tab_bg"]};
     border-radius: 4px;
+}}
+
+QTextEdit#ConsoleOutput {{
+    background: {colors["console_bg"]};
+    color: {colors["console_text"]};
+    border: none;
+    border-radius: 0px;
+    padding: 8px;
+    font-family: {mono_stack};
+}}
+
+QTextEdit#ConsoleOutput[stream="filter"] {{
+    color: {colors["console_muted"]};
+}}
+
+QTextEdit#ConsoleOutput[stream="alert"] {{
+    color: {colors["console_warn"]};
 }}
 
 QLabel#ConsoleHeaderTitle {{
@@ -992,17 +1469,17 @@ QPushButton#ConsoleButton:hover {{
 }}
 
 QWidget#DownloadControlStrip {{
-    background: {colors["surface_low"]};
-    border-radius: 3px;
+    background: transparent;
+    border: none;
+    border-radius: 0px;
 }}
 
 QFrame#FilterExportPanel {{
-    background: {colors["surface_low"]};
-    border: 1px solid {colors["border"]};
+    background: {colors["read_only_bg"]};
+    border: 1px solid {colors["card_border"]};
     border-radius: 3px;
 }}
 
-QFrame#PreviewSidebar QWidget,
 QWidget#FieldRow,
 QWidget#FieldBlock,
 QWidget#InlineField,
@@ -1025,17 +1502,18 @@ QFrame#PreviewSidebarFooter QPushButton#PrimaryButton:hover {{
 }}
 
 QFrame#PreviewSidebarFooter QPushButton#GhostButton {{
-    background: transparent;
-    color: {colors["text_muted"]};
-    border: 1px solid {colors["border"]};
-    border-radius: 3px;
+    background: {colors["card_bg"]};
+    color: {colors["text"]};
+    border: 1px solid {colors["border_strong"]};
+    border-radius: 5px;
     padding: 8px 14px;
     font-weight: 600;
 }}
 
 QFrame#PreviewSidebarFooter QPushButton#GhostButton:hover {{
-    background: {colors["surface_low"]};
-    color: {colors["text"]};
+    background: {colors["primary_soft"]};
+    color: {colors["primary"]};
+    border-color: {colors["primary"]};
 }}
 
 QFrame#PreviewSidebar QCheckBox {{
@@ -1056,10 +1534,11 @@ QLabel#SidebarTitle {{
 }}
 
 QWidget#InlineStatusField {{
-    background: {colors["surface_low"]};
-    border: 1px solid {colors["border"]};
-    border-radius: 4px;
-    padding: 7px 8px;
+    background: transparent;
+    border: none;
+    border-left: 2px solid {colors["card_border"]};
+    border-radius: 0px;
+    padding: 5px 8px;
 }}
 
 QLabel#InlineStatusValue {{
@@ -1068,19 +1547,19 @@ QLabel#InlineStatusValue {{
 }}
 
 QTableWidget#OverlayLayerTable {{
-    background: {colors["surface"]};
-    border: 1px solid {colors["border"]};
+    background: {colors["card_bg"]};
+    border: 1px solid {colors["card_border"]};
     border-radius: 4px;
     gridline-color: {colors["border"]};
-    selection-background-color: {colors["primary_soft"]};
+    selection-background-color: {colors["selected_bg"]};
     selection-color: {colors["text"]};
 }}
 
 QTableWidget#OverlayLayerTable QHeaderView::section {{
-    background: {colors["surface_low"]};
+    background: {colors["table_header_bg"]};
     color: {colors["text_muted"]};
     border: none;
-    border-bottom: 1px solid {colors["border"]};
+    border-bottom: 1px solid {colors["card_border"]};
     padding: 6px 4px;
     font-weight: 600;
 }}
@@ -1089,13 +1568,64 @@ QTableWidget#OverlayLayerTable::item {{
     padding: 4px 6px;
 }}
 
+QTreeView#PreviewLayerTree {{
+    background: {colors["card_bg"]};
+    alternate-background-color: {colors["read_only_bg"]};
+    color: {colors["text"]};
+    border: 1px solid {colors["card_border"]};
+    border-radius: 6px;
+    padding: 4px;
+    outline: none;
+    selection-background-color: {colors["selected_bg"]};
+    selection-color: {colors["text"]};
+}}
+
+QTreeView#PreviewLayerTree::item {{
+    min-height: 28px;
+    padding: 3px 5px;
+    border-radius: 4px;
+}}
+
+QTreeView#PreviewLayerTree::item:hover:!selected {{
+    background: {colors["hover_bg"]};
+}}
+
+QTreeView#PreviewLayerTree::item:selected,
+QTreeView#PreviewLayerTree::item:selected:active {{
+    background: {colors["selected_bg"]};
+    color: {colors["text"]};
+}}
+
+QTreeView#PreviewLayerTree::indicator {{
+    width: 16px;
+    height: 16px;
+    border: 1px solid {colors["border_strong"]};
+    border-radius: 3px;
+    background: {colors["field_bg"]};
+}}
+
+QTreeView#PreviewLayerTree::indicator:hover {{
+    border-color: {colors["primary"]};
+}}
+
+QTreeView#PreviewLayerTree::indicator:checked {{
+    background: {colors["primary"]};
+    border-color: {colors["primary"]};
+    image: url({check_icon});
+}}
+
+QTreeView#PreviewLayerTree::indicator:indeterminate {{
+    background: {colors["primary_soft"]};
+    border: 2px solid {colors["primary"]};
+}}
+
 QWidget#LayerActionCell {{
     background: transparent;
 }}
 
 QFrame#PreviewSidebar QComboBox QAbstractItemView,
 QFrame#PreviewSidebar QComboBox QAbstractItemView::item {{
-    background: {colors["surface"]};
+    background: {colors["field_bg"]};
     color: {colors["text"]};
 }}
 
@@ -1143,7 +1673,9 @@ QTabBar::tab:selected {{
 """
 
 
-def app_stylesheet(theme_mode: str = "system", app=None, ui_font: str | None = None, mono_font: str | None = None) -> str:
+def app_stylesheet(
+    theme_mode: str = "system", app=None, ui_font: str | None = None, mono_font: str | None = None
+) -> str:
     ensure_application_font(app=app)
     colors = palette_for_theme(theme_mode=theme_mode, app=app)
     set_active_palette(colors)

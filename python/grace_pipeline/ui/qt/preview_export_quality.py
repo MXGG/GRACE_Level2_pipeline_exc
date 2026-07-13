@@ -76,7 +76,12 @@ def _apply_export_layout(controller, *, show_colorbar: bool) -> None:
         if show_colorbar:
             cax.set_position([0.875, 0.18, 0.022, 0.60])
             with contextlib.suppress(Exception):
-                cax.set_ylabel(controller.window.page_preview.cmb_data_var.currentText().strip() or "value", fontsize=16, labelpad=10)
+                var_name = controller.window.page_preview.cmb_data_var.currentText().strip() or "value"
+                cax.set_ylabel(
+                    pe.value_label(var_name, pe._current_unit(controller)),
+                    fontsize=16,
+                    labelpad=10,
+                )
                 cax.tick_params(labelsize=13)
     with contextlib.suppress(Exception):
         ax.set_title("")

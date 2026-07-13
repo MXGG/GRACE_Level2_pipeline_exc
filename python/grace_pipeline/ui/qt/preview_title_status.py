@@ -27,7 +27,9 @@ def _projection_title(window) -> str:
         if projection_renderer(projection) == "matplotlib_3d":
             return "三维地球"
         return f"{projection} 投影"
-    return projection
+    if projection_renderer(projection) == "matplotlib_3d":
+        return "3D globe"
+    return f"{projection} projection"
 
 
 def _time_text(window) -> str:
@@ -55,7 +57,14 @@ def _variable_text(window) -> str:
 def _dataset_text(window) -> str:
     page = window.page_preview
     dataset = page.lbl_dataset.text().strip()
-    if dataset and dataset not in {"-", "—", "Dataset", "数据集"}:
+    if dataset and dataset not in {
+        "-",
+        "—",
+        "Dataset",
+        "数据集",
+        "No dataset loaded",
+        "未读取数据集",
+    }:
         return dataset
     path = page.edit_dataset_source.text().strip()
     if path:
@@ -68,6 +77,13 @@ def restore_preview_header(window) -> None:
     if not qt_object_is_alive(getattr(page, "canvas_preview_title", None)):
         return
     parts = [_projection_title(window)]
+    if not page.edit_dataset_source.text().strip():
+        parts.append(window.translate_text("No dataset loaded"))
+        text = " | ".join(parts)
+        page.canvas_preview_title.setText(text)
+        page.canvas_preview_title.setVisible(True)
+        page.canvas_preview_title.setToolTip(text)
+        return
     time_label = _time_text(window)
     variable = _variable_text(window)
     if time_label:

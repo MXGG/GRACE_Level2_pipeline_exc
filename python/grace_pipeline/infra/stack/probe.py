@@ -3,7 +3,13 @@ from typing import Callable, Optional, Tuple, Any
 
 import numpy as np
 
-from grace_pipeline.infra.io.nc_utils import var_attr_lower
+from grace_pipeline.infra.stack.loader import (
+    _attribute_case_insensitive,
+    _attribute_text_lower,
+    _decode_matlab_h5_cellstr,
+    _decode_text,
+    _json_metadata,
+)
 
 
 def _time_length(values):
@@ -87,7 +93,11 @@ def probe_stack_any(
             ewh_key = _pick_key(names, ["ewh", "tws", "grid", "data"])
             lon_key = _pick_key(names, ["lon", "long"])
             lat_key = _pick_key(names, ["lat"])
-            load_keys = [key for key in [lon_key, lat_key, "t", "tag", "ym"] if key]
+            load_keys = [
+                key
+                for key in [lon_key, lat_key, "t", "tag", "ym", "meta_json"]
+                if key
+            ]
             mat = sio.loadmat(path, squeeze_me=True, struct_as_record=False, variable_names=load_keys or ["t"])
             if not ewh_key or ewh_key not in shape_map:
                 raise ValueError("Unable to locate primary data variable in MAT file.")
@@ -104,7 +114,9 @@ def probe_stack_any(
                     dlat = 180.0 / nlat
                     lon = np.linspace(-180 + 0.5 * dlon, 180 - 0.5 * dlon, nlon)
                     lat = np.linspace(-90 + 0.5 * dlat, 90 - 0.5 * dlat, nlat)
-            meta = {"active_var": ewh_key, "data_var_names": [ewh_key]}
+            meta = _json_metadata(mat.get("meta_json"))
+            meta.setdefault("active_var", ewh_key)
+            meta.setdefault("data_var_names", [ewh_key])
             return shape, lon, lat, t, meta
         except Exception:
             pass
@@ -127,9 +139,22 @@ def probe_stack_any(
                     shape = tuple(int(v) for v in ewh.shape)
                     lon_arr = lon[()].squeeze() if lon is not None else None
                     lat_arr = lat[()].squeeze() if lat is not None else None
-                    t_arr = t[()] if t is not None and not hasattr(t, "keys") else None
+                    t_arr = (
+                        _decode_matlab_h5_cellstr(f, t[()])
+                        if t is not None and not hasattr(t, "keys")
+                        else None
+                    )
                     shape = _normalize_shape_lon_lat_time(shape, lon=lon_arr, lat=lat_arr, t=t_arr)
-                    meta = {"active_var": "ewh", "data_var_names": ["ewh"]}
+                    meta = _json_metadata(
+                        _attribute_case_insensitive(f, "meta_json", "")
+                    )
+                    data_units = _attribute_case_insensitive(ewh, "units", None)
+                    if data_units is None:
+                        data_units = _attribute_case_insensitive(ewh, "unit", None)
+                    if data_units is not None and str(data_units).strip():
+                        meta.setdefault("units", _decode_text(data_units).strip())
+                    meta.setdefault("active_var", "ewh")
+                    meta.setdefault("data_var_names", ["ewh"])
                     return shape, lon_arr, lat_arr, t_arr, meta
         except Exception:
             pass
@@ -140,14 +165,18 @@ def probe_stack_any(
 
             ds = nc.Dataset(path)
             try:
+                try:
+                    ds.set_auto_maskandscale(False)
+                except Exception:
+                    pass
                 var_names = list(ds.variables.keys())
 
                 def _score_coord(v, kind):
                     name = v.name.lower()
-                    std = var_attr_lower(v, "standard_name")
-                    long = var_attr_lower(v, "long_name")
-                    units = var_attr_lower(v, "units")
-                    axis = var_attr_lower(v, "axis")
+                    std = _attribute_text_lower(v, "standard_name")
+                    long = _attribute_text_lower(v, "long_name")
+                    units = _attribute_text_lower(v, "units")
+                    axis = _attribute_text_lower(v, "axis")
                     score = 0
                     if kind == "lon":
                         if name in ("lon", "longitude", "x") or name.endswith(("_lon", "_longitude")):
@@ -190,8 +219,8 @@ def probe_stack_any(
 
                 def _data_priority(name, var):
                     low = str(name).lower()
-                    long = var_attr_lower(var, "long_name")
-                    units = var_attr_lower(var, "units")
+                    long = _attribute_text_lower(var, "long_name")
+                    units = _attribute_text_lower(var, "units")
                     score = 0
                     preferred = (
                         "tws", "ewh", "water", "precip", "rain", "snow",
@@ -216,9 +245,9 @@ def probe_stack_any(
 
                 def _is_data_candidate(name, var):
                     low = str(name).lower()
-                    std = var_attr_lower(var, "standard_name")
-                    long = var_attr_lower(var, "long_name")
-                    units = var_attr_lower(var, "units")
+                    std = _attribute_text_lower(var, "standard_name")
+                    long = _attribute_text_lower(var, "long_name")
+                    units = _attribute_text_lower(var, "units")
                     dims = tuple(getattr(var, "dimensions", ()))
                     if var.ndim < 2:
                         return False
@@ -288,9 +317,9 @@ def probe_stack_any(
                 if time_key and time_key in ds.variables:
                     try:
                         t_var = ds.variables[time_key]
-                        time_units = getattr(t_var, "units", None)
-                        time_calendar = getattr(t_var, "calendar", None)
-                        bounds_name = getattr(t_var, "bounds", None)
+                        time_units = _attribute_case_insensitive(t_var, "units", None)
+                        time_calendar = _attribute_case_insensitive(t_var, "calendar", None)
+                        bounds_name = _attribute_case_insensitive(t_var, "bounds", None)
                         if bounds_name and bounds_name in ds.variables:
                             tb = np.asarray(ds.variables[bounds_name][:], dtype=float)
                             if tb.ndim == 2:
@@ -315,6 +344,9 @@ def probe_stack_any(
                     "time_units": time_units,
                     "time_calendar": time_calendar,
                 }
+                data_units = _attribute_case_insensitive(data_var, "units", None)
+                if data_units is not None and str(data_units).strip():
+                    meta["units"] = _decode_text(data_units).strip()
                 return (nlon, nlat, nt), lon, lat, t, meta
             finally:
                 ds.close()

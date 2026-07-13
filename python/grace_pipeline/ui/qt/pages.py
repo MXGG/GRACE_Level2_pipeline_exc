@@ -28,6 +28,7 @@ from PySide6.QtWidgets import (
 
 from grace_pipeline.ui.qt.mock_data import BASIN_ROWS, PAGE_SUBTITLES
 from grace_pipeline.ui.qt.path_defaults import DEFAULT_DATA_PATHS
+from grace_pipeline.ui.qt.preview_layer_tree import PreviewLayerTreeView
 from grace_pipeline.ui.qt.projection_registry import PROJECTION_DISPLAY_NAMES
 from grace_pipeline.ui.qt.widgets import CardFrame, CollapsibleSection, PlaceholderCanvas, YearMonthEdit, build_badge, build_page_header, populate_table
 
@@ -41,6 +42,26 @@ def _make_row_label(text: str, width: int | None = None) -> QLabel:
     if width is not None:
         label.setFixedWidth(width)
     return label
+
+
+def _bind_field_label(label: QLabel, widget: QWidget, accessible_name: str) -> None:
+    """Bind a visible field label to the first focusable control it describes.
+
+    Several page helpers wrap the real editor in a QWidget.  Qt does not infer
+    that relationship, which previously left UI Automation with dozens of
+    anonymous ``Edit`` and ``ComboBox`` nodes.  Keep the visual layout helpers,
+    but make their semantic relationship explicit in one place.
+    """
+
+    target = widget
+    if target.focusPolicy() == Qt.NoFocus:
+        for child in widget.findChildren(QWidget):
+            if child.focusPolicy() != Qt.NoFocus:
+                target = child
+                break
+    if not target.accessibleName().strip():
+        target.setAccessibleName(accessible_name)
+    label.setBuddy(target)
 
 
 def _make_line_edit(value: str = "", placeholder: str = "") -> QLineEdit:
@@ -89,6 +110,7 @@ def _make_field_row(label: str, widget: QWidget, status: QLabel | None = None, l
     label_widget = _make_row_label(label, label_width)
     if label_width is not None:
         label_widget.setFixedWidth(label_width)
+    _bind_field_label(label_widget, widget, label)
     layout.addWidget(label_widget)
     layout.addWidget(widget, 1)
     if status is not None:
@@ -107,7 +129,9 @@ def _make_stacked_field(label: str, widget: QWidget, status: QLabel | None = Non
     top = QHBoxLayout()
     top.setContentsMargins(0, 0, 0, 0)
     top.setSpacing(8)
-    top.addWidget(_make_row_label(label))
+    label_widget = _make_row_label(label)
+    _bind_field_label(label_widget, widget, label)
+    top.addWidget(label_widget)
     top.addStretch(1)
     if status is not None:
         top.addWidget(status)
@@ -325,7 +349,7 @@ class DashboardPage(ScrollPage):
         action_layout.setSpacing(8)
         self.btn_run_full = QPushButton("Start Pipeline")
         self.btn_run_full.setObjectName("PrimaryButton")
-        self.btn_validate_paths = QPushButton("Check Config")
+        self.btn_validate_paths = QPushButton("Validate Paths")
         self.btn_validate_paths.setObjectName("GhostButton")
         self.btn_console_run = QPushButton("Open Log")
         self.btn_console_run.setObjectName("GhostButton")
@@ -524,7 +548,7 @@ class DataPathsPage(ScrollPage):
         self.btn_save_config = QPushButton("Save Config")
         self.btn_save_config.setObjectName("GhostButton")
         self.btn_validate_paths = QPushButton("Validate All Paths")
-        self.btn_validate_paths.setObjectName("PrimaryButton")
+        self.btn_validate_paths.setObjectName("SoftButton")
 
         self.card_input_dirs = CardFrame("Filter Path Configuration")
         self.card_output_dirs = CardFrame("Output Directories")
@@ -542,9 +566,13 @@ class DataPathsPage(ScrollPage):
         self.btn_download_gfc_range = QPushButton("Download")
         self.btn_download_gfc_range.setObjectName("PrimaryButton")
         self.btn_download_gfc_range.setMinimumWidth(110)
-        self.btn_open_download_site = QPushButton("Web")
+        self.btn_open_download_site = QPushButton("Official Sources")
         self.btn_open_download_site.setObjectName("GhostButton")
-        self.btn_open_download_site.setToolTip("Visit Data Page")
+        self.btn_open_download_site.setToolTip("Open an official provider page")
+        self.btn_open_download_site.setAccessibleName("Official Data Sources")
+        self.btn_open_download_site.setAccessibleDescription(
+            "Browse supported GRACE and GRACE-FO provider pages"
+        )
         gfc_action_row = QWidget()
         gfc_action_row.setMinimumWidth(0)
         gfc_action_row.setObjectName("DownloadControlStrip")
@@ -567,9 +595,8 @@ class DataPathsPage(ScrollPage):
         self.btn_download_dir_browse.setMaximumWidth(132)
         self.btn_download_gfc_range.setMinimumWidth(96)
         self.btn_download_gfc_range.setMaximumWidth(112)
-        self.btn_open_download_site.setMinimumWidth(56)
-        self.btn_open_download_site.setMaximumWidth(68)
-        self.btn_open_download_site.setVisible(False)
+        self.btn_open_download_site.setMinimumWidth(116)
+        self.btn_open_download_site.setMaximumWidth(144)
         gfc_action_layout.addWidget(self.cmb_download_product, 0, 0)
         gfc_action_layout.addWidget(self.cmb_gfc_center, 0, 1)
         gfc_action_layout.addWidget(self.cmb_mascon_resolution, 0, 2)
@@ -578,6 +605,7 @@ class DataPathsPage(ScrollPage):
         gfc_action_layout.addWidget(self.edit_download_dir, 0, 5)
         gfc_action_layout.addWidget(self.btn_download_dir_browse, 0, 6)
         gfc_action_layout.addWidget(self.btn_download_gfc_range, 0, 7)
+        gfc_action_layout.addWidget(self.btn_open_download_site, 0, 8)
         gfc_action_layout.setColumnStretch(5, 1)
         self.lbl_gfc_download_status = QLabel("GFC download: idle.")
         self.lbl_gfc_download_status.setWordWrap(True)
@@ -1700,6 +1728,7 @@ class BasinPage(ScrollPage):
 class PreviewPage(QWidget):
     def __init__(self):
         super().__init__()
+        self.setObjectName("PreviewPage")
         root = QHBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
@@ -1730,14 +1759,17 @@ class PreviewPage(QWidget):
         controls_title.setObjectName("SidebarTitle")
         side_layout.addWidget(controls_title)
 
-        self.edit_dataset_source = _make_line_edit("stack_v2_grace_jpl.nc")
+        self.card_data_time = CardFrame("Data & Time")
+        self.edit_dataset_source = _make_line_edit(
+            "", "Select a gridded MAT, NetCDF, or HDF5 dataset"
+        )
         self.edit_dataset_source.setMinimumWidth(0)
         self.edit_dataset_source.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.btn_dataset_browse = QPushButton("Browse")
         self.btn_dataset_browse.setObjectName("GhostButton")
-        self.btn_load_stack = QPushButton("Load Stack Info")
+        self.btn_load_stack = QPushButton("Read Dataset Metadata")
         self.btn_load_stack.setObjectName("GhostButton")
-        self.lbl_stack_info = QLabel("Stack not loaded.")
+        self.lbl_stack_info = QLabel("Dataset not loaded.")
         self.lbl_stack_info.setWordWrap(True)
         self.lbl_stack_info.setMinimumWidth(0)
         self.lbl_stack_info.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Maximum)
@@ -1752,17 +1784,19 @@ class PreviewPage(QWidget):
         self.btn_load_stack.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         dataset_actions_layout.addWidget(self.btn_dataset_browse, 1)
         dataset_actions_layout.addWidget(self.btn_load_stack, 1)
-        side_layout.addWidget(self.dataset_source_block)
-        side_layout.addWidget(dataset_actions)
-        side_layout.addWidget(_make_inline_status_field("Data Status", self.lbl_stack_info))
+        self.card_data_time.body.addWidget(self.dataset_source_block)
+        self.card_data_time.body.addWidget(dataset_actions)
+        self.card_data_time.body.addWidget(_make_inline_status_field("Data Status", self.lbl_stack_info))
 
         self.cmb_data_var = _make_combo(["ewh"], "ewh")
-        side_layout.addWidget(_make_stacked_field("Plot Variable", self.cmb_data_var))
+        self.card_data_time.body.addWidget(
+            _make_stacked_field("Data Variable", self.cmb_data_var)
+        )
 
         self.slider_time_index = QSlider(Qt.Horizontal)
         self.slider_time_index.setRange(0, 100)
         self.slider_time_index.setValue(75)
-        self.lbl_time_index = QLabel("Index: 2018-06-15")
+        self.lbl_time_index = QLabel("1 / 1 | Month unavailable")
         self.lbl_time_index.setWordWrap(False)
         self.lbl_time_index.setMinimumWidth(0)
         self.lbl_time_index.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
@@ -1774,12 +1808,18 @@ class PreviewPage(QWidget):
         time_index_layout.setSpacing(4)
         time_index_layout.addWidget(self.lbl_time_index)
         time_index_layout.addWidget(self.slider_time_index)
-        side_layout.addWidget(_make_stacked_field("Time Slice", time_index_widget))
+        self.card_data_time.body.addWidget(_make_stacked_field("Time Slice", time_index_widget))
+        side_layout.addWidget(self.card_data_time)
 
-        self.card_projection_settings = CardFrame("Projection Settings")
+        self.card_projection_settings = CardFrame("Map Projection Settings")
         self.cmb_projection = _make_combo(PROJECTION_DISPLAY_NAMES, "Robinson")
-        self.card_projection_settings.body.addWidget(_make_stacked_field("Projection", self.cmb_projection))
+        self.card_projection_settings.body.addWidget(
+            _make_stacked_field("Map Projection", self.cmb_projection)
+        )
         self.projection_params_panel = CollapsibleSection("Projection Parameters", expanded=True)
+        self.projection_params_panel.setObjectName("EmbeddedSection")
+        self.projection_params_panel.header.setObjectName("EmbeddedSectionHeader")
+        self.projection_params_panel.content.setObjectName("EmbeddedSectionContent")
         self.projection_param_widgets: dict[str, dict[str, object]] = {}
 
         def _add_scalar_projection_param(param_key: str, label: str, value: str) -> None:
@@ -1847,7 +1887,9 @@ class PreviewPage(QWidget):
         self.chk_show_colorbar.toggled.connect(self.colorbar_options_panel.setVisible)
         side_layout.addWidget(self.card_color_scale)
 
-        self.chk_enable_spatial_grid = _mark_switch(QCheckBox("Enable Spatial Grid"))
+        self.chk_enable_spatial_grid = _mark_switch(
+            QCheckBox("Enable Spatial Extent & Graticule")
+        )
         self.chk_enable_spatial_grid.setChecked(True)
         self.chk_auto_region = QCheckBox("Use Data Extent")
         self.chk_auto_region.setChecked(True)
@@ -1855,7 +1897,7 @@ class PreviewPage(QWidget):
         self.edit_region_lon_max = _make_line_edit("180")
         self.edit_region_lat_min = _make_line_edit("-90")
         self.edit_region_lat_max = _make_line_edit("90")
-        self.card_spatial_extent = CardFrame("Spatial Grid Configuration")
+        self.card_spatial_extent = CardFrame("Spatial Extent & Graticule")
         self.card_spatial_extent.body.addWidget(self.chk_enable_spatial_grid)
         self.spatial_grid_options_panel = QWidget()
         spatial_grid_options_layout = QVBoxLayout(self.spatial_grid_options_panel)
@@ -1907,55 +1949,58 @@ class PreviewPage(QWidget):
         self.chk_enable_spatial_grid.toggled.connect(self.spatial_grid_options_panel.setVisible)
         side_layout.addWidget(self.card_spatial_extent)
 
-        self.card_layers = CardFrame("Layers")
-        self.chk_layer_data = QCheckBox("Data: Mass Anomaly")
+        self.card_layers = CardFrame("Layer Management")
+        self.lbl_layer_hint = QLabel(
+            "Layers higher in the list are rendered above lower layers. "
+            "Right-click a layer to manage it or edit its properties."
+        )
+        self.lbl_layer_hint.setObjectName("MutedText")
+        self.lbl_layer_hint.setWordWrap(True)
+        self.chk_layer_data = QCheckBox("Data: Mass Anomaly", self)
         self.chk_layer_data.setChecked(True)
         self.chk_layer_data.hide()
-        self.chk_layer_coastlines = QCheckBox("Coastlines")
+        self.chk_layer_coastlines = QCheckBox("Coastlines", self)
         self.chk_layer_coastlines.setChecked(True)
         self.chk_layer_coastlines.hide()
-        self.chk_layer_boundaries = QCheckBox("Boundary / Grid Files")
+        self.chk_layer_boundaries = QCheckBox("Boundary Overlays", self)
         self.chk_layer_boundaries.setChecked(True)
         self.chk_layer_boundaries.hide()
-        self.chk_layer_grid = QCheckBox("Grid Lines")
+        self.chk_layer_grid = QCheckBox("Grid Lines", self)
         self.chk_layer_grid.setChecked(True)
         self.chk_layer_grid.hide()
-        self.chk_layer_rivers = QCheckBox("Additional Custom SHP")
+        self.chk_layer_rivers = QCheckBox("Additional Custom SHP", self)
         self.chk_layer_rivers.setChecked(False)
         self.chk_layer_rivers.hide()
         self.edit_boundary_overlay = _make_line_edit("", "Optional boundary/grid file")
+        self.edit_boundary_overlay.setParent(self)
         self.edit_boundary_overlay.hide()
         self.btn_boundary_overlay_browse = QPushButton("Add")
+        self.btn_boundary_overlay_browse.setParent(self)
         self.btn_boundary_overlay_browse.setObjectName("GhostButton")
         self.edit_custom_overlay = _make_line_edit("", "Optional extra overlay")
+        self.edit_custom_overlay.setParent(self)
         self.edit_custom_overlay.hide()
         self.btn_custom_overlay_browse = QPushButton("Browse")
+        self.btn_custom_overlay_browse.setParent(self)
         self.btn_custom_overlay_browse.setObjectName("GhostButton")
         self.btn_custom_overlay_browse.hide()
-        self.table_overlay_layers = QTableWidget(0, 5)
-        self.table_overlay_layers.setObjectName("OverlayLayerTable")
-        self.table_overlay_layers.setHorizontalHeaderLabels(["", "Layer", "Type", "Config", "Actions"])
-        self.table_overlay_layers.verticalHeader().setVisible(False)
-        self.table_overlay_layers.setSelectionBehavior(QAbstractItemView.SelectRows)
-        self.table_overlay_layers.setSelectionMode(QAbstractItemView.SingleSelection)
-        self.table_overlay_layers.setMinimumHeight(190)
-        self.table_overlay_layers.setMaximumHeight(280)
-        self.table_overlay_layers.setColumnWidth(0, 34)
-        self.table_overlay_layers.setColumnWidth(1, 116)
-        self.table_overlay_layers.setColumnWidth(2, 58)
-        self.table_overlay_layers.setColumnWidth(3, 86)
-        self.table_overlay_layers.setColumnWidth(4, 116)
-        self.table_overlay_layers.horizontalHeader().setStretchLastSection(False)
+        self.layer_tree_view = PreviewLayerTreeView()
+        self.layer_tree_view.setMinimumHeight(230)
+        self.layer_tree_view.setMaximumHeight(420)
+        # Compatibility alias while the controller facade is migrated from
+        # the former five-column QTableWidget.
+        self.table_overlay_layers = self.layer_tree_view
         layer_actions = QWidget()
         layer_actions.setObjectName("InlineField")
         layer_actions_layout = QHBoxLayout(layer_actions)
         layer_actions_layout.setContentsMargins(0, 0, 0, 0)
         layer_actions_layout.setSpacing(6)
-        self.btn_overlay_add = QPushButton("Import Layer")
+        self.btn_overlay_add = QPushButton("Import Raster / Vector Layer")
         self.btn_overlay_add.setObjectName("GhostButton")
-        self.btn_overlay_add.setMinimumWidth(96)
+        self.btn_overlay_add.setMinimumWidth(132)
         layer_actions_layout.addWidget(self.btn_overlay_add)
         layer_actions_layout.addStretch(1)
+        self.card_layers.body.addWidget(self.lbl_layer_hint)
         self.card_layers.body.addWidget(self.table_overlay_layers)
         self.card_layers.body.addWidget(layer_actions)
         side_layout.addWidget(self.card_layers)
@@ -1970,10 +2015,12 @@ class PreviewPage(QWidget):
         footer_layout.setSpacing(10)
         self.btn_plot = QPushButton("Render Preview")
         self.btn_plot._tr_base_text = "Render Preview"
-        self.btn_plot.setObjectName("GhostButton")
+        self.btn_plot.setObjectName("PrimaryButton")
         self.btn_export_figure = QPushButton("Export Figure")
         self.btn_export_figure._tr_base_text = "Export Figure"
-        self.btn_export_figure.setObjectName("PrimaryButton")
+        self.btn_export_figure.setObjectName("SoftButton")
+        self.btn_plot.setAccessibleDescription("Render the selected month and visible layers on the map canvas.")
+        self.btn_export_figure.setAccessibleDescription("Export the current map using publication-quality settings.")
         self.btn_plot.setMinimumHeight(38)
         self.btn_export_figure.setMinimumHeight(38)
         footer_layout.addWidget(self.btn_plot)
@@ -1981,7 +2028,7 @@ class PreviewPage(QWidget):
         sidebar_panel_layout.addWidget(self.sidebar_footer, 0)
 
         self.main = QFrame()
-        self.main.setObjectName("PageRoot")
+        self.main.setObjectName("PreviewContent")
         main_layout = QVBoxLayout(self.main)
         main_layout.setContentsMargins(16, 10, 16, 10)
         main_layout.setSpacing(8)
@@ -2011,7 +2058,7 @@ class PreviewPage(QWidget):
         main_layout.addWidget(header)
 
         self.plot_card = QFrame()
-        self.plot_card.setObjectName("PageCard")
+        self.plot_card.setObjectName("PreviewMapCard")
         plot_layout = QVBoxLayout(self.plot_card)
         plot_layout.setContentsMargins(12, 10, 12, 10)
         plot_layout.setSpacing(6)
@@ -2019,7 +2066,7 @@ class PreviewPage(QWidget):
         plot_header_layout = QHBoxLayout(plot_header)
         plot_header_layout.setContentsMargins(0, 0, 0, 0)
         plot_header_layout.setSpacing(8)
-        self.canvas_preview_title = QLabel("Robinson Projection: June 2018")
+        self.canvas_preview_title = QLabel("Robinson projection | no dataset")
         self.canvas_preview_title.setObjectName("PageTitle")
         self.canvas_preview_title.setStyleSheet("font-size: 16px; font-weight: 700;")
         plot_header_layout.addWidget(self.canvas_preview_title, 1)
@@ -2033,17 +2080,25 @@ class PreviewPage(QWidget):
         plot_header_layout.addWidget(self.plot_toolbar_host, 0, alignment=Qt.AlignRight | Qt.AlignVCenter)
         plot_header_layout.addWidget(self.btn_toggle_tools, 0, alignment=Qt.AlignRight | Qt.AlignVCenter)
         self.plot_container = QFrame()
-        self.plot_container.setObjectName("PageRoot")
+        self.plot_container.setObjectName("PreviewCanvasHost")
         self.plot_container.setMinimumHeight(520)
         plot_layout.addWidget(plot_header)
         plot_layout.addWidget(self.plot_container, 1)
 
         self.card_status = CardFrame("Map Status")
-        self.lbl_dataset = QLabel("GRACE Level-2 (JPL Release)")
+        self.card_status.setObjectName("PreviewStatusBar")
+        if self.card_status.header is not None:
+            self.card_status.header.setObjectName("StatusBarHeader")
+            self.card_status.header.setFixedHeight(26)
+        if self.card_status.title_label is not None:
+            self.card_status.title_label.setObjectName("StatusBarTitle")
+        if self.card_status.body_widget is not None:
+            self.card_status.body_widget.setObjectName("StatusBarBody")
+        self.lbl_dataset = QLabel("No dataset loaded")
         self.lbl_dataset.setWordWrap(True)
-        self.lbl_cursor_position = QLabel("78.22 N, 15.65 E")
-        self.lbl_grid_value = QLabel("-12.44 cm")
-        self.lbl_engine_latency = QLabel("42 ms")
+        self.lbl_cursor_position = QLabel("—")
+        self.lbl_grid_value = QLabel("—")
+        self.lbl_engine_latency = QLabel("—")
         status_grid_wrap = QWidget()
         status_grid = QGridLayout(status_grid_wrap)
         status_grid.setContentsMargins(0, 0, 0, 0)
@@ -2053,11 +2108,11 @@ class PreviewPage(QWidget):
             value_label.setObjectName("PreviewStatusValue")
         status_grid.addWidget(_make_row_label("Dataset"), 0, 0)
         status_grid.addWidget(self.lbl_dataset, 0, 1)
-        status_grid.addWidget(_make_row_label("Cursor"), 0, 2)
+        status_grid.addWidget(_make_row_label("Cursor Position"), 0, 2)
         status_grid.addWidget(self.lbl_cursor_position, 0, 3)
-        status_grid.addWidget(_make_row_label("Value"), 0, 4)
+        status_grid.addWidget(_make_row_label("Grid Value"), 0, 4)
         status_grid.addWidget(self.lbl_grid_value, 0, 5)
-        status_grid.addWidget(_make_row_label("Latency"), 0, 6)
+        status_grid.addWidget(_make_row_label("Render Time"), 0, 6)
         status_grid.addWidget(self.lbl_engine_latency, 0, 7)
         status_grid.setColumnStretch(1, 3)
         status_grid.setColumnStretch(3, 2)

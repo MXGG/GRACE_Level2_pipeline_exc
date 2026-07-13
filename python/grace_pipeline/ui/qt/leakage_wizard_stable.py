@@ -54,10 +54,14 @@ _TEXT_REPLACEMENTS_EN = {
     "1. Input grid stack": "1. Correction dataset",
     "Input Stack": "Correction Dataset",
     "Read the input stack first. This step only reports data structure and does not guess product type or filter chain.": "Read the correction dataset first. This step reports dimensions, variable name, time coverage, and grid extent.",
+    "Apply an official gain grid directly to the input stack.": "Apply an official scale/gain factor grid by location to the correction dataset.",
+    "Boundary + reference/synthetic field for basin-scale correction.": "Estimate a regional scale factor from a boundary and a reference model or synthetic field.",
+    "Advanced correction using boundary, operator, Lmax, and reference/trend field.": "Simulate leakage response from a boundary, filter method, Lmax, and reference field.",
     "Forward modeling": "Forward modelling",
     "Filter operator": "Filter method",
     "Forward-modeling iteration settings": "Forward-modelling iteration settings",
     "Recommended outputs: corrected_stack, difference_stack, summary.json, diagnostics, and preview_manifest.json.": "Output files: corrected_stack, difference_stack, summary.json, diagnostics, and preview_manifest.json.",
+    "After the run finishes, open the corrected stack in Preview to inspect maps and series.": "After the run finishes, inspect the corrected result's spatial distribution and time series in Preview.",
 }
 
 
@@ -203,6 +207,7 @@ def install_leakage_wizard(window) -> None:
     with contextlib.suppress(Exception):
         page.lbl_lrc_filter_hint = QLabel(page)
         page.lbl_lrc_filter_hint.setObjectName("PageSubtitle")
+        page.lbl_lrc_filter_hint.setProperty("keepCompact", True)
         page.lbl_lrc_filter_hint.setWordWrap(True)
         page.panel_forward_modeling_options.layout().insertWidget(1, page.lbl_lrc_filter_hint)
 

@@ -92,7 +92,6 @@ from grace_pipeline.services.gfc_download import (
     save_earthdata_token,
     EARTHDATA_TOKEN_URL,
     EARTHDATA_TOKEN_STORE,
-    CMR_GRANULE_URL,
 )
 from grace_pipeline.ui.plotting.boundaries import (
     boundary_bbox,
@@ -127,8 +126,15 @@ from grace_pipeline.ui.plotting.projections import (
     split_plot_lon_segments,
     wrap_delta_lon,
 )
+from grace_pipeline.ui.qt.data_sources import (
+    OfficialDataPortal,
+    official_data_portal,
+    official_data_url,
+    portals_for_product,
+)
 from grace_pipeline.ui.qt.path_defaults import DEFAULT_DATA_PATHS
 from grace_pipeline.ui.qt.preferences import MONO_FONT_ITEMS, THEME_ITEMS, UI_FONT_ITEMS, UIPreferences
+from grace_pipeline.ui.qt.preview_layer_tree import PreviewLayerTreeModel
 from grace_pipeline.ui.qt.projection_registry import projection_defaults, projection_engine_name, projection_renderer
 from grace_pipeline.ui.qt.qt_safe import is_deleted_qt_object_error, qt_object_is_alive, safe_set_text
 from grace_pipeline.ui.qt.theme import COLOR
@@ -136,10 +142,24 @@ from grace_pipeline.ui.qt.widgets import populate_table
 
 
 ROOT_DIR = get_root_dir().resolve()
+_PREVIEW_PATH_UNSET = object()
 DEFAULT_CFG_PATH = find_default_config(ROOT_DIR) or (ROOT_DIR / "cfg" / "default.json")
 DEFAULT_CFG_DIR = get_config_dir(ROOT_DIR)
 DEFAULT_USER_CFG_PATH = DEFAULT_CFG_DIR / "user.json"
 DEFAULT_COASTLINE_PATH = DEFAULT_DATA_PATHS["COASTLINE_SHP"]
+
+
+def _set_button_visual_role(button, role: str) -> None:
+    """Apply a semantic button role even after Qt has already polished it."""
+
+    if not hasattr(button, "setObjectName"):
+        return
+    button.setObjectName(role)
+    with contextlib.suppress(Exception):
+        style = button.style()
+        style.unpolish(button)
+        style.polish(button)
+        button.update()
 
 
 @dataclass
@@ -155,6 +175,13 @@ class PreviewLayer:
     opacity: float = 1.0
     removable: bool = True
     metadata: dict = field(default_factory=dict)
+    instance_id: str = ""
+
+    def __post_init__(self) -> None:
+        if not self.instance_id:
+            self.instance_id = str(
+                self.metadata.get("_layer_tree_instance_id") or self.id
+            )
 
 
 class UiSettingsDialog(QDialog):
@@ -849,6 +876,8 @@ class MainWindowController:
         self._pending_terminal_status: tuple[str, str] | None = None
         self._pending_terminal_scope = ""
         self.preview_layers: list[PreviewLayer] = []
+        self.preview_layer_model: PreviewLayerTreeModel | None = None
+        self._selected_preview_layer_instance_id: str | None = None
 
         self._connect_signals()
         self._mount_plot_canvas()
@@ -906,6 +935,7 @@ class MainWindowController:
         w.page_data_paths.btn_open_download_site.clicked.connect(self.on_open_download_site)
         w.page_data_paths.cmb_gfc_center.currentTextChanged.connect(lambda *_args: self._sync_download_source_controls(update_options=False))
         w.page_data_paths.cmb_download_product.currentTextChanged.connect(lambda *_args: self._sync_download_source_controls(update_options=True))
+        self._configure_download_source_menu()
 
         w.page_processing.btn_load_preset.clicked.connect(self.on_load_config)
         w.page_processing.btn_save_config.clicked.connect(self.on_save_config)
@@ -1124,6 +1154,15 @@ class MainWindowController:
         self._canvas.setAttribute(Qt.WA_Hover, True)
         self._nav_toolbar = NavigationToolbar2QT(self._canvas, self.window)
         self._nav_toolbar.setMovable(False)
+        # Cursor coordinates are already surfaced in the persistent Map Status
+        # card.  Hiding Matplotlib's duplicate readout keeps the compact tool
+        # strip focused on actions instead of transient scientific notation.
+        location_label = getattr(self._nav_toolbar, "locLabel", None)
+        if location_label is not None:
+            location_label.setVisible(False)
+            location_label.setMinimumWidth(0)
+            location_label.setMaximumWidth(0)
+            location_label.setAccessibleName("")
         for action in list(self._nav_toolbar.actions()):
             text = (action.text() or "").strip()
             if text == "Home":
@@ -1282,7 +1321,9 @@ class MainWindowController:
 
         self._basin_preview_ax = self._basin_preview_figure.add_subplot(111)
         self._basin_preview_canvas.mpl_connect("motion_notify_event", self.on_basin_preview_canvas_event)
-        self._basin_preview_ax.set_facecolor("#eef4f8")
+        self._basin_preview_ax.set_facecolor(
+            COLOR.get("content_bg", COLOR["surface_low"])
+        )
         self._basin_preview_ax.text(
             0.5,
             0.5,
@@ -1800,6 +1841,59 @@ class MainWindowController:
             self._set_edit_text(page.edit_end_date, detected_end, block_signals=True)
         self.refresh_dashboard()
 
+    def _configure_download_source_menu(self) -> None:
+        """Expose every supported provider through one localized menu."""
+
+        button = getattr(self.window.page_data_paths, "btn_open_download_site", None)
+        if button is None:
+            return
+        menu = QMenu(button)
+        menu.setObjectName("OfficialDataSourcesMenu")
+        menu.aboutToShow.connect(self._populate_download_source_menu)
+        button.setMenu(menu)
+        self._download_sources_menu = menu
+        self._populate_download_source_menu()
+
+    def _populate_download_source_menu(self) -> None:
+        menu = getattr(self, "_download_sources_menu", None)
+        if menu is None:
+            return
+        menu.clear()
+        language = str(getattr(self.window.ui_preferences, "language", "en") or "en").lower()
+        current_product = self._download_product_type()
+        current_center = self._configured_gfc_center()
+        section_labels = {
+            "GSM": self.window.translate_text("Level-2 Spherical Harmonics"),
+            "MASCON_NC": self.window.translate_text("Mascon NetCDF"),
+        }
+        for product_type in ("GSM", "MASCON_NC"):
+            menu.addSection(section_labels[product_type])
+            for portal in portals_for_product(product_type):
+                action = menu.addAction(portal.label(language))
+                action.setToolTip(portal.url)
+                action.setCheckable(True)
+                action.setChecked(portal.product_type == current_product and portal.center == current_center)
+                action.triggered.connect(
+                    lambda _checked=False, selected_portal=portal: self._open_official_data_portal(selected_portal)
+                )
+        menu.addSeparator()
+        token_action = menu.addAction(self.window.translate_text("Manage Earthdata Authorization"))
+        token_action.triggered.connect(lambda _checked=False: self.on_earthdata_auth(require_credentials=False))
+        account_action = menu.addAction(self.window.translate_text("Create an Earthdata Account"))
+        account_action.setToolTip("https://urs.earthdata.nasa.gov/users/new")
+        account_action.triggered.connect(
+            lambda _checked=False: webbrowser.open("https://urs.earthdata.nasa.gov/users/new")
+        )
+
+    def _open_official_data_portal(self, portal: OfficialDataPortal) -> None:
+        webbrowser.open(portal.url)
+        language = str(getattr(self.window.ui_preferences, "language", "en") or "en").lower()
+        label = portal.label(language)
+        self.on_log(f"[GFC] Opened official data source: {portal.center} {portal.product_type} {portal.url}", "stdout")
+        self.window.page_data_paths.lbl_gfc_download_status.setText(
+            self.window.translate_text("Opened official data page: {source}.").format(source=label)
+        )
+
     def _sync_download_source_controls(self, update_options: bool = True) -> None:
         page = self.window.page_data_paths
         product_type = self._download_product_type()
@@ -1816,6 +1910,7 @@ class MainWindowController:
             page.cmb_mascon_resolution.setVisible(product_type == "MASCON_NC")
         page.btn_download_dir_browse.setText(self.window.translate_text("Choose Folder"))
         page.btn_download_gfc_range.setText(self.window.translate_text("Download"))
+        page.btn_open_download_site.setText(self.window.translate_text("Official Sources"))
         page.btn_download_gfc_range.setToolTip(
             self.window.translate_text("Download Mascon" if product_type == "MASCON_NC" else "Download GFC")
         )
@@ -1838,7 +1933,13 @@ class MainWindowController:
             page.lbl_gfc_download_status.setText(
                 self.window.translate_text("Mascon NC downloads support CSR, JPL, and GSFC; resolution must match the published product.")
             )
-        page.btn_open_download_site.setToolTip(self._download_source_url(product_type, center))
+        portal = official_data_portal(product_type, center)
+        page.btn_open_download_site.setToolTip(
+            self.window.translate_text("Current provider: {provider}").format(
+                provider=portal.label(getattr(self.window.ui_preferences, "language", "en"))
+            )
+            + f"\n{portal.url}"
+        )
         page.btn_download_gfc_range.setToolTip(page.lbl_gfc_download_status.text())
 
     def _configured_gfc_center(self) -> str:
@@ -1869,26 +1970,11 @@ class MainWindowController:
     def _download_source_url(self, product_type: str | None = None, center: str | None = None) -> str:
         product_type = product_type or self._download_product_type()
         center = normalize_center(center or self._configured_gfc_center())
-        if product_type == "MASCON_NC":
-            if center == "CSR":
-                return "https://www2.csr.utexas.edu/grace/RL06_mascons.html"
-            if center == "GSFC":
-                return "https://earth.gsfc.nasa.gov/geo/data/grace-mascons"
-            return "https://podaac.jpl.nasa.gov/dataset/TELLUS_GRAC-GRFO_MASCON_GRID_RL06.3_V4"
-        if center == "HUST":
-            return "https://icgem.gfz-potsdam.de/sp/03_other/HUST/HUST-Grace2016/unfiltered"
-        if center == "ITSG":
-            return "https://icgem.gfz-potsdam.de/sp/03_other/ITSG/ITSG-Grace2018/monthly"
-        return CMR_GRANULE_URL
+        return official_data_url(product_type, center)
 
     def on_open_download_site(self) -> None:
-        url = self._download_source_url()
-        webbrowser.open(url)
-        self.on_log(f"[GFC] Opened data source page: {url}", "stdout")
-        self.window.page_data_paths.lbl_gfc_download_status.setText(
-            f"Opened data source page for {self._configured_gfc_center()} {self._download_product_type()}. "
-            "If the browser reports 404 or no permission, use the download confirmation dialog and re-authorize Earthdata."
-        )
+        portal = official_data_portal(self._download_product_type(), self._configured_gfc_center())
+        self._open_official_data_portal(portal)
 
     def _ensure_earthdata_auth_for_download(self, product_type: str, center: str) -> bool:
         if not self._download_needs_earthdata(product_type, center):
@@ -1907,26 +1993,40 @@ class MainWindowController:
         download_dir: str,
         needs_auth: bool,
     ) -> str:
+        tr = self.window.translate_text
+        portal = official_data_portal(product_type, center)
+        product_label = tr("Mascon NetCDF" if product_type == "MASCON_NC" else "Level-2 Spherical Harmonics")
         box = QMessageBox(self.window)
         box.setIcon(QMessageBox.Icon.Question)
-        box.setWindowTitle(self.window.translate_text("Download Confirmation"))
-        box.setText(self.window.translate_text("Confirm the dataset before downloading."))
-        earthdata_state = current_earthdata_login() if needs_auth else self.window.translate_text("not required")
+        box.setObjectName("DownloadConfirmationDialog")
+        box.setWindowTitle(tr("Download Confirmation"))
+        box.setText(tr("Confirm the dataset before downloading."))
+        earthdata_state = current_earthdata_login() if needs_auth else tr("Not required")
+        if needs_auth and not earthdata_state:
+            earthdata_state = tr("Not configured")
         info = (
-            f"Dataset: {center} {product_type}\n"
-            f"Range: {start_ym} -> {end_ym}\n"
-            f"Output: {download_dir}\n"
-            f"Earthdata: {earthdata_state or 'missing'}\n"
-            f"Source: {self._download_source_url(product_type, center)}"
+            f"{tr('Data provider')}: {portal.label(getattr(self.window.ui_preferences, 'language', 'en'))}\n"
+            f"{tr('Product')}: {product_label}\n"
+            f"{tr('Month range')}: {start_ym} – {end_ym}\n"
+            f"{tr('Save to')}: {download_dir}\n"
+            f"{tr('Earthdata authorization')}: {earthdata_state}"
         )
         box.setInformativeText(info)
-        box.setDetailedText(info)
-        start_button = box.addButton(self.window.translate_text("Start Download"), QMessageBox.ButtonRole.AcceptRole)
+        # The native QMessageBox details expander is not translated unless a
+        # full Qt locale catalogue is installed.  The dedicated official-page
+        # action below is clearer and avoids a stray "Show Details..." button.
+        start_button = box.addButton(tr("Start Download"), QMessageBox.ButtonRole.AcceptRole)
+        _set_button_visual_role(start_button, "PrimaryButton")
         auth_button = None
         if needs_auth:
-            auth_button = box.addButton(self.window.translate_text("Re-authorize Earthdata"), QMessageBox.ButtonRole.ActionRole)
-        site_button = box.addButton(self.window.translate_text("Open Data Website"), QMessageBox.ButtonRole.ActionRole)
-        box.addButton(QMessageBox.StandardButton.Cancel)
+            auth_button = box.addButton(tr("Manage Earthdata Authorization"), QMessageBox.ButtonRole.ActionRole)
+            _set_button_visual_role(auth_button, "SoftButton")
+        site_button = box.addButton(tr("Open Official Data Page"), QMessageBox.ButtonRole.ActionRole)
+        cancel_button = box.addButton(tr("Cancel"), QMessageBox.ButtonRole.RejectRole)
+        _set_button_visual_role(site_button, "SoftButton")
+        _set_button_visual_role(cancel_button, "GhostButton")
+        box.setDefaultButton(start_button)
+        box.setEscapeButton(cancel_button)
         box.exec()
         clicked = box.clickedButton()
         if clicked is start_button:
@@ -1938,14 +2038,21 @@ class MainWindowController:
         return "cancel"
 
     def _show_download_auth_error(self, text: str) -> None:
+        tr = self.window.translate_text
         box = QMessageBox(self.window)
         box.setIcon(QMessageBox.Icon.Warning)
-        box.setWindowTitle(self.window.translate_text("Earthdata Authorization"))
-        box.setText(self.window.translate_text("Earthdata authorization is required or has expired."))
+        box.setObjectName("EarthdataAuthorizationErrorDialog")
+        box.setWindowTitle(tr("Earthdata Authorization"))
+        box.setText(tr("Earthdata authorization is required or has expired."))
         box.setInformativeText(str(text or ""))
-        auth_button = box.addButton(self.window.translate_text("Re-authorize Earthdata"), QMessageBox.ButtonRole.AcceptRole)
-        site_button = box.addButton(self.window.translate_text("Open Data Website"), QMessageBox.ButtonRole.ActionRole)
-        box.addButton(QMessageBox.StandardButton.Cancel)
+        auth_button = box.addButton(tr("Manage Earthdata Authorization"), QMessageBox.ButtonRole.AcceptRole)
+        site_button = box.addButton(tr("Open Official Data Page"), QMessageBox.ButtonRole.ActionRole)
+        cancel_button = box.addButton(tr("Cancel"), QMessageBox.ButtonRole.RejectRole)
+        _set_button_visual_role(auth_button, "PrimaryButton")
+        _set_button_visual_role(site_button, "SoftButton")
+        _set_button_visual_role(cancel_button, "GhostButton")
+        box.setDefaultButton(auth_button)
+        box.setEscapeButton(cancel_button)
         box.exec()
         clicked = box.clickedButton()
         if clicked is auth_button:
@@ -2014,7 +2121,14 @@ class MainWindowController:
         if not download_dir:
             self._show_warning(self.window.translate_text("Download Data"), self.window.translate_text("Set a download folder first."))
             return
-        start_ym, end_ym = self._gfc_download_range()
+        try:
+            start_ym, end_ym = self._gfc_download_range()
+        except ValueError as exc:
+            self._show_warning(
+                self.window.translate_text("Download Data"),
+                self.window.translate_text(str(exc)),
+            )
+            return
         center = self._configured_gfc_center()
         product_type = self._download_product_type()
         if product_type == "MASCON_NC" and center not in {"CSR", "JPL", "GSFC"}:
@@ -2113,48 +2227,64 @@ class MainWindowController:
         )
 
     def on_earthdata_auth(self, require_credentials: bool = False) -> bool:
+        tr = self.window.translate_text
         dialog = QDialog(self.window)
-        dialog.setWindowTitle("Earthdata Login")
+        dialog.setObjectName("EarthdataAuthorizationDialog")
+        dialog.setWindowTitle(tr("Earthdata Authorization"))
         dialog.setModal(True)
-        dialog.resize(620, 320)
+        dialog.resize(680, 400)
         layout = QVBoxLayout(dialog)
-        layout.setContentsMargins(16, 14, 16, 14)
+        layout.setContentsMargins(20, 18, 20, 18)
+        layout.setSpacing(12)
         current_login = current_earthdata_login()
         netrc_path = Path.home() / ".netrc"
         label = QLabel(
-            f"Current local Earthdata state: {current_login or 'none'}\n"
-            f"Token store: {EARTHDATA_TOKEN_STORE}\n"
-            f"netrc file: {netrc_path}\n"
-            "Open the official Earthdata token page in your browser, sign in there, generate a user token, then paste it below. "
-            "Tokens are stored in a local token store, not in JSON configs."
+            f"{tr('Current authorization')}: {current_login or tr('Not configured')}\n"
+            f"{tr('Local token store')}: {EARTHDATA_TOKEN_STORE}\n"
+            f"{tr('Legacy netrc file')}: {netrc_path}\n\n"
+            + tr(
+                "Open NASA Earthdata in your browser, sign in, create a user token, and paste it below. "
+                "The token is stored locally and is never written to the processing JSON configuration."
+            )
         )
         label.setWordWrap(True)
+        label.setTextInteractionFlags(Qt.TextSelectableByMouse)
         layout.addWidget(label)
-        btn_open = QPushButton("Open Earthdata Token Page")
-        btn_open.setObjectName("PrimaryButton")
+        btn_open = QPushButton(tr("Open Earthdata Token Guide"))
+        _set_button_visual_role(btn_open, "SoftButton")
         btn_open.clicked.connect(lambda: webbrowser.open(EARTHDATA_TOKEN_URL))
         layout.addWidget(btn_open, 0, Qt.AlignLeft)
         form = QFormLayout()
         edit_label = QLineEdit(current_login or "earthdata")
+        edit_label.setPlaceholderText(tr("A local label, for example: earthdata"))
         edit_token = QLineEdit()
-        edit_token.setEchoMode(QLineEdit.Password)
-        chk_replace = QCheckBox("Set this token as active")
+        edit_token.setEchoMode(QLineEdit.EchoMode.Password)
+        edit_token.setPlaceholderText(tr("Paste the Earthdata user token"))
+        chk_replace = QCheckBox(tr("Set this token as active"))
         chk_replace.setChecked(True)
-        chk_clear = QCheckBox("Clear saved Earthdata tokens")
-        chk_clear_netrc = QCheckBox("Clear local .netrc Earthdata credentials")
-        form.addRow("Account Label", edit_label)
-        form.addRow("User Token", edit_token)
+        chk_clear = QCheckBox(tr("Clear saved Earthdata tokens"))
+        chk_clear_netrc = QCheckBox(tr("Clear legacy .netrc Earthdata credentials"))
+        form.addRow(tr("Account label"), edit_label)
+        form.addRow(tr("User token"), edit_token)
         form.addRow("", chk_replace)
         form.addRow("", chk_clear)
         form.addRow("", chk_clear_netrc)
         layout.addLayout(form)
-        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons = QDialogButtonBox()
+        save_button = buttons.addButton(tr("Save Authorization"), QDialogButtonBox.ButtonRole.AcceptRole)
+        cancel_button = buttons.addButton(tr("Cancel"), QDialogButtonBox.ButtonRole.RejectRole)
+        _set_button_visual_role(save_button, "PrimaryButton")
+        _set_button_visual_role(cancel_button, "GhostButton")
+        save_button.setDefault(True)
         layout.addWidget(buttons)
-        buttons.accepted.connect(dialog.accept)
-        buttons.rejected.connect(dialog.reject)
-        if dialog.exec() != QDialog.Accepted:
+        save_button.clicked.connect(dialog.accept)
+        cancel_button.clicked.connect(dialog.reject)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
             if require_credentials:
-                self._show_warning("Earthdata Auth", "Earthdata credentials are required for this download.")
+                self._show_warning(
+                    tr("Earthdata Authorization"),
+                    tr("Earthdata authorization is required for this download."),
+                )
             return False
         try:
             cleared: list[str] = []
@@ -2168,14 +2298,20 @@ class MainWindowController:
                 self.on_log(f"[AUTH] Cleared Earthdata .netrc credentials in {path}", "stdout")
             if cleared:
                 page = self.window.page_data_paths
-                page.lbl_gfc_download_status.setText("Earthdata credentials cleared from " + "; ".join(cleared) + ".")
+                page.lbl_gfc_download_status.setText(
+                    tr("Earthdata authorization data was cleared from: {locations}.").format(
+                        locations="; ".join(cleared)
+                    )
+                )
                 return not require_credentials
             path = save_earthdata_token(edit_label.text(), edit_token.text(), replace_active=chk_replace.isChecked())
-            self.window.page_data_paths.lbl_gfc_download_status.setText(f"Earthdata token saved to {path}.")
+            self.window.page_data_paths.lbl_gfc_download_status.setText(
+                tr("Earthdata authorization saved locally: {path}.").format(path=path)
+            )
             self.on_log(f"[AUTH] Saved Earthdata token label={edit_label.text().strip()} in {path}", "stdout")
             return True
         except Exception as exc:
-            self._show_warning("Earthdata Auth", str(exc))
+            self._show_warning(tr("Earthdata Authorization"), str(exc))
             return False
 
     def _sync_processing_time_override_state(self, checked: bool) -> None:
@@ -4411,7 +4547,7 @@ class MainWindowController:
             fig.clear()
             ax = fig.add_subplot(111)
             self._basin_preview_ax = ax
-            ax.set_facecolor("#eef4f8")
+            ax.set_facecolor(COLOR.get("content_bg", COLOR["surface_low"]))
 
             full_extent = [
                 float(np.nanmin(lon_plot)),
@@ -4477,7 +4613,12 @@ class MainWindowController:
             for part in parts[:8]:
                 arr = np.asarray(part, dtype=float)
                 if arr.ndim == 2 and arr.shape[0] >= 2:
-                    ax.plot(arr[:, 0], arr[:, 1], color="#005db5", linewidth=1.4)
+                    ax.plot(
+                        arr[:, 0],
+                        arr[:, 1],
+                        color=COLOR["primary"],
+                        linewidth=1.4,
+                    )
             label = ""
             labels = ctx.get("labels")
             if labels is None:
@@ -4494,7 +4635,7 @@ class MainWindowController:
             ax.set_ylabel("Latitude")
             ax.set_xlim(xlim)
             ax.set_ylim(ylim)
-            ax.grid(True, color="#d8e3eb", linewidth=0.6)
+            ax.grid(True, color=COLOR["border"], linewidth=0.6)
             ax.tick_params(labelsize=8)
             fig.tight_layout()
             self._basin_preview_pick_state = {
@@ -4608,7 +4749,7 @@ class MainWindowController:
         page = self.window.page_preview
         path = page.edit_dataset_source.text().strip()
         if not path:
-            self._show_warning("Preview", "Please select a stack file first.")
+            self._show_warning("Preview", "Please select a gridded dataset first.")
             return
         try:
             info = self.host.load_stack_info(path)
@@ -4646,10 +4787,25 @@ class MainWindowController:
                 shape_text = f"{shape[0]} x {shape[1]}"
             else:
                 shape_text = "unknown"
-            page.lbl_stack_info.setText(f"{self.window.translate_text('Size')} {shape_text}{file_size}")
+            time_summary = ""
+            with contextlib.suppress(Exception):
+                _years, labels = self.host._resolve_time(
+                    info.get("t"), nt, meta=meta
+                )
+                if labels:
+                    first = str(labels[0])
+                    last = str(labels[min(nt, len(labels)) - 1])
+                    time_summary = (
+                        f" | {self.window.translate_text('Time coverage')}: "
+                        f"{first}–{last}"
+                    )
+            page.lbl_stack_info.setText(
+                f"{self.window.translate_text('Dimensions')}: {shape_text}"
+                f"{time_summary}{file_size}"
+            )
             self._apply_preview_bbox_from_info(info)
             self.window.refresh_translations()
-            self.on_log(f"[PREVIEW] Stack loaded: {path}", "stdout")
+            self.on_log(f"[PREVIEW] Dataset loaded: {path}", "stdout")
         except Exception as exc:
             page.lbl_stack_info.setText(f"Load failed: {exc}")
             self._show_error("Preview", str(exc))
@@ -4966,37 +5122,41 @@ class MainWindowController:
         if layer.type == "raster":
             var_name = str(meta.get("active_var") or "").strip()
             opacity = max(0.0, min(1.0, float(getattr(layer, "opacity", 1.0) or 1.0)))
-            parts = []
-            if var_name:
-                parts.append(f"ƒ {var_name}")
             if getattr(layer, "path", None):
-                parts.append(f"α {int(round(opacity * 100))}%")
-            return "  ".join(parts) or "ƒ current"
+                return f"{var_name or self.window.translate_text('Auto variable')} · {int(round(opacity * 100))}%"
+            return var_name or self.window.translate_text("Current variable")
         if layer.type in {"boundary", "shapefile"}:
             field = str(meta.get("field") or "").strip()
-            return f"◇ {field}" if field else "◇ file"
+            return field or self.window.translate_text("File layer")
         if layer.type == "coastline":
-            return "〰 line"
+            return self.window.translate_text("Line")
         return ""
 
     def _preview_sorted_layers(self, *, visible_only: bool = False) -> list[PreviewLayer]:
+        """Return layers in render order (bottom first, top last)."""
+
         layers = sorted(self.preview_layers, key=lambda item: item.zorder)
         if visible_only:
             layers = [layer for layer in layers if layer.visible]
         return layers
 
+    def _preview_display_layers(self, *, visible_only: bool = False) -> list[PreviewLayer]:
+        """Return layers in GIS display order (visual top layer first)."""
+
+        return list(reversed(self._preview_sorted_layers(visible_only=visible_only)))
+
     def _preview_render_layers(self, *, visible_only: bool = False) -> list[PreviewLayer]:
-        priority = {
-            "raster": 0,
-            "coastline": 20,
-            "boundary": 30,
-            "shapefile": 30,
-            "graticule": 40,
-            "annotation": 50,
-            "colorbar": 100,
-        }
-        layers = self._preview_sorted_layers(visible_only=visible_only)
-        return sorted(layers, key=lambda item: (priority.get(item.type, 60), item.zorder))
+        # zorder is the single source of truth.  Re-sorting by type made the
+        # layer panel appear reorderable while the canvas silently ignored
+        # cross-type moves.
+        return self._preview_sorted_layers(visible_only=visible_only)
+
+    @staticmethod
+    def _apply_preview_display_order(layers: list[PreviewLayer]) -> None:
+        """Persist a top-first UI list as bottom-first numeric z-orders."""
+
+        for render_index, layer in enumerate(reversed(layers)):
+            layer.zorder = render_index * 10
 
     def _normalize_preview_layer_zorders(self) -> None:
         for index, layer in enumerate(self._preview_sorted_layers()):
@@ -5006,18 +5166,33 @@ class MainWindowController:
         if self.preview_layers:
             return
         self.preview_layers = [
-            PreviewLayer("data", "Mass Anomaly Data", "raster", visible=True, zorder=0, removable=False),
+            PreviewLayer(
+                "data",
+                "Mass Anomaly Raster",
+                "raster",
+                visible=True,
+                zorder=0,
+                removable=False,
+            ),
             PreviewLayer("coastline", "Coastlines", "coastline", visible=True, zorder=20, removable=False),
             PreviewLayer("graticule", "Graticule", "graticule", visible=True, zorder=30, removable=False),
             PreviewLayer("colorbar", "Color Scale", "colorbar", visible=True, zorder=100, removable=False),
         ]
 
-    def _preview_layer_visible(self, layer_type: str, *, path: str | None = None) -> bool:
+    def _preview_layer_visible(self, layer_type: str, *, path=_PREVIEW_PATH_UNSET) -> bool:
+        """Return whether a matching layer is visible.
+
+        Omitting ``path`` matches every layer of the requested type.  Passing
+        ``path=None`` intentionally matches only the built-in/base layer.  The
+        distinction prevents an imported raster from silently re-enabling a
+        base raster that the user hid in the layer tree.
+        """
+
         self._ensure_preview_layers()
         for layer in self.preview_layers:
             if layer.type != layer_type or not layer.visible:
                 continue
-            if path is not None and str(layer.path or "") != str(path):
+            if path is not _PREVIEW_PATH_UNSET and layer.path != path:
                 continue
             return True
         return False
@@ -5071,67 +5246,346 @@ class MainWindowController:
     def _layer_action_button(self, text: str, tooltip: str, callback) -> QPushButton:
         button = QPushButton(text)
         button.setObjectName("LayerIconButton")
-        button.setToolTip(self.window.translate_text(tooltip))
-        button.setFixedSize(24, 24)
+        translated = self.window.translate_text(tooltip)
+        button.setToolTip(translated)
+        button.setAccessibleName(translated)
+        button.setAccessibleDescription(translated)
+        button.setFixedSize(28, 28)
         button.clicked.connect(callback)
         return button
 
-    def _render_preview_layer_table(self, selected_layer_id: str | None = None) -> None:
-        self._ensure_preview_layers()
+    def _ensure_preview_layer_model(self) -> PreviewLayerTreeModel:
         page = self.window.page_preview
-        table = page.table_overlay_layers
-        display_layers = [
-            layer for layer in self._preview_sorted_layers()
-            if layer.type not in {"graticule", "colorbar"}
-        ]
-        with QSignalBlocker(table):
-            table.setHorizontalHeaderLabels([
-                "",
-                self.window.translate_text("Layer"),
-                self.window.translate_text("Type"),
-                self.window.translate_text("Config"),
-                self.window.translate_text("Actions"),
-            ])
-            table.setRowCount(0)
-            for row, layer in enumerate(display_layers):
-                table.insertRow(row)
-                visible = QCheckBox()
-                visible.setChecked(layer.visible)
-                visible.setToolTip(self.window.translate_text("Visible"))
-                visible.toggled.connect(lambda checked, layer_id=layer.id: self._set_preview_layer_visible(layer_id, checked))
-                table.setCellWidget(row, 0, visible)
+        view = page.layer_tree_view
+        if self.preview_layer_model is not None and view.model() is self.preview_layer_model:
+            return self.preview_layer_model
 
-                name_item = QTableWidgetItem(self._preview_layer_name(layer))
-                name_item.setFlags(name_item.flags() & ~Qt.ItemIsEditable)
-                name_item.setData(Qt.UserRole, layer.id)
-                table.setItem(row, 1, name_item)
+        model = PreviewLayerTreeModel(
+            self.preview_layers,
+            view,
+            translator=self.window.translate_text,
+        )
+        view.setModel(model)
+        view.set_translator(self.window.translate_text)
+        view.expandAll()
+        self.preview_layer_model = model
 
-                type_item = QTableWidgetItem(self._preview_type_label(layer.type))
-                type_item.setFlags(type_item.flags() & ~Qt.ItemIsEditable)
-                table.setItem(row, 2, type_item)
+        for signal in (
+            model.layerVisibilityChanged,
+            model.groupVisibilityChanged,
+            model.layerRenamed,
+            model.layerAdded,
+            model.layerRemoved,
+            model.layerOrderChanged,
+            model.layerStatusChanged,
+            model.layerLegendChanged,
+            model.layerOpacityChanged,
+            model.layerMetadataChanged,
+        ):
+            signal.connect(self._on_preview_layer_model_changed)
 
-                config_item = QTableWidgetItem(self._preview_layer_config_text(layer))
-                config_item.setFlags(config_item.flags() & ~Qt.ItemIsEditable)
-                if layer.path:
-                    config_item.setToolTip(str(layer.path))
-                table.setItem(row, 3, config_item)
+        view.removeRequested.connect(lambda instance_id: model.remove_layer(instance_id))
+        view.duplicateRequested.connect(self._duplicate_preview_layer_instance)
+        view.zoomRequested.connect(self._zoom_to_preview_layer_instance)
+        view.propertiesRequested.connect(self._show_preview_layer_properties)
+        view.moveUpRequested.connect(
+            lambda instance_id: self._move_preview_layer_instance(instance_id, -1)
+        )
+        view.moveDownRequested.connect(
+            lambda instance_id: self._move_preview_layer_instance(instance_id, 1)
+        )
+        view.moveTopRequested.connect(self._top_preview_layer_instance)
+        view.selectionModel().currentChanged.connect(self._on_preview_layer_selection_changed)
+        return model
 
-                actions = QWidget()
-                actions.setObjectName("LayerActionCell")
-                layout = QHBoxLayout(actions)
-                layout.setContentsMargins(0, 0, 0, 0)
-                layout.setSpacing(3)
-                layout.addWidget(self._layer_action_button("⤴", "Move to top", lambda _=False, layer_id=layer.id: self._top_preview_layer(layer_id)))
-                layout.addWidget(self._layer_action_button("↑", "Move up", lambda _=False, layer_id=layer.id: self._move_preview_layer(layer_id, -1)))
-                layout.addWidget(self._layer_action_button("↓", "Move down", lambda _=False, layer_id=layer.id: self._move_preview_layer(layer_id, 1)))
-                delete_button = self._layer_action_button("×", "Delete", lambda _=False, layer_id=layer.id: self._delete_preview_layer(layer_id))
-                delete_button.setEnabled(layer.removable)
-                layout.addWidget(delete_button)
-                table.setCellWidget(row, 4, actions)
-                table.setRowHeight(row, 34)
-                if selected_layer_id and selected_layer_id == layer.id:
-                    table.selectRow(row)
+    def _sync_preview_layers_from_model(self) -> None:
+        model = self.preview_layer_model
+        if model is None:
+            return
+        self.preview_layers = model.to_preview_layers(PreviewLayer)
         self._sync_preview_legacy_layer_controls()
+
+    def _on_preview_layer_model_changed(self, *_args) -> None:
+        if bool(getattr(self, "_updating_preview_layer_model", False)):
+            return
+        self._sync_preview_layers_from_model()
+        self._refresh_preview_after_layer_change()
+
+    def _render_preview_layer_table(self, selected_layer_id: str | None = None) -> None:
+        """Synchronize the controller facade into the GIS-style layer tree."""
+
+        self._ensure_preview_layers()
+        model = self._ensure_preview_layer_model()
+        view = self.window.page_preview.layer_tree_view
+        target_id = selected_layer_id or self._selected_preview_layer_instance_id
+        self._updating_preview_layer_model = True
+        try:
+            # Never block begin/endResetModel: QTreeView and its selection
+            # model must receive those structural signals to invalidate old
+            # QModelIndex pointers safely.  The model reset emits no domain
+            # change signals, while this guard protects future extensions.
+            model.replace_from_preview_layers(self.preview_layers)
+        finally:
+            self._updating_preview_layer_model = False
+        # The grouped tree owns the cartographic ordering contract:
+        # decorations above vectors above rasters, with user ordering inside
+        # each group.  Reflect its normalized global z-orders immediately so
+        # the canvas can never disagree with what the tree shows.
+        self.preview_layers = model.to_preview_layers(PreviewLayer)
+        view.expandAll()
+
+        target_index = None
+        for record in model.draw_order():
+            if record.layer_id == target_id or record.instance_id == target_id:
+                target_index = model.index_for_instance(record.instance_id)
+                self._selected_preview_layer_instance_id = record.instance_id
+                break
+        if target_index is not None and target_index.isValid():
+            view.setCurrentIndex(target_index)
+            view.scrollTo(target_index)
+            self._on_preview_layer_selection_changed(target_index, None)
+        else:
+            self._clear_preview_layer_properties()
+        self._sync_preview_legacy_layer_controls()
+
+    def _on_preview_layer_selection_changed(self, current, _previous) -> None:
+        model = self.preview_layer_model
+        if model is None or current is None or not current.isValid():
+            self._clear_preview_layer_properties()
+            return
+        instance_id = str(model.data(current, model.InstanceIdRole) or "")
+        record = model.layer_record(instance_id)
+        if record is None:
+            self._clear_preview_layer_properties()
+            return
+        self._selected_preview_layer_instance_id = instance_id
+
+    def _clear_preview_layer_properties(self) -> None:
+        self._selected_preview_layer_instance_id = None
+
+    def _apply_preview_layer_properties(
+        self,
+        instance_id: str,
+        *,
+        name: str,
+        visible: bool,
+        opacity_percent: int,
+        active_var: str = "",
+    ) -> None:
+        model = self.preview_layer_model
+        if not instance_id or model is None:
+            return
+        self._updating_preview_layer_model = True
+        try:
+            model.rename_layer(instance_id, name.strip())
+            model.set_layer_visibility(instance_id, bool(visible))
+            model.set_layer_opacity(instance_id, max(5, min(100, int(opacity_percent))) / 100.0)
+            if active_var.strip():
+                model.update_layer_metadata(instance_id, {"active_var": active_var.strip()})
+        finally:
+            self._updating_preview_layer_model = False
+        self._sync_preview_layers_from_model()
+        self._refresh_preview_after_layer_change()
+
+    def _create_preview_layer_properties_dialog(self, instance_id: str) -> QDialog | None:
+        model = self.preview_layer_model
+        record = model.layer_record(instance_id) if model is not None else None
+        if record is None:
+            return None
+
+        dialog = QDialog(self.window)
+        dialog.setObjectName("PreviewLayerPropertiesDialog")
+        dialog.setWindowTitle(self.window.translate_text("Layer Properties"))
+        dialog.setModal(True)
+        dialog.setMinimumWidth(500)
+        layout = QVBoxLayout(dialog)
+        layout.setContentsMargins(20, 18, 20, 18)
+        layout.setSpacing(14)
+
+        title = QLabel(record.name)
+        title.setObjectName("SectionTitle")
+        layout.addWidget(title)
+
+        form = QFormLayout()
+        form.setContentsMargins(0, 0, 0, 0)
+        form.setHorizontalSpacing(16)
+        form.setVerticalSpacing(10)
+        form.setFieldGrowthPolicy(QFormLayout.AllNonFixedFieldsGrow)
+
+        name_edit = QLineEdit(record.name)
+        name_edit.setObjectName("LayerPropertyNameEdit")
+        name_edit.setAccessibleName(self.window.translate_text("Layer Name"))
+        source_edit = QLineEdit(
+            self._preview_layer_zoom_source(record)
+            or self.window.translate_text("Built-in layer")
+        )
+        source_edit.setObjectName("LayerPropertySourceEdit")
+        source_edit.setReadOnly(True)
+        source_edit.setCursorPosition(0)
+        source_edit.setAccessibleName(self.window.translate_text("Source"))
+        type_status = QLabel(
+            f"{self._preview_type_label(record.layer_type)} · "
+            f"{self.window.translate_text(record.status.title())}"
+        )
+        type_status.setObjectName("LayerPropertyTypeStatus")
+        visible_check = QCheckBox(self.window.translate_text("Show layer"))
+        visible_check.setObjectName("LayerPropertyVisibleCheck")
+        visible_check.setChecked(record.visible)
+        opacity_spin = QSpinBox()
+        opacity_spin.setObjectName("LayerPropertyOpacitySpin")
+        opacity_spin.setRange(5, 100)
+        opacity_spin.setSuffix("%")
+        opacity_spin.setButtonSymbols(QSpinBox.ButtonSymbols.NoButtons)
+        opacity_spin.setValue(int(round(record.opacity * 100)))
+        opacity_spin.setAccessibleName(self.window.translate_text("Opacity"))
+
+        form.addRow(self.window.translate_text("Layer Name"), name_edit)
+        form.addRow(self.window.translate_text("Source"), source_edit)
+        form.addRow(self.window.translate_text("Type & Status"), type_status)
+        form.addRow(self.window.translate_text("Visible"), visible_check)
+        form.addRow(self.window.translate_text("Opacity"), opacity_spin)
+
+        variable_combo = None
+        if record.layer_type == "raster":
+            variables: list[str] = []
+            active_var = str(record.metadata.get("active_var") or "").strip()
+            if record.path:
+                variables, probed_active = self._probe_preview_layer_variables(str(record.path))
+                active_var = active_var or str(probed_active or "")
+            if not variables:
+                fallback_var = active_var or self.window.page_preview.cmb_data_var.currentText().strip() or "ewh"
+                variables = [fallback_var]
+            if active_var and active_var not in variables:
+                variables.insert(0, active_var)
+            variable_combo = QComboBox()
+            variable_combo.setObjectName("LayerPropertyVariableCombo")
+            variable_combo.addItems(list(dict.fromkeys(variables)))
+            if active_var:
+                variable_combo.setCurrentText(active_var)
+            variable_combo.setAccessibleName(self.window.translate_text("Rendering Variable"))
+            form.addRow(self.window.translate_text("Rendering Variable"), variable_combo)
+
+        layout.addLayout(form)
+        note = QLabel(
+            self.window.translate_text(
+                "Imported raster data uses the current preview colormap, value range, and exact preview month."
+            )
+        )
+        note.setObjectName("MutedText")
+        note.setWordWrap(True)
+        note.setVisible(record.layer_type == "raster" and bool(record.path))
+        layout.addWidget(note)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        ok_button = buttons.button(QDialogButtonBox.Ok)
+        cancel_button = buttons.button(QDialogButtonBox.Cancel)
+        ok_button.setText(self.window.translate_text("OK"))
+        ok_button.setObjectName("PrimaryButton")
+        cancel_button.setText(self.window.translate_text("Cancel"))
+        cancel_button.setObjectName("GhostButton")
+        zoom_button = buttons.addButton(
+            self.window.translate_text("Zoom to Layer"),
+            QDialogButtonBox.ActionRole,
+        )
+        zoom_button.setObjectName("GhostButton")
+        zoom_button.setEnabled(bool(self._preview_layer_zoom_source(record)))
+        zoom_button.clicked.connect(
+            lambda: self._zoom_to_preview_layer_instance(instance_id)
+        )
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        dialog.accepted.connect(
+            lambda: self._apply_preview_layer_properties(
+                instance_id,
+                name=name_edit.text(),
+                visible=visible_check.isChecked(),
+                opacity_percent=opacity_spin.value(),
+                active_var=(variable_combo.currentText() if variable_combo is not None else ""),
+            )
+        )
+        layout.addWidget(buttons)
+        return dialog
+
+    def _duplicate_preview_layer_instance(self, instance_id: str) -> None:
+        model = self.preview_layer_model
+        if model is None:
+            return
+        new_id = model.duplicate_layer(instance_id)
+        if new_id:
+            index = model.index_for_instance(new_id)
+            self.window.page_preview.layer_tree_view.setCurrentIndex(index)
+
+    def _show_preview_layer_properties(self, instance_id: str) -> None:
+        model = self.preview_layer_model
+        if model is None:
+            return
+        index = model.index_for_instance(instance_id)
+        if index.isValid():
+            self.window.page_preview.layer_tree_view.setCurrentIndex(index)
+            self._on_preview_layer_selection_changed(index, None)
+            dialog = self._create_preview_layer_properties_dialog(instance_id)
+            if dialog is not None:
+                dialog.exec()
+
+    def _preview_layer_zoom_source(self, record) -> str:
+        if record is None:
+            return ""
+        if record.path:
+            return str(record.path)
+        if record.layer_type == "raster":
+            return self.window.page_preview.edit_dataset_source.text().strip()
+        if record.layer_type == "coastline":
+            candidate = self._resolve_overlay_file(str(DEFAULT_COASTLINE_PATH))
+            return str(candidate or "")
+        return ""
+
+    def _zoom_to_preview_layer_instance(self, instance_id: str) -> None:
+        model = self.preview_layer_model
+        record = model.layer_record(instance_id) if model is not None else None
+        path = self._preview_layer_zoom_source(record)
+        if record is None or not path:
+            return
+        try:
+            suffix = Path(path).suffix.lower()
+            if record.layer_type in {"boundary", "shapefile", "coastline"} or suffix in {
+                ".shp",
+                ".bln",
+            }:
+                boundaries = basin_read_boundary(path)
+                lon_parts = [
+                    np.asarray(boundary.lon, dtype=float).reshape(-1)
+                    for boundary in boundaries
+                ]
+                lat_parts = [
+                    np.asarray(boundary.lat, dtype=float).reshape(-1)
+                    for boundary in boundaries
+                ]
+                lon_values = np.concatenate(lon_parts) if lon_parts else np.asarray([])
+                lat_values = np.concatenate(lat_parts) if lat_parts else np.asarray([])
+            else:
+                _shape, lon, lat, _time_values, _meta = probe_stack_any(
+                    path, load_stack_any
+                )
+                lon_values = np.asarray(lon, dtype=float).squeeze()
+                lat_values = np.asarray(lat, dtype=float).squeeze()
+            if lon_values.size == 0 or lat_values.size == 0:
+                raise ValueError("Layer has no coordinate extent")
+            lon_values = lon_values[np.isfinite(lon_values)]
+            lat_values = lat_values[np.isfinite(lat_values)]
+            if lon_values.size == 0 or lat_values.size == 0:
+                raise ValueError("Layer has no finite coordinate extent")
+            page = self.window.page_preview
+            page.chk_auto_region.setChecked(False)
+            page.edit_region_lon_min.setText(f"{float(np.nanmin(lon_values)):.6g}")
+            page.edit_region_lon_max.setText(f"{float(np.nanmax(lon_values)):.6g}")
+            page.edit_region_lat_min.setText(f"{float(np.nanmin(lat_values)):.6g}")
+            page.edit_region_lat_max.setText(f"{float(np.nanmax(lat_values)):.6g}")
+            self._refresh_preview_after_layer_change()
+        except Exception as exc:
+            self.on_log(
+                f"[PREVIEW] Cannot zoom to layer '{record.name}': {exc}",
+                "stderr",
+            )
 
     def _set_preview_layer_type_visible(self, layer_type: str, checked: bool) -> None:
         self._ensure_preview_layers()
@@ -5146,37 +5600,108 @@ class MainWindowController:
             self._refresh_preview_after_layer_change()
 
     def _set_preview_layer_visible(self, layer_id: str, checked: bool) -> None:
+        model = self.preview_layer_model
+        if model is not None:
+            record = next(
+                (item for item in model.draw_order() if item.layer_id == layer_id),
+                None,
+            )
+            if record is not None:
+                model.set_layer_visibility(record.instance_id, checked)
+                return
         for layer in self.preview_layers:
             if layer.id == layer_id:
                 layer.visible = bool(checked)
                 break
         self._refresh_preview_after_layer_change()
 
+    def _move_preview_layer_instance(self, instance_id: str, delta: int) -> None:
+        model = self.preview_layer_model
+        record = model.layer_record(instance_id) if model is not None else None
+        if model is None or record is None:
+            return
+        siblings = model.draw_order(record.group)
+        index = next(
+            (i for i, item in enumerate(siblings) if item.instance_id == instance_id),
+            -1,
+        )
+        target = index + int(delta)
+        if index < 0 or not 0 <= target < len(siblings):
+            return
+        if model.move_layer(instance_id, target):
+            self._selected_preview_layer_instance_id = instance_id
+            current = model.index_for_instance(instance_id)
+            self.window.page_preview.layer_tree_view.setCurrentIndex(current)
+
+    def _top_preview_layer_instance(self, instance_id: str) -> None:
+        model = self.preview_layer_model
+        record = model.layer_record(instance_id) if model is not None else None
+        if model is None or record is None:
+            return
+        if model.move_layer(instance_id, 0):
+            self._selected_preview_layer_instance_id = instance_id
+            current = model.index_for_instance(instance_id)
+            self.window.page_preview.layer_tree_view.setCurrentIndex(current)
+
     def _move_preview_layer(self, layer_id: str, delta: int) -> None:
-        layers = self._preview_sorted_layers()
+        model = self.preview_layer_model
+        if model is not None:
+            record = next(
+                (item for item in model.draw_order() if item.layer_id == layer_id),
+                None,
+            )
+            if record is not None:
+                siblings = model.draw_order(record.group)
+                index = next(
+                    (i for i, item in enumerate(siblings) if item.instance_id == record.instance_id),
+                    -1,
+                )
+                target = index + int(delta)
+                if index >= 0 and 0 <= target < len(siblings):
+                    model.move_layer(record.instance_id, target)
+                    self._selected_preview_layer_instance_id = record.instance_id
+                return
+        layers = self._preview_display_layers()
         index = next((i for i, layer in enumerate(layers) if layer.id == layer_id), -1)
         target = index + int(delta)
         if index < 0 or target < 0 or target >= len(layers):
             return
         layers[index], layers[target] = layers[target], layers[index]
-        for row, layer in enumerate(layers):
-            layer.zorder = row * 10
+        self._apply_preview_display_order(layers)
         self._render_preview_layer_table(selected_layer_id=layer_id)
         self._refresh_preview_after_layer_change()
 
     def _top_preview_layer(self, layer_id: str) -> None:
-        layers = self._preview_sorted_layers()
+        model = self.preview_layer_model
+        if model is not None:
+            record = next(
+                (item for item in model.draw_order() if item.layer_id == layer_id),
+                None,
+            )
+            if record is not None:
+                model.move_layer(record.instance_id, 0)
+                self._selected_preview_layer_instance_id = record.instance_id
+                return
+        layers = self._preview_display_layers()
         index = next((i for i, layer in enumerate(layers) if layer.id == layer_id), -1)
         if index < 0:
             return
         layer = layers.pop(index)
-        layers.append(layer)
-        for row, item in enumerate(layers):
-            item.zorder = row * 10
+        layers.insert(0, layer)
+        self._apply_preview_display_order(layers)
         self._render_preview_layer_table(selected_layer_id=layer_id)
         self._refresh_preview_after_layer_change()
 
     def _delete_preview_layer(self, layer_id: str) -> None:
+        model = self.preview_layer_model
+        if model is not None:
+            record = next(
+                (item for item in model.draw_order() if item.layer_id == layer_id),
+                None,
+            )
+            if record is not None:
+                model.remove_layer(record.instance_id)
+                return
         layer = next((item for item in self.preview_layers if item.id == layer_id), None)
         if layer is None or not layer.removable:
             return
@@ -5204,14 +5729,15 @@ class MainWindowController:
         page = self.window.page_preview
         path, _selected_filter = QFileDialog.getOpenFileName(
             self.window,
-            self.window.translate_text("Select boundary or grid file"),
+            self.window.translate_text("Select a raster dataset or vector feature file"),
             page.edit_boundary_overlay.text().strip() or str(ROOT_DIR),
-            self.window.translate_text("Boundary / Grid Files (*.shp *.bln *.txt *.nc *.nc4 *.cdf *.h5 *.hdf5 *.mat);;All Files (*)"),
+            self.window.translate_text(
+                "Raster / Vector Files (*.shp *.bln *.txt *.nc *.nc4 *.cdf *.h5 *.hdf5 *.mat);;All Files (*)"
+            ),
         )
         if not path:
             return
-        suffix = Path(path).suffix.lower()
-        layer_type = "boundary" if suffix in {".shp", ".bln", ".txt"} else "raster"
+        layer_type = self._preview_layer_type_for_path(path)
         options = self._prompt_preview_layer_import_options(path, layer_type)
         if options is None:
             return
@@ -5233,6 +5759,29 @@ class MainWindowController:
         variables = list(dict.fromkeys(variables))
         return variables, active_var
 
+    def _preview_layer_type_for_path(self, path: str) -> str:
+        """Classify an imported layer by readable content, not extension alone."""
+
+        suffix = Path(str(path or "")).suffix.lower()
+        if suffix in {".shp", ".bln"}:
+            return "boundary"
+        if suffix != ".txt":
+            return "raster"
+        try:
+            shape, lon, lat, _time_values, _meta = probe_stack_any(
+                str(path), load_stack_any
+            )
+            if (
+                shape
+                and len(shape) >= 2
+                and np.asarray(lon).size == int(shape[0])
+                and np.asarray(lat).size == int(shape[1])
+            ):
+                return "raster"
+        except Exception:
+            pass
+        return "boundary"
+
     def _prompt_preview_layer_import_options(self, path: str, layer_type: str) -> dict | None:
         if layer_type != "raster":
             return {"metadata": {}, "opacity": 1.0}
@@ -5242,7 +5791,10 @@ class MainWindowController:
             active_var = variables[0]
 
         dialog = QDialog(self.window)
-        dialog.setWindowTitle(self.window.translate_text("Import Layer"))
+        dialog.setObjectName("PreviewDataImportDialog")
+        dialog.setWindowTitle(
+            self.window.translate_text("Import Raster / Vector Layer")
+        )
         dialog.setModal(True)
         layout = QVBoxLayout(dialog)
         layout.setContentsMargins(16, 16, 16, 16)
@@ -5261,10 +5813,14 @@ class MainWindowController:
         opacity_spin.setSingleStep(0.05)
         opacity_spin.setDecimals(2)
         opacity_spin.setValue(0.72)
-        form.addRow(self.window.translate_text("Plot Variable"), combo_var)
+        form.addRow(self.window.translate_text("Rendering Variable"), combo_var)
         form.addRow(self.window.translate_text("Opacity"), opacity_spin)
         layout.addLayout(form)
-        hint = QLabel(self.window.translate_text("The layer uses the current preview colormap and value range."))
+        hint = QLabel(
+            self.window.translate_text(
+                "Imported raster data uses the current preview colormap, value range, and exact preview month."
+            )
+        )
         hint.setObjectName("MutedText")
         hint.setWordWrap(True)
         layout.addWidget(hint)
@@ -5275,7 +5831,9 @@ class MainWindowController:
         if dialog.exec() != QDialog.Accepted:
             return None
         return {
-            "metadata": {"active_var": combo_var.currentText().strip()},
+            "metadata": {
+                "active_var": combo_var.currentText().strip(),
+            },
             "opacity": float(opacity_spin.value()),
         }
 
@@ -5284,22 +5842,15 @@ class MainWindowController:
         if not clean_path:
             return
         resolved = self._resolve_overlay_file(clean_path) or clean_path
-        for layer in self.preview_layers:
-            if str(layer.path or "") == str(resolved):
-                layer.visible = bool(visible)
-                if metadata:
-                    layer.metadata.update(metadata)
-                if opacity is not None:
-                    layer.opacity = float(opacity)
-                self._render_preview_layer_table(selected_layer_id=layer.id)
-                return
-        suffix = Path(resolved).suffix.lower()
-        layer_type = "boundary" if suffix in {".shp", ".bln", ".txt"} else "raster"
+        layer_type = self._preview_layer_type_for_path(resolved)
         if layer_type == "raster":
             base = [layer.zorder for layer in self.preview_layers if layer.type == "raster"]
             zorder = (max(base, default=0) + 10)
         else:
             zorder = (max((layer.zorder for layer in self.preview_layers), default=0) + 10)
+        clean_metadata = dict(metadata or {})
+        clean_metadata.pop("time_tolerance_months", None)
+        clean_metadata.pop("month_tolerance", None)
         layer = PreviewLayer(
             id=f"layer-{uuid4().hex[:10]}",
             name=Path(resolved).name,
@@ -5309,19 +5860,18 @@ class MainWindowController:
             zorder=zorder,
             removable=True,
             opacity=float(opacity) if opacity is not None else (0.72 if layer_type == "raster" else 1.0),
-            metadata=dict(metadata or {}),
+            metadata=clean_metadata,
         )
         self.preview_layers.append(layer)
         self._render_preview_layer_table(selected_layer_id=layer.id)
 
     def _swap_preview_overlay_rows(self, row_a: int, row_b: int):
-        layers = self._preview_sorted_layers()
+        layers = self._preview_display_layers()
         if row_a < 0 or row_b < 0 or row_a >= len(layers) or row_b >= len(layers):
             return
         selected_id = layers[row_a].id
         layers[row_a], layers[row_b] = layers[row_b], layers[row_a]
-        for row, layer in enumerate(layers):
-            layer.zorder = row * 10
+        self._apply_preview_display_order(layers)
         self._render_preview_layer_table(selected_layer_id=selected_id)
 
     def _set_preview_overlay_layer_entries(self, entries: list[tuple[bool, str]], selected: int | None = None):
@@ -5329,7 +5879,7 @@ class MainWindowController:
         for visible, path in entries:
             self._add_preview_overlay_layer(path, visible=visible)
         if selected is not None:
-            layers = self._preview_sorted_layers()
+            layers = self._preview_display_layers()
             if 0 <= selected < len(layers):
                 self._render_preview_layer_table(selected_layer_id=layers[selected].id)
         self._sync_preview_overlay_controls()
@@ -5337,7 +5887,7 @@ class MainWindowController:
     def _preview_overlay_layer_entries(self, include_invisible: bool = False) -> list[tuple[bool, str]]:
         entries: list[tuple[bool, str]] = []
         self._ensure_preview_layers()
-        for layer in self._preview_sorted_layers():
+        for layer in self._preview_display_layers():
             if not layer.path:
                 continue
             if layer.visible or include_invisible:
@@ -5345,22 +5895,25 @@ class MainWindowController:
         return entries
 
     def on_remove_preview_overlay_layer(self):
-        row = self.window.page_preview.table_overlay_layers.currentRow()
-        layers = self._preview_sorted_layers()
-        if 0 <= row < len(layers):
-            self._delete_preview_layer(layers[row].id)
+        instance_id = self._selected_preview_layer_instance_id or ""
+        model = self.preview_layer_model
+        record = model.layer_record(instance_id) if model is not None else None
+        if record is not None:
+            self._delete_preview_layer(record.layer_id)
 
     def on_move_preview_overlay_layer(self, delta: int):
-        row = self.window.page_preview.table_overlay_layers.currentRow()
-        layers = self._preview_sorted_layers()
-        if 0 <= row < len(layers):
-            self._move_preview_layer(layers[row].id, delta)
+        instance_id = self._selected_preview_layer_instance_id or ""
+        model = self.preview_layer_model
+        record = model.layer_record(instance_id) if model is not None else None
+        if record is not None:
+            self._move_preview_layer(record.layer_id, delta)
 
     def on_top_preview_overlay_layer(self):
-        row = self.window.page_preview.table_overlay_layers.currentRow()
-        layers = self._preview_sorted_layers()
-        if 0 <= row < len(layers):
-            self._top_preview_layer(layers[row].id)
+        instance_id = self._selected_preview_layer_instance_id or ""
+        model = self.preview_layer_model
+        record = model.layer_record(instance_id) if model is not None else None
+        if record is not None:
+            self._top_preview_layer(record.layer_id)
 
     def _record_preview_view(self, x_data, y_data):
         try:
@@ -5735,8 +6288,20 @@ class MainWindowController:
                 self.window.page_preview.lbl_grid_value.setText("NaN")
             self.window.page_preview.lbl_engine_latency.setText(f"{(time.perf_counter() - start) * 1000.0:.1f} ms")
             time_text = self._preview_time_text(idx)
-            title_suffix = f"slice {idx + 1}" + (f" | {time_text}" if time_text else "")
-            self.window.page_preview.canvas_preview_title.setText(f"{self.window.page_preview.cmb_projection.currentText()}: {title_suffix}")
+            projection_name = self.window.page_preview.cmb_projection.currentText()
+            projection_title = (
+                "3D globe"
+                if projection_renderer(projection_name) == "matplotlib_3d"
+                else f"{projection_name} projection"
+            )
+            total = self.window.page_preview.slider_time_index.maximum() + 1
+            title_parts = [projection_title, f"{idx + 1} / {max(1, total)}"]
+            if time_text:
+                title_parts.append(time_text)
+            title_parts.append(str(active_var_name))
+            self.window.page_preview.canvas_preview_title.setText(
+                " | ".join(title_parts)
+            )
             self._apply_preview_main_splitter()
             self.on_log(f"[PREVIEW] Rendered {Path(path).name} [{active_var_name}] idx={idx}", "stdout")
         except Exception as exc:

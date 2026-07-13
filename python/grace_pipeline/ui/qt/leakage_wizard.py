@@ -235,6 +235,7 @@ def _make_method_card(title: str, desc: str, radio: QRadioButton) -> QFrame:
     radio.setFont(title_font)
     desc_label = QLabel(desc)
     desc_label.setObjectName("PageSubtitle")
+    desc_label.setProperty("keepCompact", True)
     desc_label.setWordWrap(True)
     layout.addWidget(radio)
     layout.addWidget(desc_label)
@@ -477,6 +478,7 @@ def install_leakage_wizard(window) -> None:
     card_method.body.addWidget(methods_row)
     page.lbl_lrc_method_hint = QLabel("")
     page.lbl_lrc_method_hint.setObjectName("PageSubtitle")
+    page.lbl_lrc_method_hint.setProperty("keepCompact", True)
     page.lbl_lrc_method_hint.setWordWrap(True)
     card_method.body.addWidget(page.lbl_lrc_method_hint)
 

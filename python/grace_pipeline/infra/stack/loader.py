@@ -4,11 +4,67 @@ import json
 from pathlib import Path
 
 import numpy as np
-from grace_pipeline.infra.io.nc_utils import var_attr_lower
 
 
 _NC_EXTS = (".nc", ".nc4", ".cdf", ".hdf", ".h5", ".hdf5", ".he5")
 _H5_EXTS = (".h5", ".hdf5", ".hdf", ".he5")
+
+
+def _attribute_case_insensitive(obj, key, default=None):
+    """Read a NetCDF/HDF5 attribute without assuming its letter case."""
+
+    try:
+        return getattr(obj, key)
+    except Exception:
+        pass
+    try:
+        for name in obj.ncattrs():
+            if str(name).lower() == str(key).lower():
+                return obj.getncattr(name)
+    except Exception:
+        pass
+    try:
+        for name in obj.attrs.keys():
+            if str(name).lower() == str(key).lower():
+                return obj.attrs[name]
+    except Exception:
+        pass
+    return default
+
+
+def _attribute_text_lower(obj, key):
+    value = _attribute_case_insensitive(obj, key, "")
+    if isinstance(value, (bytes, bytearray, np.bytes_)):
+        value = bytes(value).decode("utf-8", errors="replace")
+    return str(value or "").lower()
+
+
+def _decode_text(value):
+    if isinstance(value, (bytes, bytearray, np.bytes_)):
+        return bytes(value).decode("utf-8", errors="replace").strip("\x00")
+    if isinstance(value, np.ndarray):
+        if value.size == 0:
+            return ""
+        if value.size == 1:
+            return _decode_text(value.reshape(-1)[0])
+        if value.dtype.kind in {"U", "S"}:
+            parts = [_decode_text(item) for item in value.reshape(-1)]
+            if all(len(part) <= 1 for part in parts):
+                return "".join(parts)
+    if isinstance(value, np.generic):
+        return _decode_text(value.item())
+    return str(value or "").strip("\x00")
+
+
+def _json_metadata(value):
+    text = _decode_text(value).strip()
+    if not text:
+        return {}
+    try:
+        parsed = json.loads(text)
+    except Exception:
+        return {}
+    return dict(parsed) if isinstance(parsed, dict) else {}
 
 
 def _time_length(values):
@@ -94,6 +150,13 @@ def _decode_matlab_h5_cellstr(handle, values):
     arr = np.asarray(values)
     if arr.size == 0:
         return arr
+    if arr.dtype.kind == "S":
+        return np.vectorize(
+            lambda item: bytes(item).decode("utf-8", errors="replace").strip("\x00"),
+            otypes=[object],
+        )(arr)
+    if arr.dtype.kind == "U":
+        return arr.astype(object)
     if arr.dtype.kind != "O":
         return arr
 
@@ -101,6 +164,12 @@ def _decode_matlab_h5_cellstr(handle, values):
     flat = arr.reshape(-1)
     for item in flat:
         text = ""
+        if isinstance(item, (bytes, bytearray, np.bytes_)):
+            decoded.append(bytes(item).decode("utf-8", errors="replace").strip("\x00"))
+            continue
+        if isinstance(item, str):
+            decoded.append(item.strip("\x00"))
+            continue
         try:
             if item:
                 target = handle[item]
@@ -170,7 +239,7 @@ def load_stack_any(path, active_var=None, selection_meta=None, select_nc_variabl
         import scipy.io as sio
         known_mat_keys = [
             "ewh", "tws", "grid", "data", "lon", "long", "lat",
-            "t", "tag", "ym", "meta", "P",
+            "t", "tag", "ym", "meta", "meta_json", "P",
         ]
 
         def _load_mat(fast_only: bool):
@@ -341,6 +410,7 @@ def load_stack_any(path, active_var=None, selection_meta=None, select_nc_variabl
 
         if ewh is not None and lon is not None and lat is not None:
             meta = {}
+            meta.update(_json_metadata(mat.get("meta_json")))
             try:
                 if "tag" in mat:
                     tag_v = mat.get("tag")
@@ -453,7 +523,15 @@ def load_stack_any(path, active_var=None, selection_meta=None, select_nc_variabl
                 else:
                     t_arr = None
                 ewh_arr = _normalize_stack_to_lon_lat_time(ewh_arr, lon_arr=lon_arr, lat_arr=lat_arr, t_arr=t_arr)
-                return ewh_arr, lon_arr, lat_arr, t_arr, {"active_var": "ewh", "data_var_names": ["ewh"]}
+                meta = _json_metadata(_attribute_case_insensitive(f, "meta_json", ""))
+                data_unit = _attribute_case_insensitive(ewh, "units", None)
+                if data_unit is None:
+                    data_unit = _attribute_case_insensitive(ewh, "unit", None)
+                if data_unit is not None and str(data_unit).strip():
+                    meta.setdefault("units", _decode_text(data_unit).strip())
+                meta.setdefault("active_var", "ewh")
+                meta.setdefault("data_var_names", ["ewh"])
+                return ewh_arr, lon_arr, lat_arr, t_arr, meta
         except Exception as e:
             # Preserve error context for v7.3 MAT files.
             if path.lower().endswith(".mat"):
@@ -475,10 +553,10 @@ def load_stack_any(path, active_var=None, selection_meta=None, select_nc_variabl
 
                 def _score_coord(v, kind):
                     name = v.name.lower()
-                    std = var_attr_lower(v, "standard_name")
-                    long = var_attr_lower(v, "long_name")
-                    units = var_attr_lower(v, "units")
-                    axis = var_attr_lower(v, "axis")
+                    std = _attribute_text_lower(v, "standard_name")
+                    long = _attribute_text_lower(v, "long_name")
+                    units = _attribute_text_lower(v, "units")
+                    axis = _attribute_text_lower(v, "axis")
                     score = 0
                     if kind == "lon":
                         if name in ("lon", "longitude", "x") or name.endswith(("_lon", "_longitude")):
@@ -556,8 +634,8 @@ def load_stack_any(path, active_var=None, selection_meta=None, select_nc_variabl
 
                 def _data_priority(name, var):
                     low = str(name).lower()
-                    long = var_attr_lower(var, "long_name")
-                    units = var_attr_lower(var, "units")
+                    long = _attribute_text_lower(var, "long_name")
+                    units = _attribute_text_lower(var, "units")
                     score = 0
                     preferred = (
                         "tws", "ewh", "water", "precip", "rain", "snow",
@@ -582,9 +660,9 @@ def load_stack_any(path, active_var=None, selection_meta=None, select_nc_variabl
 
                 def _is_data_candidate(name, var):
                     low = str(name).lower()
-                    std = var_attr_lower(var, "standard_name")
-                    long = var_attr_lower(var, "long_name")
-                    units = var_attr_lower(var, "units")
+                    std = _attribute_text_lower(var, "standard_name")
+                    long = _attribute_text_lower(var, "long_name")
+                    units = _attribute_text_lower(var, "units")
                     dims = tuple(getattr(var, "dimensions", ()))
                     if var.ndim < 2:
                         return False
@@ -691,11 +769,11 @@ def load_stack_any(path, active_var=None, selection_meta=None, select_nc_variabl
                 if time_key and time_key in ds.variables:
                     try:
                         t_var = ds.variables[time_key]
-                        t_units = getattr(t_var, "units", None)
-                        t_cal = getattr(t_var, "calendar", None)
+                        t_units = _attribute_case_insensitive(t_var, "units", None)
+                        t_cal = _attribute_case_insensitive(t_var, "calendar", None)
                         t_arr = _read_var(t_var).squeeze()
                         try:
-                            b_name = getattr(t_var, "bounds", None)
+                            b_name = _attribute_case_insensitive(t_var, "bounds", None)
                             if b_name and b_name in ds.variables:
                                 tb = _read_var(ds.variables[b_name])
                                 tb = np.asarray(tb, dtype=float)
@@ -872,6 +950,9 @@ def load_stack_any(path, active_var=None, selection_meta=None, select_nc_variabl
                     raise ValueError("No data variables loaded from NetCDF.")
 
                 active_var = next(iter(data_vars.keys()))
+                active_units = _attribute_case_insensitive(
+                    ds.variables[active_var], "units", None
+                )
                 meta = {
                     "data_var_names": list(dict.fromkeys(selected_data_keys or data_candidates or available_data_keys)),
                     "active_var": active_var,
@@ -881,6 +962,8 @@ def load_stack_any(path, active_var=None, selection_meta=None, select_nc_variabl
                     "time_units": t_units,
                     "time_calendar": t_cal,
                 }
+                if active_units is not None and str(active_units).strip():
+                    meta["units"] = _decode_text(active_units).strip()
                 return data_vars[active_var], lon_1d, lat_1d, t_arr, meta
             finally:
                 try:
@@ -892,9 +975,33 @@ def load_stack_any(path, active_var=None, selection_meta=None, select_nc_variabl
 
     # Try plain text (lon lat val)
     if path.lower().endswith(".txt"):
-        data = np.genfromtxt(path, comments='#', delimiter=None)
-        if data.shape[1] < 3:
+        delimiter = None
+        with open(path, "r", encoding="utf-8-sig", errors="replace") as handle:
+            for raw_line in handle:
+                sample = raw_line.strip()
+                if not sample or sample.startswith("#"):
+                    continue
+                if "," in sample:
+                    delimiter = ","
+                elif "\t" in sample:
+                    delimiter = "\t"
+                break
+        data = np.genfromtxt(
+            path,
+            comments="#",
+            delimiter=delimiter,
+            dtype=float,
+            encoding="utf-8-sig",
+            invalid_raise=False,
+        )
+        data = np.asarray(data, dtype=float)
+        if data.ndim == 1:
+            data = data.reshape(1, -1)
+        if data.ndim != 2 or data.shape[1] < 3:
             raise ValueError("TXT must have at least 3 columns: lon lat val")
+        data = data[np.all(np.isfinite(data[:, :3]), axis=1)]
+        if data.size == 0:
+            raise ValueError("TXT contains no finite lon/lat/value rows")
         lon_vals = np.unique(data[:, 0])
         lat_vals = np.unique(data[:, 1])
         grid = np.full((len(lon_vals), len(lat_vals)), np.nan, dtype=float)
@@ -926,7 +1033,19 @@ def load_stack_slice_any(path, time_index=0, active_var=None, selection_meta=Non
             from grace_pipeline.io.stack import load_stack_slice_hdf5
 
             grid, lon_arr, lat_arr, t_val = load_stack_slice_hdf5(str(h5_sidecar), time_index)
-            frame_meta = dict(meta)
+            frame_meta = {}
+            try:
+                import h5py
+
+                with h5py.File(h5_sidecar, "r") as handle:
+                    frame_meta.update(
+                        _json_metadata(
+                            _attribute_case_insensitive(handle, "meta_json", "")
+                        )
+                    )
+            except Exception:
+                pass
+            frame_meta.update(meta)
             frame_meta["active_var"] = "ewh"
             frame_meta["source"] = "hdf5_sidecar"
             return np.asarray(grid), lon_arr, lat_arr, t_val, frame_meta
@@ -971,6 +1090,17 @@ def load_stack_slice_any(path, time_index=0, active_var=None, selection_meta=Non
                     t_val = t_flat[idx_t]
                 frame_meta = dict(meta)
                 frame_meta["active_var"] = data_key
+                data_units = _attribute_case_insensitive(data_var, "units", None)
+                if data_units is not None and str(data_units).strip():
+                    frame_meta["units"] = _decode_text(data_units).strip()
+                if time_key in ds.variables:
+                    time_var = ds.variables[time_key]
+                    frame_meta["time_units"] = _attribute_case_insensitive(
+                        time_var, "units", frame_meta.get("time_units")
+                    )
+                    frame_meta["time_calendar"] = _attribute_case_insensitive(
+                        time_var, "calendar", frame_meta.get("time_calendar")
+                    )
                 return np.asarray(data), lon_arr, lat_arr, t_val, frame_meta
             finally:
                 ds.close()
@@ -1035,8 +1165,16 @@ def load_stack_slice_any(path, time_index=0, active_var=None, selection_meta=Non
                     idx_t = _clamp_time_index(idx, np.asarray(t_arr).size)
                     t_flat = np.asarray(t_arr).reshape(-1)
                     t_val = t_flat[idx_t]
-                frame_meta = dict(meta)
+                frame_meta = _json_metadata(
+                    _attribute_case_insensitive(f, "meta_json", "")
+                )
+                frame_meta.update(meta)
                 frame_meta["active_var"] = data_key
+                data_units = _attribute_case_insensitive(data_var, "units", None)
+                if data_units is None:
+                    data_units = _attribute_case_insensitive(data_var, "unit", None)
+                if data_units is not None and str(data_units).strip():
+                    frame_meta.setdefault("units", _decode_text(data_units).strip())
                 return np.asarray(data), lon_arr, lat_arr, t_val, frame_meta
         except Exception:
             pass

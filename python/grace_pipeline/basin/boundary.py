@@ -4,6 +4,7 @@ Basin boundary reading and processing.
 
 import os
 import contextlib
+import csv
 import math
 import re
 from collections import OrderedDict
@@ -290,7 +291,11 @@ def read_bln(file_path: str) -> List[BasinBoundary]:
         if not line or line.startswith("#"):
             i += 1
             continue
-        parts = line.replace(",", " ").split()
+        if "," in line:
+            parts = next(csv.reader([line], skipinitialspace=True))
+            parts = [part.strip() for part in parts]
+        else:
+            parts = line.split(maxsplit=1)
         if len(parts) < 1 or not _is_number(parts[0]):
             # Not a BLN header -> fallback to txt poly format
             return read_txt_poly(file_path)
@@ -299,9 +304,11 @@ def read_bln(file_path: str) -> List[BasinBoundary]:
         except Exception:
             return read_txt_poly(file_path)
         name = f"poly_{count}"
-        if len(parts) >= 2 and parts[1]:
-            if not _is_number(parts[1]):
-                name = parts[1].strip().strip("\"'") or name
+        for candidate in reversed(parts[1:]):
+            candidate = candidate.strip().strip("\"'")
+            if candidate and not _is_number(candidate):
+                name = candidate
+                break
         coords = []
         i += 1
         for _ in range(npts):

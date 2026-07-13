@@ -88,6 +88,40 @@ TRANSLATIONS = {
         "Basin Workflow": "流域工作流",
         "Preview": "预览",
         "Preview & Analysis": "预览与分析",
+        "Data & Time": "数据与时间",
+        "Layers at the top draw above layers below. Right-click a layer for management and properties.": "上方图层绘制在下方图层之上。右键单击图层可进行管理和属性设置。",
+        "Map Decorations": "地图装饰",
+        "Vector Overlays": "矢量叠加层",
+        "Data Layers": "数据图层",
+        "Legends, color scales, graticules, annotations, and map furniture": "图例、色标、经纬网、标注和地图整饰",
+        "Coastlines, boundaries, points, lines, and polygons": "海岸线、边界、点、线和面",
+        "GRACE grids and other raster data": "GRACE 格网和其他栅格数据",
+        "Preview layers": "预览图层",
+        "Map layers grouped by type. Layers nearer the top draw above layers below them.": "按类型分组的地图图层；越靠上的图层绘制层级越高。",
+        "layer(s)": "个图层",
+        "layers": "个图层",
+        "layer": "图层",
+        "group": "分组",
+        "Layer Management": "图层管理",
+        "Layer Properties": "图层属性",
+        "Layer Name": "图层名称",
+        "Source": "数据源",
+        "Type & Status": "类型与状态",
+        "Opacity": "透明度",
+        "Value": "数值",
+        "Show layer": "显示图层",
+        "Rendering Variable": "渲染变量",
+        "Zoom to Layer": "缩放至图层",
+        "Rename": "重命名",
+        "Duplicate": "复制图层",
+        "Properties": "属性",
+        "Hidden": "隐藏",
+        "Built-in layer": "内置图层",
+        "Current variable": "当前变量",
+        "Auto variable": "自动变量",
+        "File layer": "文件图层",
+        "Line": "线",
+        "Imported raster data uses the current preview colormap, value range, and exact preview month.": "导入的栅格数据使用当前预览页的色带、值域和精确预览月份。",
         "Run Output": "运行输出",
         "Project overview, pipeline actions, and recent execution state.": "项目概览、流程操作与最近运行状态。",
         "Project overview, recent execution state, and resolved outputs.": "项目概览、最近运行状态和已解析输出。",
@@ -138,6 +172,10 @@ TRANSLATIONS = {
         "Preview Results": "预览结果",
         "Console": "控制台",
         "Log": "日志",
+        "Console & Log Management": "控制台与日志管理",
+        "Workflow Logs": "工作流日志",
+        "Data & I/O": "数据与输入输出",
+        "Warnings & Errors": "警告与错误",
         "Session Log": "会话日志",
         "Open Log": "打开日志",
         "Open Log Folder": "打开日志目录",
@@ -171,6 +209,24 @@ TRANSLATIONS = {
         "Start Download": "开始下载",
         "Re-authorize Earthdata": "重新授权 Earthdata",
         "Open Data Website": "打开数据网页",
+        "Official Sources": "官方数据源",
+        "Official Data Sources": "官方数据源",
+        "Open an official provider page": "打开官方数据提供方页面",
+        "Level-2 Spherical Harmonics": "Level-2 球谐系数",
+        "Mascon NetCDF": "Mascon NetCDF",
+        "Manage Earthdata Authorization": "管理 Earthdata 授权",
+        "Create an Earthdata Account": "创建 Earthdata 账户",
+        "Current provider: {provider}": "当前数据提供方：{provider}",
+        "Opened official data page: {source}.": "已打开官方数据页面：{source}。",
+        "Data provider": "数据提供方",
+        "Product": "产品",
+        "Month range": "月份范围",
+        "Save to": "保存到",
+        "Earthdata authorization": "Earthdata 授权",
+        "Not required": "不需要",
+        "Not configured": "未配置",
+        "Official source URL": "官方来源网址",
+        "Open Official Data Page": "打开官方数据页面",
         "Select Month": "选择年月",
         "Filter Path Configuration": "滤波路径配置",
         "Choose Folder...": "选择文件夹...",
@@ -186,6 +242,22 @@ TRANSLATIONS = {
         "first boundary feature": "第一个边界要素",
         "Earthdata Authorization": "Earthdata 授权",
         "Earthdata authorization is required or has expired.": "需要 Earthdata 授权，或现有授权已失效。",
+        "Earthdata authorization is required for this download.": "本次下载需要有效的 Earthdata 授权。",
+        "Current authorization": "当前授权",
+        "Local token store": "本地令牌存储",
+        "Legacy netrc file": "旧版 netrc 文件",
+        "Open NASA Earthdata in your browser, sign in, create a user token, and paste it below. The token is stored locally and is never written to the processing JSON configuration.": "请在浏览器中打开 NASA Earthdata，登录并创建用户令牌，然后粘贴到下方。令牌仅保存在本机，不会写入处理流程的 JSON 配置。",
+        "Open Earthdata Token Guide": "打开 Earthdata 令牌指南",
+        "A local label, for example: earthdata": "本地标签，例如：earthdata",
+        "Paste the Earthdata user token": "粘贴 Earthdata 用户令牌",
+        "Set this token as active": "将此令牌设为当前授权",
+        "Clear saved Earthdata tokens": "清除已保存的 Earthdata 令牌",
+        "Clear legacy .netrc Earthdata credentials": "清除旧版 .netrc Earthdata 凭据",
+        "Account label": "账户标签",
+        "User token": "用户令牌",
+        "Save Authorization": "保存授权",
+        "Earthdata authorization data was cleared from: {locations}.": "已从以下位置清除 Earthdata 授权数据：{locations}。",
+        "Earthdata authorization saved locally: {path}.": "Earthdata 授权已保存到本机：{path}。",
         "not required": "不需要",
         "Custom Range": "自定义范围",
         "PnMl": "PnMl",
@@ -521,7 +593,9 @@ TRANSLATIONS = {
         "Data: Mass Anomaly": "数据：质量异常",
         "Mass Anomaly Data": "质量异常数据",
         "Coastlines": "海岸线",
-        "Boundary / Grid Files": "导入图层",
+        "Boundary / Grid Files": "边界 / 格网文件",
+        "Data / Feature Files": "数据 / 要素文件",
+        "Boundary Overlays": "边界叠加层",
         "Basin Boundaries": "流域边界",
         "Grid Lines": "经纬网",
         "Graticule": "经纬网",
@@ -556,7 +630,10 @@ TRANSLATIONS = {
         "Uses the selected color scale and value range.": "使用当前色带和数值范围。",
         "River Networks": "河网",
         "Add": "添加",
-        "Import Layer": "导入图层",
+        "Import Data": "导入数据",
+        "Import Feature": "导入要素",
+        "Import Data / Feature": "导入数据 / 要素",
+        "Select data or feature file": "选择数据或要素文件",
         "Remove": "删除",
         "Delete": "删除",
         "Up": "上移",
@@ -583,6 +660,7 @@ TRANSLATIONS = {
         "Annotation": "标注",
         "Select boundary or grid file": "选择边界或网格文件",
         "Boundary / Grid Files (*.shp *.bln *.txt *.nc *.nc4 *.cdf *.h5 *.hdf5 *.mat);;All Files (*)": "边界/网格文件 (*.shp *.bln *.txt *.nc *.nc4 *.cdf *.h5 *.hdf5 *.mat);;所有文件 (*)",
+        "Data / Feature Files (*.shp *.bln *.txt *.nc *.nc4 *.cdf *.h5 *.hdf5 *.mat);;All Files (*)": "数据/要素文件 (*.shp *.bln *.txt *.nc *.nc4 *.cdf *.h5 *.hdf5 *.mat);;所有文件 (*)",
         "Render Preview": "渲染预览",
         "Export Figure": "导出图像",
         "Hide Controls": "隐藏控制",
@@ -847,6 +925,8 @@ LANGUAGE_SYSTEM_TERMS_ZH = {
     "Downloading data": "下载数据",
     "Download Data": "下载数据",
     "Set a download folder first.": "请先设置下载文件夹。",
+    "Set a valid start/end month before downloading files.": "请先设置有效的下载开始月份和结束月份。",
+    "Download date range is outside the configured processing range.": "下载月份范围超出当前配置的处理时间范围。",
     "Mascon NC downloads currently support CSR, JPL, and GSFC.": "Mascon NC 下载目前支持 CSR、JPL 和 GSFC。",
     "Mascon NC downloads support CSR, JPL, and GSFC; resolution must match the published product.": "Mascon NC 支持 CSR、JPL、GSFC；分辨率需与机构发布产品匹配。",
     "Download in progress": "正在下载",
@@ -869,6 +949,9 @@ LANGUAGE_SYSTEM_TERMS_ZH = {
     "1. Correction dataset": "1. 待校正数据",
     "Official scale/gain factor": "官方尺度/增益因子",
     "Official scale/gain factor grid": "官方尺度/增益因子网格",
+    "Apply an official scale/gain factor grid by location to the correction dataset.": "读取官方尺度/增益因子网格，并按格网位置应用于待校正数据。",
+    "Estimate a regional scale factor from a boundary and a reference model or synthetic field.": "基于区域边界与参考模型或合成场估计区域尺度因子。",
+    "Simulate leakage response from a boundary, filter method, Lmax, and reference field.": "基于区域边界、滤波方法、Lmax 和参考场模拟泄漏响应。",
     "Scale/Gain Factor Grid": "尺度/增益因子网格",
     "Forward modelling": "正演建模",
     "Forward-modeling": "正演建模",
@@ -883,6 +966,20 @@ LANGUAGE_SYSTEM_TERMS_ZH = {
     "Regional scale factor": "区域尺度因子",
     "3. Output and run": "3. 输出与运行",
     "Output files: corrected_stack, difference_stack, summary.json, diagnostics, and preview_manifest.json.": "输出文件：corrected_stack、difference_stack、summary.json、diagnostics 和 preview_manifest.json。",
+    "Use an official scale/gain grid to apply grid-wise amplitude restoration to the correction dataset.": "适用于已获得官方尺度/增益因子网格的情形。程序按格网位置对待校正数据进行幅值恢复。",
+    "Use a regional boundary and a reference model or synthetic field to estimate a scale factor for basin-scale analysis.": "适用于流域、湖泊等区域统计。程序基于区域边界及参考模型或合成场估计区域尺度因子。",
+    "Use a regional boundary, filter method, Lmax, and reference or trend field to simulate the leakage response before correction.": "适用于高级区域校正。程序基于区域边界、滤波方法、Lmax 及参考场或趋势场模拟滤波前后的泄漏响应。",
+    "Use Processing Setup": "沿用滤波处理设置",
+    "Gaussian filtering requires a smoothing radius.": "选择 Gaussian 时需设置平滑半径。",
+    "DDK filtering requires the DDK kernel type.": "选择 DDK 时需设置 DDK 类型。",
+    "Fan filtering uses the parameters from the processing setup.": "Fan 滤波参数沿用滤波处理页设置。",
+    "PnMm/P4M6 parameters are taken from the processing setup.": "PnMm/P4M6 参数沿用滤波处理页设置。",
+    "HSAF parameters are taken from the processing setup.": "HSAF 参数沿用滤波处理页设置。",
+    "The filter method follows the processing setup.": "滤波方法沿用滤波处理页设置。",
+    "The selected filter method uses the processing setup.": "所选滤波方法沿用滤波处理页设置。",
+    "Reference model stack; leave blank to use the synthetic-field workflow": "参考模型栈；留空时采用合成场方案",
+    "Reference field, model field, or trend field": "参考场、模型场或趋势场",
+    "After the run finishes, inspect the corrected result's spatial distribution and time series in Preview.": "运行完成后，可在预览页检查校正结果的空间分布和时间序列。",
 
     # Common status fragments that previously leaked across language modes.
     "Input loaded": "输入已读取",
@@ -913,8 +1010,196 @@ LANGUAGE_SYSTEM_PREFIX_ZH = {
     "Session Log: ": "会话日志：",
 }
 
+# Canonical scientific and GIS terminology used by Preview and the global
+# shell.  Keep one authoritative vocabulary here instead of allowing each
+# page to invent near-synonyms such as "stack", "time index/slice", or
+# "latency".  English aliases below normalize legacy construction-time text
+# before either language is rendered.
+ACADEMIC_PREVIEW_TERMS_ZH = {
+    # Mission and product terminology.  Product levels are proper names in
+    # GRACE/GRACE-FO documentation and therefore remain "Level-2" in Chinese.
+    "GRACE Level-2 Pipeline": "GRACE Level-2 数据处理流程",
+    "GRACE LEVEL-2 PIPELINE": "GRACE Level-2 数据处理流程",
+    "Level-2 Spherical Harmonics": "Level-2 球谐系数产品",
+    "GRACE Level-2 (JPL Release)": "GRACE Level-2（JPL 产品）",
+    "C30 (GRACE-FO only)": "C30（仅适用于 GRACE-FO）",
+    "Equivalent Water Height": "等效水高",
+    "Equivalent Water Height (EWH)": "等效水高（EWH）",
+    "Equivalent water height (EWH)": "等效水高（EWH）",
+    "Equivalent water height": "等效水高",
+    "equivalent-water-height": "等效水高",
+
+    # Preview information architecture and data/time controls.
+    "Preview & Analysis": "预览与分析",
+    "Inspect gridded time-series products, compare map projections, and manage overlay layers.": "查看格网时间序列产品、比较地图投影并管理叠加图层。",
+    "Data & Time": "数据与时间",
+    "Select a gridded MAT, NetCDF, or HDF5 dataset": "选择 MAT、NetCDF 或 HDF5 格网数据集",
+    "Read Dataset Metadata": "读取数据集元数据",
+    "Dataset not loaded.": "数据集尚未读取。",
+    "No dataset loaded": "未读取数据集",
+    "Dimensions": "维度",
+    "Time coverage": "时间范围",
+    "Please select a gridded dataset first.": "请先选择格网数据集。",
+    "Grid Data Stack Status": "格网数据栈状态",
+    "Data Read Status": "数据读取状态",
+    "Grid data stack is not loaded.": "格网数据栈尚未读取。",
+    "Please select a stack file first.": "请先选择数据栈文件。",
+    "Data Variable": "数据变量",
+    "Time Index": "时次索引",
+    "Time Slice": "时次",
+    "Month unavailable": "月份信息不可用",
+    "1 / 1 | Month unavailable": "1 / 1 | 月份信息不可用",
+    "Exact Month": "同月精确匹配",
+    "Nearest Month": "最近邻月份",
+    "Missing Month Fallback": "缺测月份处理",
+    "Single-slice layer treated as static.": "单时次图层按静态图层处理。",
+    "Layer contains no time slices.": "该图层不包含任何时次。",
+
+    # Projection and spatial-domain terminology follows common GIS usage.
+    "Map Projection": "地图投影",
+    "Map Projection Settings": "地图投影设置",
+    "Robinson projection | no dataset": "Robinson 投影 | 未读取数据集",
+    "Projection Parameters": "投影参数",
+    "Central longitude": "中央经线",
+    "Central latitude": "中心纬度",
+    "Standard parallels": "标准纬线",
+    "Lat 1": "纬线 1",
+    "Lat 2": "纬线 2",
+    "Extent": "显示范围",
+    "Azimuth": "方位角",
+    "Elevation": "仰角",
+    "Zoom": "缩放比例",
+    "Use Detected Extent": "采用检测到的空间范围",
+    "Use Data Extent": "自动采用数据覆盖范围",
+    "Spatial Extent": "空间范围",
+    "Spatial Extent & Graticule": "空间范围与经纬网",
+    "Enable Spatial Extent & Graticule": "启用空间范围与经纬网设置",
+    "3D Globe: use mouse drag to rotate and wheel or Zoom to scale.": "3D 地球：拖动鼠标旋转，滚轮或“缩放”控制视图比例。",
+
+    # Layer-tree terminology mirrors ArcGIS/QGIS conventions.
+    "Layers higher in the list are rendered above lower layers. Right-click a layer to manage it or edit its properties.": "图层列表越靠上，绘制层级越高。右键单击图层可进行管理或编辑属性。",
+    "Map Decorations": "地图整饰",
+    "Vector Overlays": "矢量叠加图层",
+    "Data Layers": "栅格数据图层",
+    "Legends, color scales, graticules, annotations, and map furniture": "图例、色标、经纬网、标注与其他地图整饰要素",
+    "Coastlines, boundaries, points, lines, and polygons": "海岸线、边界以及点、线、面矢量要素",
+    "GRACE/GRACE-FO gridded products and other raster datasets": "GRACE/GRACE-FO 格网产品及其他栅格数据集",
+    "Map layers are grouped by type; layers higher in the list are rendered above lower layers.": "地图图层按类型分组；列表越靠上，绘制层级越高。",
+    "Mass Anomaly Raster": "质量变化栅格",
+    "Current variable": "当前绘图变量",
+    "Auto variable": "自动选择变量",
+    "Raster Data / Vector Features": "栅格数据 / 矢量要素",
+    "Import Raster / Vector Layer": "导入栅格 / 矢量图层",
+    "Select a raster dataset or vector feature file": "选择栅格数据集或矢量要素文件",
+    "Raster / Vector Files (*.shp *.bln *.txt *.nc *.nc4 *.cdf *.h5 *.hdf5 *.mat);;All Files (*)": "栅格/矢量文件 (*.shp *.bln *.txt *.nc *.nc4 *.cdf *.h5 *.hdf5 *.mat);;所有文件 (*)",
+    "Layer Type": "图层类型",
+    "Decorator": "地图整饰",
+    "Coastline": "海岸线",
+    "Shapefile": "Shapefile",
+    "Colorbar": "色标",
+    "Move to top": "移至顶层",
+    "Imported raster layers use the Preview page's current colormap and display range and render only the exact selected month.": "导入的栅格图层沿用当前预览的色带与显示值域，并仅渲染与所选时次完全同月的数据。",
+
+    # Symbology, map readout, and publication export.
+    "Color Scale": "色标",
+    "Color Scale Settings": "色标设置",
+    "Color Bar": "色标",
+    "Show Color Bar": "显示色标",
+    "Uses the selected color scale and value range.": "使用所选色带与显示值域。",
+    "The layer uses the current preview colormap and value range.": "该图层采用当前预览的色带与显示值域。",
+    "Map Status": "地图状态",
+    "Cursor Position": "光标位置",
+    "Grid Value": "格网值",
+    "Render Time": "渲染耗时",
+    "Render the selected month and visible layers on the map canvas.": "在地图画布中渲染所选月份及所有可见图层。",
+    "Export the current map using publication-quality settings.": "使用出版级参数导出当前地图图件。",
+    "Preview Export": "预览图件导出",
+    "Export Figure": "导出图像",
+    "Output file": "输出文件",
+    "Format": "文件格式",
+    "Canvas size": "画布尺寸",
+    "No rendered figure is available. Render Preview first.": "当前无可导出的地图图件。请先渲染预览。",
+    "Robinson Projection: June 2018": "Robinson 投影：2018 年 6 月",
+
+    # Layer state terms shown in tooltips and accessibility descriptions.
+    "Loading": "正在读取",
+    "Exact": "精确同月匹配",
+    "Nearest": "最近邻月份匹配",
+    "Positional-Unverified": "按位置匹配（未经月份核验）",
+    "Static": "静态",
+    "Unavailable": "不可用",
+    "Unmatched": "月份不匹配",
+    "Skipped": "已跳过",
+    "Unsupported": "不支持",
+    "Warning": "警告",
+}
+
+ACADEMIC_PREVIEW_PREFIX_ZH = {
+    "Index: ": "时次：",
+    "Stack Status: ": "格网数据栈状态：",
+    "Month match: ": "月份匹配：",
+}
+
+# Construction-time and older enhancement hooks still emit several retired
+# labels.  Normalize them to the approved English source before translation so
+# language switching removes mixed or ambiguous terminology without changing
+# persisted data values.
+CANONICAL_ALIASES = {
+    "GRACE 二级处理流程": "GRACE Level-2 Pipeline",
+    "GRACE Level-2 数据处理流程": "GRACE Level-2 Pipeline",
+    "等效水高（EWH）": "Equivalent water height (EWH)",
+    "Inspect stacked products, switch projections, and manage map overlays.": "Inspect gridded time-series products, compare map projections, and manage overlay layers.",
+    "Load Stack Info": "Read Dataset Metadata",
+    "Read Data": "Read Dataset Metadata",
+    "Read Dataset": "Read Dataset Metadata",
+    "Read Grid Metadata": "Read Dataset Metadata",
+    "读取栈信息": "Read Dataset Metadata",
+    "读取数据": "Read Dataset Metadata",
+    "Stack Status": "Grid Data Stack Status",
+    "栈状态": "Grid Data Stack Status",
+    "Stack not loaded.": "Dataset not loaded.",
+    "Grid data stack is not loaded.": "Dataset not loaded.",
+    "栈未读取。": "Dataset not loaded.",
+    "数据栈未读取。": "Dataset not loaded.",
+    "Data Status": "Data Read Status",
+    "数据状态": "Data Read Status",
+    "时间索引/切片": "Time Slice",
+    "时间切片": "Time Slice",
+    "Projection": "Map Projection",
+    "投影方式": "Map Projection",
+    "Projection Settings": "Map Projection Settings",
+    "中心经度": "Central longitude",
+    "俯仰角": "Elevation",
+    "缩放": "Zoom",
+    "Spatial Grid Configuration": "Spatial Extent & Graticule",
+    "空间网格配置": "Spatial Extent & Graticule",
+    "Enable Spatial Grid": "Enable Spatial Extent & Graticule",
+    "启用空间网格配置": "Enable Spatial Extent & Graticule",
+    "使用数据范围": "Use Data Extent",
+    "色标尺": "Color Scale",
+    "色带设置": "Color Scale Settings",
+    "Layers at the top draw above layers below. Right-click a layer for management and properties.": "Layers higher in the list are rendered above lower layers. Right-click a layer to manage it or edit its properties.",
+    "Map layers grouped by type. Layers nearer the top draw above layers below them.": "Map layers are grouped by type; layers higher in the list are rendered above lower layers.",
+    "GRACE grids and other raster data": "GRACE/GRACE-FO gridded products and other raster datasets",
+    "Mass Anomaly Data": "Mass Anomaly Raster",
+    "Data: Mass Anomaly": "Mass Anomaly Raster",
+    "Data / Feature Files": "Raster Data / Vector Features",
+    "Import Data / Feature": "Import Raster / Vector Layer",
+    "Select data or feature file": "Select a raster dataset or vector feature file",
+    "Data / Feature Files (*.shp *.bln *.txt *.nc *.nc4 *.cdf *.h5 *.hdf5 *.mat);;All Files (*)": "Raster / Vector Files (*.shp *.bln *.txt *.nc *.nc4 *.cdf *.h5 *.hdf5 *.mat);;All Files (*)",
+    "Imported raster data uses the current preview colormap, value range, and exact preview month.": "Imported raster layers use the Preview page's current colormap and display range and render only the exact selected month.",
+    "Cursor": "Cursor Position",
+    "光标": "Cursor Position",
+    "Value": "Grid Value",
+    "数值": "Grid Value",
+    "Latency": "Render Time",
+    "延迟": "Render Time",
+}
+
 TRANSLATIONS.setdefault("zh", {}).update(LANGUAGE_SYSTEM_TERMS_ZH)
+TRANSLATIONS.setdefault("zh", {}).update(ACADEMIC_PREVIEW_TERMS_ZH)
 PREFIX_TRANSLATIONS.setdefault("zh", {}).update(LANGUAGE_SYSTEM_PREFIX_ZH)
+PREFIX_TRANSLATIONS.setdefault("zh", {}).update(ACADEMIC_PREVIEW_PREFIX_ZH)
 
 
 def canonical_text(text: str) -> str:
@@ -922,6 +1207,12 @@ def canonical_text(text: str) -> str:
 
     value = str(text or "")
     if not value:
+        return value
+    seen_aliases: set[str] = set()
+    while value in CANONICAL_ALIASES and value not in seen_aliases:
+        seen_aliases.add(value)
+        value = CANONICAL_ALIASES[value]
+    if any(value in table for table in TRANSLATIONS.values()):
         return value
     reverse = getattr(canonical_text, "_reverse", None)
     if reverse is None:
@@ -975,7 +1266,26 @@ def canonical_text(text: str) -> str:
 
 
 def translate_text(text: str, language: str = "en") -> str:
-    value = canonical_text(str(text or ""))
+    raw_value = str(text or "")
+    dataset_summary = re.match(
+        r"^(?:Dimensions:|维度[：:])\s*(.+?)(?:\s*\|\s*(?:Time coverage:|时间范围[：:])\s*([^|]+))?"
+        r"(\s*\|\s*[0-9.]+\s*(?:KB|MB|GB))?$",
+        raw_value,
+    )
+    if dataset_summary:
+        dimensions, coverage, file_size = dataset_summary.groups()
+        if language == "zh":
+            summary = f"维度：{dimensions.strip()}"
+            if coverage:
+                summary += f" | 时间范围：{coverage.strip()}"
+        else:
+            summary = f"Dimensions: {dimensions.strip()}"
+            if coverage:
+                summary += f" | Time coverage: {coverage.strip()}"
+        if file_size:
+            summary += f" | {file_size.rsplit('|', 1)[-1].strip()}"
+        return summary
+    value = canonical_text(raw_value)
     if not value or language == "en":
         return value
     podaac_login = re.match(r"^([A-Z0-9_.-]+) GSM uses PO\.DAAC; Earthdata login: (.+)\.$", value)
@@ -1016,7 +1326,8 @@ def translate_text(text: str, language: str = "en") -> str:
         return f"\u9884\u89c8\u76ee\u6807\uff1a{preview_target_simple.group(1)}\u3002"
     preview_basin = re.match(r"^Preview basin: (.+)$", value)
     if language == "zh" and preview_basin:
-        return f"\u9884\u89c8\u6d41\u57df\uff1a{preview_basin.group(1)}"
+        basin_name = translate_text(preview_basin.group(1), language)
+        return f"\u9884\u89c8\u6d41\u57df\uff1a{basin_name}"
     time_slice = re.match(r"^Time slice: (\d+) / (\d+)(?: \| (.+))?$", value)
     if language == "zh" and time_slice:
         idx, total, label = time_slice.groups()
@@ -1037,6 +1348,38 @@ def translate_text(text: str, language: str = "en") -> str:
     boundary_loaded = re.match(r"^Boundary loaded: (\d+) feature\(s\)$", value)
     if language == "zh" and boundary_loaded:
         return f"\u8fb9\u754c\u5df2\u8bfb\u53d6\uff1a{boundary_loaded.group(1)} \u4e2a\u8981\u7d20"
+    layer_month_unmatched = re.match(
+        r"^No layer month is within (\d+) month\(s\) of (\d{4}-\d{2}); "
+        r"nearest is ([^ ]+) \(([^ ]+) month\(s\)\)\.$",
+        value,
+    )
+    if language == "zh" and layer_month_unmatched:
+        tolerance, target, nearest, distance = layer_month_unmatched.groups()
+        return (
+            f"图层中没有与目标月份 {target} 相差不超过 {tolerance} 个月的数据；"
+            f"最近月份为 {nearest}（相差 {distance} 个月）。"
+        )
+    positional_slice = re.match(
+        r"^Using in-range positional slice (\d+)/(\d+); "
+        r"(target month unavailable|layer time metadata is not interpretable)\.$",
+        value,
+    )
+    if language == "zh" and positional_slice:
+        index, total, reason = positional_slice.groups()
+        reason_zh = (
+            "目标月份不可用"
+            if reason == "target month unavailable"
+            else "图层时间元数据无法解析"
+        )
+        return f"{reason_zh}；按位置使用第 {index}/{total} 个时次（未经月份核验）。"
+    positional_outside = re.match(
+        r"^Requested positional slice (\d+) is outside the layer's 1\.\.(\d+) "
+        r"range; the index was not clamped\.$",
+        value,
+    )
+    if language == "zh" and positional_outside:
+        index, total = positional_outside.groups()
+        return f"请求的第 {index} 个时次超出图层的 1..{total} 范围；未将索引强制调整到末时次。"
     table = TRANSLATIONS.get(language, {})
     if value in table:
         return table[value]

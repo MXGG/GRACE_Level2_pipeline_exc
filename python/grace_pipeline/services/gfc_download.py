@@ -52,7 +52,7 @@ LOW_DEGREE_URLS = {
     "DEGREE1_JPL": "https://archive.podaac.earthdata.nasa.gov/podaac-ops-cumulus-docs/gracefo/open/docs/TN-13_GEOC_JPL_RL0603.txt",
     "DEGREE1_GFZ": "https://archive.podaac.earthdata.nasa.gov/podaac-ops-cumulus-docs/gracefo/open/docs/TN-13_GEOC_GFZ_RL0603.txt",
 }
-EARTHDATA_TOKEN_URL = "https://urs.earthdata.nasa.gov/users/user_tokens"
+EARTHDATA_TOKEN_URL = "https://urs.earthdata.nasa.gov/documentation/for_users/user_token"
 EARTHDATA_TOKEN_STORE = Path.home() / ".grace_pipeline_earthdata_tokens.json"
 
 ICGEM_BASE_URL = "https://icgem.gfz-potsdam.de"

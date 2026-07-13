@@ -27,16 +27,13 @@ from PySide6.QtWidgets import (
 from grace_pipeline.infra.config import get_root_dir
 from grace_pipeline.ui.qt.qt_safe import is_deleted_qt_object_error, qt_object_is_alive
 from grace_pipeline.ui.plotting.boundaries import plot_line, read_boundary_file, split_dateline
-from grace_pipeline.ui.plotting.overlays import draw_coastlines
 from grace_pipeline.ui.plotting.projections import (
     apply_proj_scale,
     get_conic_parallels,
     get_proj_center,
-    infer_plot_lon_mode,
     normalize_lon_for_plot,
     parse_float,
     scale_projection,
-    split_plot_lon_segments,
     wrap_delta_lon,
 )
 from grace_pipeline.ui.qt.projection_registry import (
@@ -50,6 +47,12 @@ from grace_pipeline.ui.qt.projection_registry import (
     projection_renderer,
     projection_spec,
     visible_projection_params,
+)
+from grace_pipeline.ui.qt.preview_science import (
+    open_shapefile_reader,
+    unit_from_metadata,
+    value_label,
+    variable_unit_from_file,
 )
 
 ROOT_DIR = get_root_dir().resolve()
@@ -194,17 +197,7 @@ def _handle_cpt_combo(controller) -> bool:
 
 
 def _unit_from_meta(meta: dict | None, var_name: str) -> str:
-    meta = meta or {}
-    for key in ("units", "unit", "data_units", "ewh_unit", "value_unit"):
-        value = meta.get(key)
-        if value:
-            return str(value)
-    var_units = meta.get("var_units") or meta.get("variable_units")
-    if isinstance(var_units, dict):
-        value = var_units.get(var_name) or var_units.get(str(var_name).lower())
-        if value:
-            return str(value)
-    return "mm"
+    return unit_from_metadata(meta, var_name)
 
 
 def _current_unit(controller) -> str:
@@ -212,31 +205,37 @@ def _current_unit(controller) -> str:
     var_name = page.cmb_data_var.currentText().strip() or "ewh"
     meta = {}
     with contextlib.suppress(Exception):
+        frame = getattr(controller, "_preview_current_frame", None) or {}
+        meta = dict(frame.get("meta", {}) or {})
+    with contextlib.suppress(Exception):
         info = controller.host._stack_info_cache or {}
-        if info.get("path") == page.edit_dataset_source.text().strip():
+        if not meta and info.get("path") == page.edit_dataset_source.text().strip():
             meta = info.get("meta", {}) or {}
     if not meta:
         with contextlib.suppress(Exception):
             meta = (controller.host._stack_cache or {}).get("meta", {}) or {}
-    return _unit_from_meta(meta, var_name)
+    unit = _unit_from_meta(meta, var_name)
+    if unit:
+        return unit
+    return variable_unit_from_file(page.edit_dataset_source.text().strip(), var_name)
 
 
 def _apply_preview_labels(window) -> None:
     page = window.page_preview
     replacements = {
-        "Load Stack Info": _tr(window, "Read Data", "读取数据"),
-        "Read Dataset": _tr(window, "Read Data", "读取数据"),
-        "读取栈信息": "读取数据",
-        "Stack Status": _tr(window, "Data Status", "数据状态"),
-        "栈状态": "数据状态",
+        "Load Stack Info": _tr(window, "Read Dataset Metadata", "读取数据集元数据"),
+        "Read Dataset": _tr(window, "Read Dataset Metadata", "读取数据集元数据"),
+        "读取栈信息": "读取数据集元数据",
+        "Stack Status": _tr(window, "Data Read Status", "数据读取状态"),
+        "栈状态": "数据读取状态",
         "Dataset Source": _tr(window, "Data Source", "数据源"),
         "Data Source": _tr(window, "Data Source", "数据源"),
-        "Data Variable": _tr(window, "Plot Variable", "绘图变量"),
-        "Plot Variable": _tr(window, "Plot Variable", "绘图变量"),
-        "Time Index": _tr(window, "Time Slice", "时间索引/切片"),
-        "Time Slice": _tr(window, "Time Slice", "时间索引/切片"),
-        "Projection": _tr(window, "Projection", "投影方式"),
-        "Projection Settings": _tr(window, "Projection Settings", "投影设置"),
+        "Data Variable": _tr(window, "Data Variable", "数据变量"),
+        "Plot Variable": _tr(window, "Data Variable", "数据变量"),
+        "Time Index": _tr(window, "Time Slice", "时次"),
+        "Time Slice": _tr(window, "Time Slice", "时次"),
+        "Projection": _tr(window, "Map Projection", "地图投影"),
+        "Projection Settings": _tr(window, "Map Projection Settings", "地图投影设置"),
         "Projection Parameters": _tr(window, "Projection Parameters", "投影参数"),
         "Central longitude": _tr(window, "Central longitude", "中心经度"),
         "中心经度": _tr(window, "Central longitude", "中心经度"),
@@ -254,9 +253,15 @@ def _apply_preview_labels(window) -> None:
         "缩放": _tr(window, "Zoom", "缩放"),
         "Color Scale": _tr(window, "Color Scale Settings", "色带设置"),
         "色标尺": _tr(window, "Color Scale Settings", "色带设置"),
-        "Enable Spatial Grid": _tr(window, "Enable Spatial Grid", "启用空间网格配置"),
+        "Enable Spatial Grid": _tr(
+            window,
+            "Enable Spatial Extent & Graticule",
+            "启用空间范围与经纬网设置",
+        ),
         "Spatial Extent": _tr(window, "Spatial Extent", "空间范围"),
-        "Spatial Grid Configuration": _tr(window, "Spatial Grid Configuration", "空间网格配置"),
+        "Spatial Grid Configuration": _tr(
+            window, "Spatial Extent & Graticule", "空间范围与经纬网"
+        ),
         "Colormap": _tr(window, "Colormap", "色带"),
         "Minimum": _tr(window, "Minimum", "最小值"),
         "Maximum": _tr(window, "Maximum", "最大值"),
@@ -269,15 +274,15 @@ def _apply_preview_labels(window) -> None:
         "Lat Min": _tr(window, "Lat Min", "最小纬度"),
         "Lat Max": _tr(window, "Lat Max", "最大纬度"),
         "Render Preview": _tr(window, "Render Preview", "渲染预览"),
-        "Export Figure": _tr(window, "Export", "导出图像"),
+        "Export Figure": _tr(window, "Export Figure", "导出图像"),
         "Hide Controls": _tr(window, "Hide Controls", "隐藏控制"),
         "Hide Status": _tr(window, "Hide Status", "隐藏状态"),
         "Tools": _tr(window, "Tools", "工具"),
         "Map Status": _tr(window, "Map Status", "地图状态"),
         "Dataset": _tr(window, "Dataset", "数据集"),
-        "Cursor": _tr(window, "Cursor", "光标"),
-        "Value": _tr(window, "Value", "数值"),
-        "Latency": _tr(window, "Latency", "延迟"),
+        "Cursor": _tr(window, "Cursor Position", "光标位置"),
+        "Value": _tr(window, "Grid Value", "格网值"),
+        "Latency": _tr(window, "Render Time", "渲染耗时"),
     }
     for label in page.findChildren(QLabel):
         if not qt_object_is_alive(label):
@@ -293,17 +298,24 @@ def _apply_preview_labels(window) -> None:
                 if text in replacements:
                     widget.setText(replacements[text])
     with contextlib.suppress(Exception):
-        page.btn_load_stack.setText(_tr(window, "Read Data", "读取数据"))
+        page.btn_load_stack.setText(
+            _tr(window, "Read Dataset Metadata", "读取数据集元数据")
+        )
         page.btn_plot._tr_base_text = "Render Preview"
         page.btn_plot.setText(_tr(window, "Render Preview", "渲染预览"))
         if not page.btn_plot.text().strip():
             page.btn_plot.setText(_tr(window, "Render Preview", "渲染预览"))
-        page.btn_export_figure.setText(_tr(window, "Export", "导出图像"))
-        page.canvas_preview_title.setText("")
-        page.canvas_preview_title.setVisible(False)
+        page.btn_export_figure.setText(_tr(window, "Export Figure", "导出图像"))
     with contextlib.suppress(Exception):
-        if page.lbl_stack_info.text().strip() in {"Stack not loaded.", "栈未读取。", "未读取。"}:
-            page.lbl_stack_info.setText(_tr(window, "Not loaded", "未读取"))
+        if page.lbl_stack_info.text().strip() in {
+            "Stack not loaded.",
+            "Dataset not loaded.",
+            "栈未读取。",
+            "未读取。",
+        }:
+            page.lbl_stack_info.setText(
+                _tr(window, "Dataset not loaded.", "数据集尚未读取。")
+            )
     with contextlib.suppress(Exception):
         if "cm" in page.lbl_grid_value.text() and page.lbl_dataset.text().startswith("GRACE Level-2"):
             page.lbl_grid_value.setText("—")
@@ -551,50 +563,33 @@ def _draw_enhanced_coastlines(controller, *, proj, lon0=0.0, lat0=0.0, lat1=30.0
         return
     try:
         import os
-        import shapefile
-
         shp_path = coast_path
         if os.path.isdir(shp_path):
             for filename in os.listdir(shp_path):
                 if filename.lower().endswith(".shp"):
                     shp_path = os.path.join(shp_path, filename)
                     break
-        reader = shapefile.Reader(shp_path)
-        for shape in reader.shapes():
-            points = shape.points
-            parts = list(shape.parts) + [len(points)]
-            for i in range(len(parts) - 1):
-                seg = np.asarray(points[parts[i] : parts[i + 1]], dtype=float)
-                if seg.ndim != 2 or seg.shape[0] < 2:
-                    continue
-                lons = seg[:, 0]
-                lats = seg[:, 1]
-                for lons_seg, lats_seg in split_dateline(lons, lats, wrap_delta_lon, lon0=lon0):
-                    if proj == "PlateCarree":
-                        x = normalize_lon_for_plot(lons_seg)
-                        y = lats_seg
-                    else:
-                        x, y = _project(controller, proj, lons_seg, lats_seg, lon0=lon0, lat0=lat0, lat1=lat1, lat2=lat2)
-                        x = apply_proj_scale(x, getattr(controller, "_proj_scale", None), getattr(controller, "_proj_x0", None))
-                    _draw_segmented_line(ax, x, y, color="#263f4d", linewidth=0.36, alpha=0.88, zorder=9)
-    except Exception:
+        with open_shapefile_reader(shp_path) as reader:
+            for shape in reader.shapes():
+                points = shape.points
+                parts = list(shape.parts) + [len(points)]
+                for i in range(len(parts) - 1):
+                    seg = np.asarray(points[parts[i] : parts[i + 1]], dtype=float)
+                    if seg.ndim != 2 or seg.shape[0] < 2:
+                        continue
+                    lons = seg[:, 0]
+                    lats = seg[:, 1]
+                    for lons_seg, lats_seg in split_dateline(lons, lats, wrap_delta_lon, lon0=lon0):
+                        if proj == "PlateCarree":
+                            x = normalize_lon_for_plot(lons_seg)
+                            y = lats_seg
+                        else:
+                            x, y = _project(controller, proj, lons_seg, lats_seg, lon0=lon0, lat0=lat0, lat1=lat1, lat2=lat2)
+                            x = apply_proj_scale(x, getattr(controller, "_proj_scale", None), getattr(controller, "_proj_x0", None))
+                        _draw_segmented_line(ax, x, y, color="#263f4d", linewidth=0.36, alpha=0.88, zorder=9)
+    except Exception as exc:
         with contextlib.suppress(Exception):
-            draw_coastlines(
-                ax,
-                coast_path=coast_path,
-                proj=proj,
-                lon0=lon0,
-                lat0=lat0,
-                lat1=lat1,
-                lat2=lat2,
-                bbox=bbox,
-                normalize_lon_for_plot_cb=normalize_lon_for_plot,
-                split_dateline_cb=lambda lons, lats, lon0=0.0: split_dateline(lons, lats, wrap_delta_lon, lon0=lon0),
-                split_plot_lon_segments_cb=lambda lons, lats, plate_carree=False: split_plot_lon_segments(lons, lats, split_dateline, lon0=lon0, plate_carree=plate_carree),
-                apply_proj_scale_cb=lambda x: apply_proj_scale(x, getattr(controller, "_proj_scale", None), getattr(controller, "_proj_x0", None)),
-                plot_line_cb=plot_line,
-                projector_cb=controller._project,
-            )
+            controller.on_log(f"[PREVIEW] Coastline layer failed: {exc}", "stderr")
 
 
 def _grid_context(controller):
@@ -603,6 +598,7 @@ def _grid_context(controller):
     active_var = page.cmb_data_var.currentText().strip() or None
     idx = int(page.slider_time_index.value())
     frame = controller.host.get_stack_frame(path, idx, active_var=active_var)
+    controller._preview_current_frame = frame
     grid = np.asarray(frame["grid"], dtype=float)
     lon = np.asarray(frame["lon"], dtype=float).squeeze()
     lat = np.asarray(frame["lat"], dtype=float).squeeze()
@@ -735,18 +731,76 @@ def _preview_layers_by_type(controller, *layer_types: str):
     return []
 
 
+def _preview_base_raster_visible(controller) -> bool:
+    """Return visibility of the built-in data raster, not any raster layer."""
+
+    with contextlib.suppress(Exception):
+        controller._ensure_preview_layers()
+        return any(
+            getattr(layer, "type", "") == "raster"
+            and not getattr(layer, "path", None)
+            and bool(getattr(layer, "visible", False))
+            for layer in controller.preview_layers
+        )
+    page = controller.window.page_preview
+    checkbox = getattr(page, "chk_layer_data", None)
+    return bool(checkbox is None or checkbox.isChecked())
+
+
+def _visible_imported_raster_layers(controller):
+    return [
+        layer
+        for layer in _preview_layers_by_type(controller, "raster")
+        if getattr(layer, "path", None)
+    ]
+
+
+def _surface_unsupported_3d_rasters(controller, ax, layers) -> tuple[str, ...]:
+    """Log and annotate raster overlays that the 3-D renderer cannot draw."""
+
+    names = tuple(str(getattr(layer, "name", "") or Path(str(layer.path)).name) for layer in layers)
+    controller._preview_3d_unsupported_raster_layers = names
+    if not names:
+        return names
+    joined = ", ".join(names)
+    message = _tr(
+        controller.window,
+        f"3D Globe does not support imported raster overlays; skipped: {joined}",
+        f"三维地球暂不支持导入的栅格叠加层，已跳过：{joined}",
+    )
+    with contextlib.suppress(Exception):
+        controller.on_log(f"[PREVIEW] {message}", "stderr")
+    with contextlib.suppress(Exception):
+        ax.text2D(
+            0.02,
+            0.025,
+            message,
+            transform=ax.transAxes,
+            ha="left",
+            va="bottom",
+            fontsize=8,
+            color="#9a5b13",
+            bbox={"facecolor": "#fff8e6", "edgecolor": "#e4bd74", "alpha": 0.94, "pad": 4},
+            wrap=True,
+        )
+    return names
+
+
 def _update_preview_status(controller, path, idx, frame, grid, elapsed_ms: float) -> None:
     page = controller.window.page_preview
     active_var_name = frame.get("meta", {}).get("active_var", page.cmb_data_var.currentText().strip() or "ewh")
+    unit = _unit_from_meta(frame.get("meta", {}) or {}, active_var_name)
+    if not unit:
+        unit = variable_unit_from_file(path, active_var_name)
+    controller._preview_value_unit = unit
     page.lbl_dataset.setText(f"{Path(path).name} | {active_var_name}")
     finite = np.isfinite(grid)
     if np.any(finite):
-        page.lbl_grid_value.setText(f"{float(np.nanmean(grid[finite])):.3f}")
+        value = f"{float(np.nanmean(grid[finite])):.3f}"
+        page.lbl_grid_value.setText(f"{value} {unit}" if unit else value)
     else:
         page.lbl_grid_value.setText("NaN")
     page.lbl_engine_latency.setText(f"{elapsed_ms:.1f} ms")
-    page.canvas_preview_title.setText("")
-    page.canvas_preview_title.setVisible(False)
 
 
 def _render_2d_fallback(controller) -> None:
@@ -800,6 +854,27 @@ def _render_2d_fallback(controller) -> None:
     controller._canvas.draw_idle()
 
 
+def _globe_surface_visuals(grid_plot, cmap, norm, relief: float, *, data_visible: bool):
+    """Return surface radius/colors without leaking hidden raster values."""
+
+    import matplotlib as mpl
+
+    grid_plot = np.asarray(grid_plot, dtype=float)
+    finite = grid_plot[np.isfinite(grid_plot)]
+    fill_value = float(np.nanmean(finite)) if finite.size else 0.0
+    grid_for_surface = np.nan_to_num(grid_plot, nan=fill_value)
+    if not data_visible:
+        neutral = np.asarray(mpl.colors.to_rgba("#dce7e2"), dtype=float)
+        facecolors = np.broadcast_to(neutral, grid_plot.shape + (4,)).copy()
+        return 1.0, facecolors
+    radius_grid = 1.0
+    if relief > 0:
+        max_abs = float(np.nanmax(np.abs(finite))) if finite.size else 0.0
+        if max_abs > 0:
+            radius_grid = 1.0 + relief * np.clip(grid_for_surface / max_abs, -1.0, 1.0)
+    return radius_grid, cmap(norm(grid_for_surface))
+
+
 def _render_3d_globe(controller) -> None:
     import time
     import matplotlib as mpl
@@ -807,6 +882,11 @@ def _render_3d_globe(controller) -> None:
 
     start = time.perf_counter()
     page = controller.window.page_preview
+    with contextlib.suppress(Exception):
+        controller._ensure_preview_layers()
+        controller._sync_preview_legacy_layer_controls()
+    base_raster_visible = _preview_base_raster_visible(controller)
+    imported_rasters = _visible_imported_raster_layers(controller)
     with contextlib.suppress(Exception):
         controller.on_log("[PREVIEW] 3D Globe render start", "stdout")
     params = _projection_params(page, "3D Globe")
@@ -839,15 +919,14 @@ def _render_3d_globe(controller) -> None:
         cmin, cmax = -1.0, 1.0
     norm = mpl.colors.Normalize(vmin=cmin, vmax=cmax)
     cmap = mpl.colormaps[page.cmb_cmap.currentText().strip() or "RdBu_r"]
-    fill_value = float(np.nanmean(finite)) if finite.size else 0.0
-    grid_for_surface = np.nan_to_num(grid_plot, nan=fill_value)
-    radius_grid = 1.0
-    if relief > 0:
-        max_abs = float(np.nanmax(np.abs(finite))) if finite.size else 0.0
-        if max_abs > 0:
-            radius_grid = 1.0 + relief * np.clip(grid_for_surface / max_abs, -1.0, 1.0)
+    radius_grid, facecolors = _globe_surface_visuals(
+        grid_plot,
+        cmap,
+        norm,
+        relief,
+        data_visible=base_raster_visible,
+    )
     x, y, z = _lonlat_to_globe_xyz(lon2d, lat2d, params=params, surface=True, radius=radius_grid)
-    facecolors = cmap(norm(np.nan_to_num(grid_plot, nan=fill_value)))
     controller._figure.clear()
     ax = controller._figure.add_subplot(111, projection="3d")
     controller._ax = ax
@@ -864,6 +943,7 @@ def _render_3d_globe(controller) -> None:
         shade=False,
         alpha=1.0,
     )
+    _surface_unsupported_3d_rasters(controller, ax, imported_rasters)
     coastline_visible = _preview_layer_visible(controller, "coastline", fallback=getattr(page, "chk_layer_coastlines", None) is None or page.chk_layer_coastlines.isChecked())
     with contextlib.suppress(Exception):
         controller.on_log(f"[PREVIEW] 3D coastline visible = {bool(coastline_visible)}", "stdout")
@@ -880,11 +960,13 @@ def _render_3d_globe(controller) -> None:
     controller._preview_globe_params = params
     mappable = plt.cm.ScalarMappable(norm=norm, cmap=cmap)
     mappable.set_array([])
-    if _preview_layer_visible(controller, "colorbar", fallback=getattr(page, "chk_show_colorbar", None) is None or page.chk_show_colorbar.isChecked()):
+    if base_raster_visible and _preview_layer_visible(controller, "colorbar", fallback=getattr(page, "chk_show_colorbar", None) is None or page.chk_show_colorbar.isChecked()):
         controller._figure.colorbar(mappable, ax=ax, shrink=0.68, pad=0.03)
     _polish_rendered_figure(controller, export=False)
     apply_3d_globe_view(controller)
     _update_preview_status(controller, path, idx, frame, grid, (time.perf_counter() - start) * 1000.0)
+    if not base_raster_visible:
+        page.lbl_grid_value.setText("—")
     controller._preview_pick_state = None
     with contextlib.suppress(Exception):
         controller._sync_preview_toolbar_mode()
@@ -1016,35 +1098,33 @@ def _draw_3d_coastlines(controller, ax, *, params: dict) -> int:
         return drawn
     try:
         import os
-        import shapefile
-
         shp_path = coast_path
         if os.path.isdir(shp_path):
             for filename in os.listdir(shp_path):
                 if filename.lower().endswith(".shp"):
                     shp_path = os.path.join(shp_path, filename)
                     break
-        reader = shapefile.Reader(shp_path)
-        for shape in reader.shapes():
-            pts = np.asarray(shape.points, dtype=float)
-            if pts.ndim != 2 or pts.shape[0] < 2:
-                continue
-            parts = list(shape.parts) + [len(pts)]
-            for i in range(len(parts) - 1):
-                seg = pts[parts[i] : parts[i + 1]]
-                if seg.shape[0] >= 2:
-                    drawn += _plot_3d_lonlat_segments(
-                        ax,
-                        seg[:, 0],
-                        seg[:, 1],
-                        params=params,
-                        radius=radius,
-                        color=color,
-                        linewidth=linewidth,
-                        alpha=alpha,
-                        linestyle="-",
-                        stats=stats,
-                    )
+        with open_shapefile_reader(shp_path) as reader:
+            for shape in reader.shapes():
+                pts = np.asarray(shape.points, dtype=float)
+                if pts.ndim != 2 or pts.shape[0] < 2:
+                    continue
+                parts = list(shape.parts) + [len(pts)]
+                for i in range(len(parts) - 1):
+                    seg = pts[parts[i] : parts[i + 1]]
+                    if seg.shape[0] >= 2:
+                        drawn += _plot_3d_lonlat_segments(
+                            ax,
+                            seg[:, 0],
+                            seg[:, 1],
+                            params=params,
+                            radius=radius,
+                            color=color,
+                            linewidth=linewidth,
+                            alpha=alpha,
+                            linestyle="-",
+                            stats=stats,
+                        )
         _log_3d_segment_stats(controller, "local coastline", stats)
         with contextlib.suppress(Exception):
             controller.on_log(f"[PREVIEW] 3D coastline rendered from local source: {drawn} segments", "stdout")
@@ -1200,12 +1280,9 @@ def _polish_rendered_figure(controller, *, export: bool = False) -> None:
         return
     var_name = page.cmb_data_var.currentText().strip() or "value"
     unit = _current_unit(controller)
-    cb_label = f"{var_name} ({unit})" if unit else var_name
+    cb_label = value_label(var_name, unit)
     with contextlib.suppress(Exception):
         ax.set_title("")
-    with contextlib.suppress(Exception):
-        page.canvas_preview_title.setText("")
-        page.canvas_preview_title.setVisible(False)
     with contextlib.suppress(Exception):
         for line in ax.lines:
             color = str(line.get_color()).lower()
@@ -1272,10 +1349,26 @@ def _enhanced_load_stack_info(self) -> None:
         page.slider_time_index.setValue(0)
         page.slider_time_index.blockSignals(False)
         self._sync_preview_time_label(0)
+        time_summary = ""
+        with contextlib.suppress(Exception):
+            _years, labels = self.host._resolve_time(
+                info.get("t"), nt, meta=meta
+            )
+            if labels:
+                first = str(labels[0])
+                last = str(labels[min(nt, len(labels)) - 1])
+                time_summary = (
+                    f" | {_tr(self.window, 'Time coverage', '时间范围')}: "
+                    f"{first}–{last}"
+                )
         if _is_zh(self.window):
-            page.lbl_stack_info.setText(f"尺寸 {shape[0]} × {shape[1]} × {nt}")
+            page.lbl_stack_info.setText(
+                f"维度：{shape[0]} × {shape[1]} × {nt}{time_summary}"
+            )
         else:
-            page.lbl_stack_info.setText(f"Size {shape[0]} × {shape[1]} × {nt}")
+            page.lbl_stack_info.setText(
+                f"Dimensions: {shape[0]} × {shape[1]} × {nt}{time_summary}"
+            )
         self._apply_preview_bbox_from_info(info)
         _apply_preview_labels(self.window)
         self.on_log(f"[PREVIEW] Data loaded: {path}", "stdout")

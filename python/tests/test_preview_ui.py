@@ -92,6 +92,11 @@ class PreviewUiTest(unittest.TestCase):
     def test_toolbar_starts_hidden_and_button_text_stays_in_sync(self):
         self.assertFalse(self.page.plot_toolbar_host.isVisible())
         self.assertEqual(self.page.btn_toggle_tools.text(), "Tools")
+        location_label = self.window.controller._nav_toolbar.locLabel
+        location_label.setText("1.23e+06, 4.56e+06")
+        self.assertTrue(location_label.isHidden())
+        self.assertEqual(location_label.maximumWidth(), 0)
+        self.assertTrue(self.page.lbl_cursor_position.isVisible())
 
         QTest.mouseClick(self.page.btn_toggle_tools, Qt.LeftButton)
         self.app.processEvents()
@@ -237,6 +242,10 @@ class PreviewUiTest(unittest.TestCase):
 
         self.assertEqual(translate_text("下载 GFC", "en"), "Download GFC")
         self.assertEqual(translate_text("系统与项目状态", "en"), "System and project status")
+        self.assertEqual(
+            translate_text("Preview basin: first boundary feature", "zh"),
+            "预览流域：第一个边界要素",
+        )
 
     def test_preview_render_survives_layout_toggles(self):
         sample_stack = self._create_sample_stack()

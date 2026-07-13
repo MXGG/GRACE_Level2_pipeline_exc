@@ -53,6 +53,7 @@ def start_gui(argv: list[str] | None = None):
     from grace_pipeline.ui.qt.preview_stable_rendering import install_preview_stable_rendering
     from grace_pipeline.ui.qt.preview_title_status import install_preview_title_status
     from grace_pipeline.ui.qt.preview_view_polish import install_preview_view_polish
+    from grace_pipeline.ui.qt.preferences import load_ui_preferences
     from grace_pipeline.ui.qt.shell_enhancements import install_shell_enhancements
     from grace_pipeline.ui.qt.splash import create_splash_screen
     from grace_pipeline.ui.qt.theme import app_stylesheet
@@ -62,7 +63,17 @@ def start_gui(argv: list[str] | None = None):
     if splash is not None:
         splash.set_progress(12, "Loading runtime environment...")
 
-    app.setStyleSheet(app_stylesheet("blue", app=app))
+    # Apply the persisted palette before constructing the window so the splash
+    # and first frame do not briefly flash the legacy blue theme.
+    bootstrap_preferences = load_ui_preferences()
+    app.setStyleSheet(
+        app_stylesheet(
+            bootstrap_preferences.theme,
+            app=app,
+            ui_font=bootstrap_preferences.ui_font,
+            mono_font=bootstrap_preferences.mono_font,
+        )
+    )
     _load_windows_fonts()
     preferred_families = [
         "Microsoft YaHei UI",

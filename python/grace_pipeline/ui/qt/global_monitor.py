@@ -321,6 +321,9 @@ def _install_processing_action_bar(window) -> None:
     data_page.btn_load_config.setText("Load Config")
     data_page.btn_save_config.setText("Save Config")
     data_page.btn_validate_paths.setText("Validate Paths")
+    # Validation is a preparatory action in this row.  Keep the single filled
+    # primary treatment for the operation that actually starts processing.
+    data_page.btn_validate_paths.setObjectName("SoftButton")
     proc.btn_run_filters.setMinimumWidth(148)
     for button in (data_page.btn_load_config, data_page.btn_save_config, data_page.btn_validate_paths, proc.btn_run_filters):
         layout.addWidget(button, 0)
@@ -572,6 +575,8 @@ def _patch_download_controls(window, controller) -> None:
             page.cmb_mascon_resolution.setVisible(product_type == "MASCON_NC")
         page.btn_download_gfc_range.setText(self.window.translate_text("Download"))
         page.btn_download_dir_browse.setText(self.window.translate_text("Choose Folder..."))
+        if hasattr(page, "btn_open_download_site"):
+            page.btn_open_download_site.setText(self.window.translate_text("Official Sources"))
         center = self._configured_gfc_center()
         if product_type == "GSM" and center in {"CSR", "JPL", "GFZ"}:
             self._apply_low_degree_files_for_center(center)
@@ -588,6 +593,8 @@ def _patch_download_controls(window, controller) -> None:
             )
         if hasattr(page, "btn_open_download_site"):
             page.btn_open_download_site.setToolTip(self._download_source_url(product_type, center))
+        if hasattr(self, "_populate_download_source_menu"):
+            self._populate_download_source_menu()
         page.btn_download_gfc_range.setToolTip(page.lbl_gfc_download_status.text())
 
     def gfc_download_range(self) -> tuple[str, str]:
@@ -619,7 +626,14 @@ def _patch_download_controls(window, controller) -> None:
         if not download_dir:
             self._show_warning(self.window.translate_text("Download Data"), self.window.translate_text("Set a download folder first."))
             return
-        start_ym, end_ym = self._gfc_download_range()
+        try:
+            start_ym, end_ym = self._gfc_download_range()
+        except ValueError as exc:
+            self._show_warning(
+                self.window.translate_text("Download Data"),
+                self.window.translate_text(str(exc)),
+            )
+            return
         center = self._configured_gfc_center()
         product_type = self._download_product_type()
         if product_type == "MASCON_NC" and center not in {"CSR", "JPL", "GSFC"}:
@@ -628,7 +642,26 @@ def _patch_download_controls(window, controller) -> None:
                 self.window.translate_text("Mascon NC downloads currently support CSR, JPL, and GSFC."),
             )
             return
-        if not self._ensure_earthdata_auth_for_download(product_type, center):
+        needs_auth = self._download_needs_earthdata(product_type, center)
+        while True:
+            action = self._confirm_download_request(
+                product_type=product_type,
+                center=center,
+                start_ym=start_ym,
+                end_ym=end_ym,
+                download_dir=download_dir,
+                needs_auth=needs_auth,
+            )
+            if action == "cancel":
+                return
+            if action == "site":
+                self.on_open_download_site()
+                continue
+            if action == "auth":
+                self.on_earthdata_auth(require_credentials=True)
+                continue
+            break
+        if needs_auth and not self._ensure_earthdata_auth_for_download(product_type, center):
             return
         low_degree_dir = self._low_degree_dir()
         page.lbl_gfc_download_status.setText(

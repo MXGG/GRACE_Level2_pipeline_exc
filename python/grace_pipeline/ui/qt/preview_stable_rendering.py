@@ -16,7 +16,8 @@ from types import MethodType
 import numpy as np
 import matplotlib.ticker as mticker
 
-from grace_pipeline.infra.stack.loader import load_stack_slice_any
+from grace_pipeline.infra.stack.loader import load_stack_any, load_stack_slice_any
+from grace_pipeline.infra.stack.probe import probe_stack_any
 from grace_pipeline.ui.plotting.boundaries import draw_boundaries, plot_line, read_boundary_file, split_dateline
 from grace_pipeline.ui.plotting.projections import (
     apply_proj_scale,
@@ -39,6 +40,14 @@ from grace_pipeline.ui.qt.projection_registry import (
     projection_supports_global_extent,
 )
 from grace_pipeline.ui.qt.preview_title_status import restore_preview_header
+from grace_pipeline.ui.qt.preview_science import (
+    LayerTimeMatch,
+    open_shapefile_reader,
+    select_layer_time_index,
+    unit_from_metadata,
+    value_label,
+    variable_unit_from_file,
+)
 
 _GRID_COLOR = "#6f8fa3"
 _COAST_COLOR = "#1f3547"
@@ -95,6 +104,16 @@ def _show_base_raster(controller) -> bool:
     return bool(getattr(page, "chk_layer_data", None) is None or page.chk_layer_data.isChecked())
 
 
+def _layer_artist_zorder(layer, fallback: float = 0.0) -> float:
+    """Map the controller's bottom-first layer order to Matplotlib directly."""
+
+    raw = getattr(layer, "zorder", fallback)
+    try:
+        return 2.0 + float(fallback if raw is None else raw)
+    except (TypeError, ValueError):
+        return 2.0 + float(fallback)
+
+
 def _is_3d_label(page) -> bool:
     return projection_renderer(page.cmb_projection.currentText().strip()) == "matplotlib_3d"
 
@@ -148,7 +167,7 @@ def _line(ax, x, y, *, color, linewidth, alpha=1.0, linestyle="-", zorder=20):
     plot_line(ax, x2, y2, color=color, linewidth=linewidth, alpha=alpha, linestyle=linestyle, zorder=zorder)
 
 
-def _label(ax, x, y, text, *, ha="center", va="center", fontsize=7, fontfamily=None) -> None:
+def _label(ax, x, y, text, *, ha="center", va="center", fontsize=7, fontfamily=None, zorder=35) -> None:
     if not (np.isfinite(x) and np.isfinite(y)):
         return
     xmin, xmax = ax.get_xlim()
@@ -169,7 +188,7 @@ def _label(ax, x, y, text, *, ha="center", va="center", fontsize=7, fontfamily=N
         ha=ha,
         va=va,
         clip_on=True,
-        zorder=35,
+        zorder=zorder,
         bbox={"facecolor": "white", "edgecolor": "none", "alpha": 0.55, "pad": 0.8},
     )
 
@@ -210,7 +229,16 @@ def _draw_graticule(controller, proj, lon0, lat0, lat1, lat2, zorder=25) -> None
             lat2=lat2,
         )
         text = f"{abs(int(lon_line))}°{'W' if lon_line < 0 else ('E' if lon_line > 0 else '')}"
-        _label(ax, float(x[0]), float(y[0]), text, va="top", fontsize=opts["font_size"], fontfamily=opts["font_family"])
+        _label(
+            ax,
+            float(x[0]),
+            float(y[0]),
+            text,
+            va="top",
+            fontsize=opts["font_size"],
+            fontfamily=opts["font_family"],
+            zorder=zorder + 0.1,
+        )
 
     label_lon = -174.0
     for lat_line in lat_lines:
@@ -225,7 +253,16 @@ def _draw_graticule(controller, proj, lon0, lat0, lat1, lat2, zorder=25) -> None
             lat2=lat2,
         )
         text = f"{abs(int(lat_line))}°{'S' if lat_line < 0 else ('N' if lat_line > 0 else '')}"
-        _label(ax, float(x[0]), float(y[0]), text, ha="right", fontsize=opts["font_size"], fontfamily=opts["font_family"])
+        _label(
+            ax,
+            float(x[0]),
+            float(y[0]),
+            text,
+            ha="right",
+            fontsize=opts["font_size"],
+            fontfamily=opts["font_family"],
+            zorder=zorder + 0.1,
+        )
     if _projection_accepts_rectangular_frame(proj):
         _draw_graticule_frame(ax, opts)
 
@@ -240,27 +277,25 @@ def _draw_coastlines(controller, proj, lon0, lat0, lat1, lat2, zorder=32) -> Non
         return
     try:
         import os
-        import shapefile
-
         shp_path = coast_path
         if os.path.isdir(shp_path):
             for filename in os.listdir(shp_path):
                 if filename.lower().endswith(".shp"):
                     shp_path = os.path.join(shp_path, filename)
                     break
-        reader = shapefile.Reader(shp_path)
-        for shape in reader.shapes():
-            pts = np.asarray(shape.points, dtype=float)
-            if pts.ndim != 2 or pts.shape[0] < 2:
-                continue
-            parts = list(shape.parts) + [len(pts)]
-            for i in range(len(parts) - 1):
-                seg = pts[parts[i] : parts[i + 1]]
-                if seg.shape[0] < 2:
+        with open_shapefile_reader(shp_path) as reader:
+            for shape in reader.shapes():
+                pts = np.asarray(shape.points, dtype=float)
+                if pts.ndim != 2 or pts.shape[0] < 2:
                     continue
-                for lons, lats in split_dateline(seg[:, 0], seg[:, 1], wrap_delta_lon, lon0=lon0):
-                    x, y = _project(controller, proj, lons, lats, lon0=lon0, lat0=lat0, lat1=lat1, lat2=lat2)
-                    _line(controller._ax, x, y, color=_COAST_COLOR, linewidth=0.44, alpha=0.92, zorder=zorder)
+                parts = list(shape.parts) + [len(pts)]
+                for i in range(len(parts) - 1):
+                    seg = pts[parts[i] : parts[i + 1]]
+                    if seg.shape[0] < 2:
+                        continue
+                    for lons, lats in split_dateline(seg[:, 0], seg[:, 1], wrap_delta_lon, lon0=lon0):
+                        x, y = _project(controller, proj, lons, lats, lon0=lon0, lat0=lat0, lat1=lat1, lat2=lat2)
+                        _line(controller._ax, x, y, color=_COAST_COLOR, linewidth=0.44, alpha=0.92, zorder=zorder)
     except Exception:
         return
 
@@ -303,7 +338,189 @@ def _draw_boundary_layers(controller, proj, lon0, lat0, lat1, lat2, bbox) -> Non
         _draw_boundary_layer(controller, layer, proj, lon0, lat0, lat1, lat2, bbox)
 
 
-def _draw_imported_raster_layer(controller, layer, idx, proj, lon0, lat0, lat1, lat2, cmap, cmin, cmax):
+def _log_preview_once(controller, key: tuple, message: str, channel: str = "stderr") -> None:
+    seen = getattr(controller, "_preview_science_log_keys", None)
+    if not isinstance(seen, set):
+        seen = set()
+        controller._preview_science_log_keys = seen
+    if key in seen:
+        return
+    seen.add(key)
+    with contextlib.suppress(Exception):
+        controller.on_log(message, channel)
+
+
+def _imported_raster_probe(controller, layer) -> tuple[int, object, dict]:
+    path = str(getattr(layer, "path", "") or "")
+    layer_meta = dict(getattr(layer, "metadata", {}) or {})
+    active_var = str(layer_meta.get("active_var") or "").strip()
+    mtime_ns = Path(path).stat().st_mtime_ns
+    key = (path, mtime_ns, active_var)
+    cache = getattr(controller, "_preview_imported_raster_probe_cache", None)
+    if not isinstance(cache, dict):
+        cache = {}
+        controller._preview_imported_raster_probe_cache = cache
+    if key in cache:
+        layer_length, times, file_meta = cache[key]
+        merged_meta = dict(file_meta)
+        merged_meta.update(layer_meta)
+        return layer_length, times, merged_meta
+
+    shape, _lon, _lat, times, probed_meta = probe_stack_any(path, load_stack_any)
+    if not shape:
+        raise ValueError("Unable to inspect raster layer time axis.")
+    file_meta = dict(probed_meta or {})
+    if active_var:
+        file_meta["active_var"] = active_var
+    selected_var = str(file_meta.get("active_var") or active_var or "").strip()
+    unit = variable_unit_from_file(path, selected_var)
+    if unit:
+        file_meta["units"] = unit
+    layer_length = int(shape[2]) if len(shape) >= 3 else 1
+    result = (max(1, layer_length), times, file_meta)
+    if len(cache) > 12:
+        cache.clear()
+    cache[key] = result
+    merged_meta = dict(file_meta)
+    merged_meta.update(layer_meta)
+    return result[0], result[1], merged_meta
+
+
+def _resolve_imported_raster_time(
+    controller,
+    layer,
+    requested_index: int,
+    *,
+    target_time=None,
+    target_meta: dict | None = None,
+) -> tuple[int, dict, LayerTimeMatch] | None:
+    path = str(getattr(layer, "path", "") or "")
+    try:
+        layer_length, layer_times, layer_meta = _imported_raster_probe(controller, layer)
+    except Exception as exc:
+        _log_preview_once(
+            controller,
+            ("overlay-probe", path, str(exc)),
+            f"[PREVIEW] Raster overlay skipped; unable to inspect {path}: {exc}",
+        )
+        return None
+
+    target_meta = dict(target_meta or {})
+    match = select_layer_time_index(
+        target_time,
+        layer_times,
+        requested_index=requested_index,
+        layer_length=layer_length,
+        # Preview layers follow the selected preview month exactly.  Nearest-
+        # month tolerance belongs to processing/reference matching, not to a
+        # visual layer stack, and is intentionally not user-configurable here.
+        tolerance_months=0,
+        target_units=target_meta.get("time_units"),
+        target_calendar=target_meta.get("time_calendar"),
+        layer_units=layer_meta.get("time_units"),
+        layer_calendar=layer_meta.get("time_calendar"),
+    )
+    layer_name = str(getattr(layer, "name", "") or Path(path).name)
+    if not match.matched:
+        _log_preview_once(
+            controller,
+            ("overlay-time-unmatched", path, str(match.target_month), match.message),
+            f"[PREVIEW] Raster overlay '{layer_name}' skipped: {match.message}",
+        )
+        return None
+    if match.method == "positional-unverified":
+        _log_preview_once(
+            controller,
+            ("overlay-time-positional", path, requested_index, match.message),
+            f"[PREVIEW] Raster overlay '{layer_name}': {match.message}",
+        )
+    return int(match.index), layer_meta, match
+
+
+def _tag_raster_artist(
+    artist,
+    *,
+    var_name: str,
+    meta: dict,
+    match: LayerTimeMatch | None = None,
+    source_path: str = "",
+    values=None,
+):
+    if artist is None:
+        return None
+    unit = unit_from_metadata(meta, var_name)
+    artist._grace_preview_label = value_label(var_name, unit)
+    artist._grace_preview_unit = unit
+    artist._grace_preview_time_match = match
+    artist._grace_preview_source_path = str(source_path or "")
+    if values is not None:
+        finite = np.asarray(values, dtype=float)
+        finite = finite[np.isfinite(finite)]
+        artist._grace_preview_mean = float(np.nanmean(finite)) if finite.size else float("nan")
+    return artist
+
+
+def _base_raster_label(controller, frame: dict) -> str:
+    page = controller.window.page_preview
+    meta = dict(frame.get("meta", {}) or {})
+    var_name = str(meta.get("active_var") or page.cmb_data_var.currentText().strip() or "value")
+    unit = unit_from_metadata(meta, var_name) or variable_unit_from_file(
+        page.edit_dataset_source.text().strip(),
+        var_name,
+    )
+    return value_label(var_name, unit)
+
+
+def _raster_artist_label(controller, artist, frame: dict) -> str:
+    label = str(getattr(artist, "_grace_preview_label", "") or "").strip()
+    return label or _base_raster_label(controller, frame)
+
+
+def _update_visible_raster_status(controller, artist) -> None:
+    if artist is None:
+        return
+    source_path = str(getattr(artist, "_grace_preview_source_path", "") or "")
+    if not source_path:
+        return
+    page = controller.window.page_preview
+    label = str(getattr(artist, "_grace_preview_label", "") or "value")
+    page.lbl_dataset.setText(f"{Path(source_path).name} | {label}")
+    mean = float(getattr(artist, "_grace_preview_mean", float("nan")))
+    unit = str(getattr(artist, "_grace_preview_unit", "") or "")
+    controller._preview_value_unit = unit
+    if np.isfinite(mean):
+        page.lbl_grid_value.setText(f"{mean:.3f} {unit}".strip())
+
+
+def _append_preview_value_unit(controller) -> None:
+    """Keep the cursor-value status unit after the legacy pick callback runs."""
+
+    unit = str(getattr(controller, "_preview_value_unit", "") or "").strip()
+    if not unit:
+        return
+    label = controller.window.page_preview.lbl_grid_value
+    text = str(label.text() or "").strip()
+    if not text or text in {"—", "-", "NaN"} or text.endswith(f" {unit}"):
+        return
+    label.setText(f"{text} {unit}")
+
+
+def _draw_imported_raster_layer(
+    controller,
+    layer,
+    idx,
+    proj,
+    lon0,
+    lat0,
+    lat1,
+    lat2,
+    cmap,
+    cmin,
+    cmax,
+    *,
+    target_time=None,
+    target_meta: dict | None = None,
+):
     page = controller.window.page_preview
     path = str(getattr(layer, "path", "") or "")
     if not path:
@@ -312,16 +529,31 @@ def _draw_imported_raster_layer(controller, layer, idx, proj, lon0, lat0, lat1, 
         return None
     if not Path(path).exists():
         return None
-    with contextlib.suppress(Exception):
-        meta = dict(getattr(layer, "metadata", {}) or {})
+    resolved = _resolve_imported_raster_time(
+        controller,
+        layer,
+        idx,
+        target_time=target_time,
+        target_meta=target_meta,
+    )
+    if resolved is None:
+        return None
+    layer_index, meta, time_match = resolved
+    try:
         active_var = str(meta.get("active_var") or page.cmb_data_var.currentText().strip() or "").strip() or None
-        grid, lon, lat, _t_val, _meta = load_stack_slice_any(
+        grid, lon, lat, _t_val, loaded_meta = load_stack_slice_any(
             path,
-            time_index=idx,
+            time_index=layer_index,
             active_var=active_var,
+            selection_meta=meta,
         )
         if grid is None or lon is None or lat is None:
             return None
+        merged_meta = dict(meta)
+        merged_meta.update(dict(loaded_meta or {}))
+        unit = unit_from_metadata(merged_meta, active_var or "") or variable_unit_from_file(path, active_var or "")
+        if unit:
+            merged_meta["units"] = unit
         grid = np.asarray(grid, dtype=float)
         lon = np.asarray(lon, dtype=float).squeeze()
         lat = np.asarray(lat, dtype=float).squeeze()
@@ -332,8 +564,8 @@ def _draw_imported_raster_layer(controller, layer, idx, proj, lon0, lat0, lat1, 
         grid_plot = grid.T if grid.shape == (lon.size, lat.size) else np.squeeze(grid)
         x, y = _project(controller, proj, lon2d, lat2d, lon0=lon0, lat0=lat0, lat1=lat1, lat2=lat2)
         alpha = float(getattr(layer, "opacity", 0.72) or 0.72)
-        zorder = 6 + min(9, max(0, int(getattr(layer, "zorder", 0) or 0) // 10))
-        return controller._ax.pcolormesh(
+        zorder = _layer_artist_zorder(layer)
+        artist = controller._ax.pcolormesh(
             x,
             y,
             grid_plot,
@@ -344,15 +576,43 @@ def _draw_imported_raster_layer(controller, layer, idx, proj, lon0, lat0, lat1, 
             alpha=max(0.05, min(1.0, alpha)),
             zorder=zorder,
         )
+        return _tag_raster_artist(
+            artist,
+            var_name=active_var or "value",
+            meta=merged_meta,
+            match=time_match,
+            source_path=path,
+            values=grid,
+        )
+    except Exception as exc:
+        _log_preview_once(
+            controller,
+            ("overlay-render", path, layer_index, str(exc)),
+            f"[PREVIEW] Raster overlay failed: {path}: {exc}",
+        )
     return None
 
 
-def _draw_imported_raster_layers(controller, idx, proj, lon0, lat0, lat1, lat2, cmap, cmin, cmax):
+def _draw_imported_raster_layers(controller, idx, proj, lon0, lat0, lat1, lat2, cmap, cmin, cmax, *, target_time=None, target_meta=None):
     first_im = None
     for layer in _visible_layers(controller, "raster"):
         if not getattr(layer, "path", None):
             continue
-        im = _draw_imported_raster_layer(controller, layer, idx, proj, lon0, lat0, lat1, lat2, cmap, cmin, cmax)
+        im = _draw_imported_raster_layer(
+            controller,
+            layer,
+            idx,
+            proj,
+            lon0,
+            lat0,
+            lat1,
+            lat2,
+            cmap,
+            cmin,
+            cmax,
+            target_time=target_time,
+            target_meta=target_meta,
+        )
         if first_im is None and im is not None:
             first_im = im
     return first_im
@@ -415,6 +675,7 @@ def _render_manual_2d(controller) -> None:
 
     for layer in layer_queue:
         layer_type = getattr(layer, "type", "")
+        layer_zorder = _layer_artist_zorder(layer)
         if layer_type == "raster" and not getattr(layer, "path", None):
             finite_xy = np.isfinite(x) & np.isfinite(y) & np.isfinite(grid_plot)
             if np.all(np.isfinite(x)) and np.all(np.isfinite(y)):
@@ -426,7 +687,7 @@ def _render_manual_2d(controller) -> None:
                     cmap=cmap,
                     vmin=cmin,
                     vmax=cmax,
-                    zorder=2,
+                    zorder=layer_zorder,
                 )
             elif np.any(finite_xy):
                 im = ax.scatter(
@@ -439,18 +700,34 @@ def _render_manual_2d(controller) -> None:
                     cmap=cmap,
                     vmin=cmin,
                     vmax=cmax,
-                    zorder=2,
+                    zorder=layer_zorder,
                 )
+            if im is not None:
+                im._grace_preview_label = _base_raster_label(controller, frame)
         elif layer_type == "raster":
-            overlay_im = _draw_imported_raster_layer(controller, layer, idx, proj, lon0, lat0, lat1, lat2, cmap, cmin, cmax)
-            if im is None and overlay_im is not None:
+            overlay_im = _draw_imported_raster_layer(
+                controller,
+                layer,
+                idx,
+                proj,
+                lon0,
+                lat0,
+                lat1,
+                lat2,
+                cmap,
+                cmin,
+                cmax,
+                target_time=frame.get("t"),
+                target_meta=frame.get("meta", {}),
+            )
+            if overlay_im is not None:
                 im = overlay_im
         elif layer_type == "coastline":
-            _draw_coastlines(controller, proj, lon0, lat0, lat1, lat2, zorder=max(30, int(getattr(layer, "zorder", 32) or 32)))
+            _draw_coastlines(controller, proj, lon0, lat0, lat1, lat2, zorder=layer_zorder)
         elif layer_type == "graticule":
-            _draw_graticule(controller, proj, lon0, lat0, lat1, lat2, zorder=max(45, int(getattr(layer, "zorder", 25) or 25)))
+            _draw_graticule(controller, proj, lon0, lat0, lat1, lat2, zorder=layer_zorder)
         elif layer_type in {"boundary", "shapefile"}:
-            _draw_boundary_layer(controller, layer, proj, lon0, lat0, lat1, lat2, _bbox, zorder=max(35, int(getattr(layer, "zorder", 40) or 40)))
+            _draw_boundary_layer(controller, layer, proj, lon0, lat0, lat1, lat2, _bbox, zorder=layer_zorder)
 
     if not layer_queue and _show_base_raster(controller):
         finite_xy = np.isfinite(x) & np.isfinite(y) & np.isfinite(grid_plot)
@@ -458,13 +735,15 @@ def _render_manual_2d(controller) -> None:
             im = ax.pcolormesh(x, y, grid_plot, shading="auto", cmap=cmap, vmin=cmin, vmax=cmax, zorder=2)
         elif np.any(finite_xy):
             im = ax.scatter(x[finite_xy], y[finite_xy], c=grid_plot[finite_xy], s=9, marker="s", linewidths=0, cmap=cmap, vmin=cmin, vmax=cmax, zorder=2)
+        if im is not None:
+            im._grace_preview_label = _base_raster_label(controller, frame)
         _draw_coastlines(controller, proj, lon0, lat0, lat1, lat2)
         _draw_graticule(controller, proj, lon0, lat0, lat1, lat2)
         _draw_boundary_layers(controller, proj, lon0, lat0, lat1, lat2, _bbox)
 
     if im is not None and _show_colorbar(controller):
         cbar = controller._figure.colorbar(im, ax=ax, shrink=0.78, pad=0.02)
-        cbar.set_label(page.cmb_data_var.currentText().strip() or "value", fontsize=9)
+        cbar.set_label(_raster_artist_label(controller, im, frame), fontsize=9)
         cbar.ax.tick_params(labelsize=8)
 
     # Larger default map view.  Leave room for a visible color scale only when it is enabled.
@@ -483,11 +762,8 @@ def _render_manual_2d(controller) -> None:
         "grid": np.asarray(grid_plot, dtype=float),
     }
 
-    active_var_name = frame.get("meta", {}).get("active_var", page.cmb_data_var.currentText().strip() or "value")
-    page.lbl_dataset.setText(f"{Path(path).name} | {active_var_name}")
-    finite_grid = np.isfinite(grid)
-    page.lbl_grid_value.setText(f"{float(np.nanmean(grid[finite_grid])):.3f}" if np.any(finite_grid) else "NaN")
-    page.lbl_engine_latency.setText(f"{(time.perf_counter() - start) * 1000.0:.1f} ms")
+    pe._update_preview_status(controller, path, idx, frame, grid, (time.perf_counter() - start) * 1000.0)
+    _update_visible_raster_status(controller, im)
     restore_preview_header(controller.window)
     controller._canvas.draw_idle()
 
@@ -665,24 +941,22 @@ def _draw_cartopy_coastlines(controller, ax, data_crs, *, zorder: int) -> None:
         return
     try:
         import os
-        import shapefile
-
         shp_path = coast_path
         if os.path.isdir(shp_path):
             for filename in os.listdir(shp_path):
                 if filename.lower().endswith(".shp"):
                     shp_path = os.path.join(shp_path, filename)
                     break
-        reader = shapefile.Reader(shp_path)
-        for shape in reader.shapes():
-            pts = np.asarray(shape.points, dtype=float)
-            if pts.ndim != 2 or pts.shape[0] < 2:
-                continue
-            parts = list(shape.parts) + [len(pts)]
-            for i in range(len(parts) - 1):
-                seg = pts[parts[i] : parts[i + 1]]
-                if seg.shape[0] >= 2:
-                    ax.plot(seg[:, 0], seg[:, 1], transform=data_crs, color=_COAST_COLOR, linewidth=0.44, alpha=0.92, zorder=zorder)
+        with open_shapefile_reader(shp_path) as reader:
+            for shape in reader.shapes():
+                pts = np.asarray(shape.points, dtype=float)
+                if pts.ndim != 2 or pts.shape[0] < 2:
+                    continue
+                parts = list(shape.parts) + [len(pts)]
+                for i in range(len(parts) - 1):
+                    seg = pts[parts[i] : parts[i + 1]]
+                    if seg.shape[0] >= 2:
+                        ax.plot(seg[:, 0], seg[:, 1], transform=data_crs, color=_COAST_COLOR, linewidth=0.44, alpha=0.92, zorder=zorder)
     except Exception as exc:
         with contextlib.suppress(Exception):
             controller.on_log(f"[PREVIEW] Coastline layer failed: {exc}", "stderr")
@@ -733,17 +1007,48 @@ def _draw_cartopy_boundary_layer(controller, ax, data_crs, layer, *, zorder: int
             controller.on_log(f"[PREVIEW] Boundary layer failed: {path}: {exc}", "stderr")
 
 
-def _draw_cartopy_imported_raster(controller, ax, data_crs, layer, idx, cmap, cmin, cmax):
+def _draw_cartopy_imported_raster(
+    controller,
+    ax,
+    data_crs,
+    layer,
+    idx,
+    cmap,
+    cmin,
+    cmax,
+    *,
+    target_time=None,
+    target_meta: dict | None = None,
+):
     page = controller.window.page_preview
     path = str(getattr(layer, "path", "") or "")
     if not path or Path(path).suffix.lower() not in {".nc", ".nc4", ".cdf", ".h5", ".hdf5", ".hdf", ".mat"} or not Path(path).exists():
         return None
+    resolved = _resolve_imported_raster_time(
+        controller,
+        layer,
+        idx,
+        target_time=target_time,
+        target_meta=target_meta,
+    )
+    if resolved is None:
+        return None
+    layer_index, meta, time_match = resolved
     try:
-        meta = dict(getattr(layer, "metadata", {}) or {})
         active_var = str(meta.get("active_var") or page.cmb_data_var.currentText().strip() or "").strip() or None
-        grid, lon, lat, _t_val, _meta = load_stack_slice_any(path, time_index=idx, active_var=active_var)
+        grid, lon, lat, _t_val, loaded_meta = load_stack_slice_any(
+            path,
+            time_index=layer_index,
+            active_var=active_var,
+            selection_meta=meta,
+        )
         if grid is None or lon is None or lat is None:
             return None
+        merged_meta = dict(meta)
+        merged_meta.update(dict(loaded_meta or {}))
+        unit = unit_from_metadata(merged_meta, active_var or "") or variable_unit_from_file(path, active_var or "")
+        if unit:
+            merged_meta["units"] = unit
         grid = np.asarray(grid, dtype=float)
         lon = np.asarray(lon, dtype=float).squeeze()
         lat = np.asarray(lat, dtype=float).squeeze()
@@ -752,8 +1057,8 @@ def _draw_cartopy_imported_raster(controller, ax, data_crs, layer, idx, cmap, cm
         lon, grid = _normalize_grid_longitudes(lon, grid)
         lon2d, lat2d = np.meshgrid(lon, lat)
         grid_plot = grid.T if grid.shape == (lon.size, lat.size) else np.squeeze(grid)
-        zorder = 6 + min(9, max(0, int(getattr(layer, "zorder", 0) or 0) // 10))
-        return ax.pcolormesh(
+        zorder = _layer_artist_zorder(layer)
+        artist = ax.pcolormesh(
             lon2d,
             lat2d,
             grid_plot,
@@ -764,6 +1069,14 @@ def _draw_cartopy_imported_raster(controller, ax, data_crs, layer, idx, cmap, cm
             vmax=cmax,
             alpha=max(0.05, min(1.0, float(getattr(layer, "opacity", 0.72) or 0.72))),
             zorder=zorder,
+        )
+        return _tag_raster_artist(
+            artist,
+            var_name=active_var or "value",
+            meta=merged_meta,
+            match=time_match,
+            source_path=path,
+            values=grid,
         )
     except Exception as exc:
         with contextlib.suppress(Exception):
@@ -845,22 +1158,35 @@ def _render_cartopy_2d(controller) -> None:
 
     for layer in layer_queue:
         layer_type = getattr(layer, "type", "")
-        zorder = int(getattr(layer, "zorder", 10) or 10)
+        zorder = _layer_artist_zorder(layer)
         if layer_type == "raster" and not getattr(layer, "path", None):
-            im = ax.pcolormesh(lon2d, lat2d, grid_plot, transform=data_crs, shading="auto", cmap=cmap, vmin=cmin, vmax=cmax, zorder=2)
+            im = ax.pcolormesh(lon2d, lat2d, grid_plot, transform=data_crs, shading="auto", cmap=cmap, vmin=cmin, vmax=cmax, zorder=zorder)
+            im._grace_preview_label = _base_raster_label(controller, frame)
         elif layer_type == "raster":
-            overlay_im = _draw_cartopy_imported_raster(controller, ax, data_crs, layer, idx, cmap, cmin, cmax)
-            if im is None and overlay_im is not None:
+            overlay_im = _draw_cartopy_imported_raster(
+                controller,
+                ax,
+                data_crs,
+                layer,
+                idx,
+                cmap,
+                cmin,
+                cmax,
+                target_time=frame.get("t"),
+                target_meta=frame.get("meta", {}),
+            )
+            if overlay_im is not None:
                 im = overlay_im
         elif layer_type == "coastline":
-            _draw_cartopy_coastlines(controller, ax, data_crs, zorder=max(30, zorder))
+            _draw_cartopy_coastlines(controller, ax, data_crs, zorder=zorder)
         elif layer_type == "graticule":
-            _draw_cartopy_graticule(controller, ax, data_crs, zorder=max(45, zorder))
+            _draw_cartopy_graticule(controller, ax, data_crs, zorder=zorder)
         elif layer_type in {"boundary", "shapefile"}:
-            _draw_cartopy_boundary_layer(controller, ax, data_crs, layer, zorder=max(35, zorder))
+            _draw_cartopy_boundary_layer(controller, ax, data_crs, layer, zorder=zorder)
 
     if not layer_queue and _show_base_raster(controller):
         im = ax.pcolormesh(lon2d, lat2d, grid_plot, transform=data_crs, shading="auto", cmap=cmap, vmin=cmin, vmax=cmax, zorder=2)
+        im._grace_preview_label = _base_raster_label(controller, frame)
         _draw_cartopy_coastlines(controller, ax, data_crs, zorder=20)
         _draw_cartopy_graticule(controller, ax, data_crs, zorder=30)
 
@@ -876,7 +1202,7 @@ def _render_cartopy_2d(controller) -> None:
 
     if im is not None and _show_colorbar(controller):
         cbar = controller._figure.colorbar(im, ax=ax, shrink=0.78, pad=0.02)
-        cbar.set_label(page.cmb_data_var.currentText().strip() or "value", fontsize=9)
+        cbar.set_label(_raster_artist_label(controller, im, frame), fontsize=9)
         cbar.ax.tick_params(labelsize=8)
 
     ax.set_title("")
@@ -891,7 +1217,7 @@ def _render_cartopy_2d(controller) -> None:
     pick_x = np.asarray(lon2d, dtype=float)
     pick_y = np.asarray(lat2d, dtype=float)
     with contextlib.suppress(Exception):
-        points = crs.transform_points(data_crs, pick_x, pick_y)
+        points = target_crs.transform_points(data_crs, pick_x, pick_y)
         if points is not None and points.shape[-1] >= 2:
             pick_x = points[..., 0]
             pick_y = points[..., 1]
@@ -903,11 +1229,8 @@ def _render_cartopy_2d(controller) -> None:
         "lat": np.asarray(lat2d, dtype=float),
         "grid": np.asarray(grid_plot, dtype=float),
     }
-    active_var_name = frame.get("meta", {}).get("active_var", page.cmb_data_var.currentText().strip() or "value")
-    page.lbl_dataset.setText(f"{Path(path).name} | {active_var_name}")
-    finite_grid = np.isfinite(grid)
-    page.lbl_grid_value.setText(f"{float(np.nanmean(grid[finite_grid])):.3f}" if np.any(finite_grid) else "NaN")
-    page.lbl_engine_latency.setText(f"{(time.perf_counter() - start) * 1000.0:.1f} ms")
+    pe._update_preview_status(controller, path, idx, frame, grid, (time.perf_counter() - start) * 1000.0)
+    _update_visible_raster_status(controller, im)
     restore_preview_header(controller.window)
     with contextlib.suppress(Exception):
         controller._sync_preview_toolbar_mode()
@@ -916,17 +1239,6 @@ def _render_cartopy_2d(controller) -> None:
 
 def _render_normalized_2d(controller) -> None:
     _render_cartopy_2d(controller)
-
-
-def _strip_colorbar_units(controller) -> None:
-    fig = getattr(controller, "_figure", None)
-    ax = getattr(controller, "_ax", None)
-    if fig is None or ax is None:
-        return
-    label = controller.window.page_preview.cmb_data_var.currentText().strip() or "value"
-    for cax in [item for item in fig.axes if item is not ax]:
-        with contextlib.suppress(Exception):
-            cax.set_ylabel(label, fontsize=9)
 
 
 def install_preview_stable_rendering(window) -> None:
@@ -941,7 +1253,6 @@ def install_preview_stable_rendering(window) -> None:
     def render(self):
         if _is_3d_label(page):
             result = pe._render_3d_globe(self)
-            _strip_colorbar_units(self)
             restore_preview_header(window)
             return result
         try:
@@ -978,4 +1289,13 @@ def install_preview_stable_rendering(window) -> None:
         if signal is not None:
             with contextlib.suppress(Exception):
                 signal.toggled.connect(lambda *_args, _controller=controller: _controller.on_render_preview())
+    with contextlib.suppress(Exception):
+        controller._preview_unit_motion_cid = controller._canvas.mpl_connect(
+            "motion_notify_event",
+            lambda _event, _controller=controller: _append_preview_value_unit(_controller),
+        )
+        controller._preview_unit_click_cid = controller._canvas.mpl_connect(
+            "button_press_event",
+            lambda _event, _controller=controller: _append_preview_value_unit(_controller),
+        )
     window._preview_stable_rendering_installed = True

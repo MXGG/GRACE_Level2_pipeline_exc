@@ -24,10 +24,26 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
-APP_VERSION = "0.1"
+from grace_pipeline import __version__ as APP_VERSION
+from grace_pipeline.ui.qt.data_sources import OFFICIAL_DATA_PORTALS
+from grace_pipeline.ui.qt.theme import palette_for_theme
+
 REPOSITORY_URL = "https://github.com/MXGG/GRACE_Level2_pipeline_exc"
 RELEASES_URL = f"{REPOSITORY_URL}/releases"
 ISSUES_URL = f"{REPOSITORY_URL}/issues"
+EARTHDATA_REGISTER_URL = "https://urs.earthdata.nasa.gov/users/new"
+EARTHDATA_LOGIN_URL = "https://urs.earthdata.nasa.gov/"
+EARTHDATA_TOKEN_URL = "https://urs.earthdata.nasa.gov/documentation/for_users/user_token"
+
+
+def _official_portal_links(language: str) -> str:
+    items = []
+    for portal in OFFICIAL_DATA_PORTALS:
+        auth_note = " · Earthdata" if portal.requires_earthdata else ""
+        if language == "zh" and portal.requires_earthdata:
+            auth_note = " · 需要 Earthdata 授权"
+        items.append(f'<li><a href="{portal.url}">{portal.label(language)}</a>{auth_note}</li>')
+    return "\n".join(items)
 
 
 @dataclass(frozen=True)
@@ -204,6 +220,15 @@ HELP_TOPICS: list[HelpTopic] = [
           <li><b>DDK kernels:</b> kernel directory required when DDK filtering is enabled.</li>
           <li><b>Boundaries and references:</b> basin boundaries, coastlines, mascon products, or other validation data.</li>
         </ul>
+        <h2>Official data download</h2>
+        <ol>
+          <li>Select <b>GSM files</b> or <b>Mascon NetCDF</b>, then choose the processing center.</li>
+          <li>Set an inclusive start and end month and a writable destination folder.</li>
+          <li>Use <b>Official Sources</b> to inspect the provider's product page, version, licence, and citation before downloading.</li>
+          <li>Review the confirmation dialog. PO.DAAC products require a NASA Earthdata user token; ICGEM, CSR direct, and GSFC direct products do not.</li>
+          <li>Keep one center and release consistent within an analysis unless the comparison is intentional and documented.</li>
+        </ol>
+        <p>The application supports CSR, JPL, GFZ, HUST, and ITSG Level-2 products, plus CSR, JPL, and GSFC Mascon NetCDF products. Missing mission months are preserved as missing; they are not silently substituted.</p>
         <h2>Output directories</h2>
         <ul>
           <li><b>local/stacks:</b> corrected stack products.</li>
@@ -227,6 +252,15 @@ HELP_TOPICS: list[HelpTopic] = [
           <li><b>DDK 核文件：</b> 启用 DDK 滤波时需要指定对应核函数目录。</li>
           <li><b>边界与参考数据：</b> 流域边界、海岸线、Mascon 产品或其他验证数据。</li>
         </ul>
+        <h2>官方数据下载</h2>
+        <ol>
+          <li>选择 <b>GSM 文件</b> 或 <b>Mascon NetCDF</b>，再选择处理中心。</li>
+          <li>设置包含首尾月份的时间范围，并选择具有写入权限的保存目录。</li>
+          <li>下载前通过 <b>官方数据源</b> 查看数据提供方发布的产品版本、许可和引用要求。</li>
+          <li>在确认对话框中核对信息。PO.DAAC 产品需要 NASA Earthdata 用户令牌；ICGEM、CSR 直连和 GSFC 直连产品无需该授权。</li>
+          <li>除非明确进行对比并记录差异，同一次分析应保持处理中心和产品版本一致。</li>
+        </ol>
+        <p>程序支持 CSR、JPL、GFZ、HUST、ITSG 的 Level-2 产品，以及 CSR、JPL、GSFC 的 Mascon NetCDF 产品。任务缺失月份会保持缺失，不会静默替换为相邻月份。</p>
         <h2>输出目录</h2>
         <ul>
           <li><b>local/stacks：</b> 校正后的栈产品。</li>
@@ -238,7 +272,7 @@ HELP_TOPICS: list[HelpTopic] = [
         <p>建议使用较短的英文路径，避免空格、特殊符号和需要管理员权限的目录。</p>
                 """
 ,
-        ('path', 'directory', 'input', 'output'),
+        ('path', 'directory', 'input', 'output', 'download', 'earthdata', 'provider'),
     ),
     _topic(
         'Processing Setup',
@@ -399,13 +433,20 @@ HELP_TOPICS: list[HelpTopic] = [
         ('preview', 'map', 'plot', 'export'),
     ),
     _topic(
-        'Run Monitor and logs',
-        '运行监控与日志',
+        'Console and log management',
+        '控制台与日志管理',
         'monitor',
         '▣',
         """
-        <h1>Run Monitor and logs</h1>
-        <p>The Run Monitor and logs page displays workflow progress, stage messages, output paths, warnings, and errors. It is useful for long runs, result tracking, and troubleshooting.</p>
+        <h1>Console and log management</h1>
+        <p>The console panel and Run Monitor display live process output, workflow progress, output paths, warnings, and errors. Session messages are also persisted under the configured log directory.</p>
+        <h2>Log categories</h2>
+        <ul>
+          <li><b>Console:</b> complete chronological output, including stdout and stderr.</li>
+          <li><b>Workflow Logs:</b> processing, filtering, preview, leakage-correction, basin-analysis, and tool messages.</li>
+          <li><b>Data &amp; I/O:</b> paths, configuration, downloads, authorization, input, and generated-output messages.</li>
+          <li><b>Warnings &amp; Errors:</b> stderr and messages explicitly tagged as warnings, errors, critical, or fatal.</li>
+        </ul>
         <h2>What to inspect</h2>
         <ul>
           <li><b>Current stage:</b> input indexing, preprocessing, filtering, grid synthesis, basin analysis, or leakage correction.</li>
@@ -419,8 +460,15 @@ HELP_TOPICS: list[HelpTopic] = [
                 """
 ,
         """
-        <h1>运行监控与日志</h1>
-        <p>运行监控与日志页面用于查看流程进度、阶段信息、输出路径、警告和错误信息，适合长任务运行、结果追踪和问题排查。</p>
+        <h1>控制台与日志管理</h1>
+        <p>控制台面板和运行监控页面用于查看实时程序输出、流程进度、输出路径、警告和错误；会话信息还会持久保存到当前配置的日志目录。</p>
+        <h2>日志分类</h2>
+        <ul>
+          <li><b>控制台：</b> 按时间顺序显示完整 stdout 和 stderr 输出。</li>
+          <li><b>工作流日志：</b> 处理、滤波、预览、泄漏校正、流域分析和工具消息。</li>
+          <li><b>数据与输入输出：</b> 路径、配置、下载、授权、输入文件和生成结果消息。</li>
+          <li><b>警告与错误：</b> stderr，以及明确标记为警告、错误、严重或致命的问题消息。</li>
+        </ul>
         <h2>重点关注</h2>
         <ul>
           <li><b>当前阶段：</b> 输入索引、预处理、滤波、格网合成、流域分析或泄漏校正。</li>
@@ -599,12 +647,12 @@ HELP_TOPICS: list[HelpTopic] = [
         'ⓘ',
         f"""
         <h1>Version and runtime information</h1>
-        <p>The Version and runtime information page records the GUI version, repository branch, and local runtime environment. Include this information when reporting an issue so that the problem can be reproduced and diagnosed more quickly.</p>
+        <p>The Version and runtime information page records the application version and local runtime environment. Include this information when reporting an issue so that the problem can be reproduced and diagnosed more quickly.</p>
         <h2>Current version</h2>
         <ul>
           <li><b>Application:</b> GRACE Level-2 Pipeline</li>
           <li><b>GUI version:</b> {APP_VERSION}</li>
-          <li><b>Repository branch:</b> wip/python-runtime-qt-monitor-refactor</li>
+          <li><b>Releases:</b> <a href="{RELEASES_URL}">{RELEASES_URL}</a></li>
         </ul>
         <h2>Issue report checklist</h2>
         <ul>
@@ -619,12 +667,12 @@ HELP_TOPICS: list[HelpTopic] = [
 ,
         f"""
         <h1>版本与运行环境</h1>
-        <p>版本与运行环境页面记录 GUI 版本、仓库分支和本地运行环境。反馈问题时，建议同时提供这些信息，以便快速复现和定位。</p>
+        <p>版本与运行环境页面记录应用程序版本和本地运行环境。反馈问题时，建议同时提供这些信息，以便快速复现和定位。</p>
         <h2>当前版本</h2>
         <ul>
           <li><b>应用程序：</b> GRACE Level-2 Pipeline</li>
           <li><b>GUI 版本：</b> {APP_VERSION}</li>
-          <li><b>仓库分支：</b> wip/python-runtime-qt-monitor-refactor</li>
+          <li><b>版本发布：</b> <a href="{RELEASES_URL}">{RELEASES_URL}</a></li>
         </ul>
         <h2>问题反馈清单</h2>
         <ul>
@@ -643,37 +691,47 @@ HELP_TOPICS: list[HelpTopic] = [
         '外部文档链接',
         'external_links',
         '↗',
-        """
+        f"""
         <h1>External links</h1>
-        <p>This page collects entries for source code, releases, issue reporting, and upstream data or documentation.</p>
-        <h2>Common links</h2>
+        <p>Use these human-facing official pages to check product versions, licences, citations, and access requirements. The application uses machine APIs internally only when a download starts.</p>
+        <h2>Project</h2>
         <ul>
-          <li>Project repository</li>
-          <li>GitHub Releases</li>
-          <li>Issue tracker</li>
-          <li>NASA PO.DAAC GRACE/GRACE-FO data</li>
-          <li>UTCSR GRACE resources</li>
-          <li>ICGEM gravity field models</li>
+          <li><a href="{REPOSITORY_URL}">Project repository</a></li>
+          <li><a href="{RELEASES_URL}">GitHub Releases</a></li>
+          <li><a href="{ISSUES_URL}">Issue tracker</a></li>
+        </ul>
+        <h2>Official GRACE / GRACE-FO data providers</h2>
+        <ul>{_official_portal_links('en')}</ul>
+        <h2>Earthdata account and authorization</h2>
+        <ul>
+          <li><a href="{EARTHDATA_REGISTER_URL}">Create a NASA Earthdata Login account</a></li>
+          <li><a href="{EARTHDATA_LOGIN_URL}">Sign in to NASA Earthdata Login</a></li>
+          <li><a href="{EARTHDATA_TOKEN_URL}">Official Earthdata user-token guide</a></li>
         </ul>
         <h2>Citation advice</h2>
-        <p>External pages, data releases, and download addresses may change. When citing a data source, record the access date, product name, release version, and processing center.</p>
+        <p>Record the product name, release/version, processing center, DOI or requested citation, and access date. Do not cite this application as the original data provider.</p>
         <p>---</p>
                 """
 ,
-        """
+        f"""
         <h1>外部文档链接</h1>
-        <p>本页面汇总源码、版本发布、问题反馈以及上游数据和文档入口。</p>
-        <h2>常用链接</h2>
+        <p>以下均为面向用户的官方页面，可用于核对产品版本、许可、引用方式和访问要求。仅在实际开始下载时，程序才会在内部调用机器接口。</p>
+        <h2>项目链接</h2>
         <ul>
-          <li>项目仓库</li>
-          <li>GitHub Releases</li>
-          <li>问题反馈</li>
-          <li>NASA PO.DAAC GRACE/GRACE-FO 数据</li>
-          <li>UTCSR GRACE 资源</li>
-          <li>ICGEM 重力场模型</li>
+          <li><a href="{REPOSITORY_URL}">项目仓库</a></li>
+          <li><a href="{RELEASES_URL}">版本发布</a></li>
+          <li><a href="{ISSUES_URL}">问题反馈</a></li>
+        </ul>
+        <h2>GRACE / GRACE-FO 官方数据提供方</h2>
+        <ul>{_official_portal_links('zh')}</ul>
+        <h2>Earthdata 账户与授权</h2>
+        <ul>
+          <li><a href="{EARTHDATA_REGISTER_URL}">创建 NASA Earthdata Login 账户</a></li>
+          <li><a href="{EARTHDATA_LOGIN_URL}">登录 NASA Earthdata Login</a></li>
+          <li><a href="{EARTHDATA_TOKEN_URL}">Earthdata 用户令牌官方指南</a></li>
         </ul>
         <h2>引用建议</h2>
-        <p>外部页面、数据版本和下载地址可能更新。引用数据源时，应记录访问日期、产品名称、发布版本和处理中心。</p>
+        <p>请记录产品名称、发布版本、处理中心、DOI 或官方要求的引用方式以及访问日期；不要将本程序作为原始数据提供方引用。</p>
                 """
 ,
         ('link', 'github', 'release', 'data'),
@@ -688,6 +746,10 @@ class HelpDocsDialog(QDialog):
         super().__init__(window)
         self.window = window
         self.language = getattr(window.ui_preferences, "language", "en")
+        self.colors = palette_for_theme(
+            getattr(window.ui_preferences, "theme", "system"),
+            app=QApplication.instance(),
+        )
         self._visible_topics: list[HelpTopic] = list(HELP_TOPICS)
         self.setWindowTitle("帮助文档" if self.language == "zh" else "Documentation")
         self.resize(1120, 780)
@@ -761,16 +823,16 @@ class HelpDocsDialog(QDialog):
         self._render_topic_list()
 
     def _browser_css(self) -> str:
-        return """
-        QTextBrowser {
-            background: #ffffff;
-            border: 1px solid #d8e2ef;
+        colors = self.colors
+        return f"""
+        QTextBrowser {{
+            background: {colors['surface']};
+            border: 1px solid {colors['border']};
             border-radius: 14px;
             padding: 16px;
-            color: #17233c;
+            color: {colors['text']};
             font-size: 14px;
-            line-height: 1.65;
-        }
+        }}
         """
 
     def _topic_label(self, topic: HelpTopic) -> str:
@@ -804,21 +866,23 @@ class HelpDocsDialog(QDialog):
 
     def _wrap_body(self, body: str) -> str:
         runtime = self._runtime_footer()
+        colors = self.colors
         return f"""
         <html><head><style>
-        body {{ font-family: 'Segoe UI', 'Microsoft YaHei UI', Arial, sans-serif; color: #17233c; line-height: 1.65; }}
-        h1 {{ font-size: 26px; margin: 0 0 12px 0; color: #0b254f; }}
-        h2 {{ font-size: 17px; margin: 22px 0 8px 0; color: #005b96; }}
+        body {{ font-family: 'Segoe UI', 'Microsoft YaHei UI', Arial, sans-serif; background: {colors['surface']}; color: {colors['text']}; line-height: 1.65; }}
+        h1 {{ font-size: 26px; margin: 0 0 12px 0; color: {colors['text']}; }}
+        h2 {{ font-size: 17px; margin: 22px 0 8px 0; color: {colors['primary']}; }}
         p {{ margin: 8px 0 12px 0; }}
         ul, ol {{ margin-top: 8px; padding-left: 24px; }}
         li {{ margin: 6px 0; }}
-        b {{ color: #0b254f; }}
-        pre {{ background: #f3f6fb; border: 1px solid #d8e2ef; border-radius: 8px; padding: 10px; white-space: pre-wrap; }}
+        b {{ color: {colors['text']}; }}
+        code, pre {{ color: {colors['text']}; }}
+        pre {{ background: {colors['surface_low']}; border: 1px solid {colors['border']}; border-radius: 8px; padding: 10px; white-space: pre-wrap; }}
         table {{ border-collapse: collapse; margin-top: 8px; width: 100%; }}
-        th, td {{ border: 1px solid #d8e2ef; padding: 8px 10px; text-align: left; }}
-        th {{ background: #f3f6fb; color: #0b254f; }}
-        a {{ color: #006ba6; text-decoration: none; }}
-        .runtime {{ margin-top: 28px; padding-top: 12px; border-top: 1px solid #d8e2ef; color: #637089; font-size: 12px; }}
+        th, td {{ border: 1px solid {colors['border']}; padding: 8px 10px; text-align: left; }}
+        th {{ background: {colors['surface_low']}; color: {colors['text']}; }}
+        a {{ color: {colors['primary']}; text-decoration: none; }}
+        .runtime {{ margin-top: 28px; padding-top: 12px; border-top: 1px solid {colors['border']}; color: {colors['text_muted']}; font-size: 12px; }}
         </style></head><body>{body}{runtime}</body></html>
         """
 
@@ -905,7 +969,10 @@ BUTTON_HELP: dict[str, tuple[str, str]] = {
     "btn_run": ("Start the configured GRACE Level-2 workflow.", "启动当前配置的 GRACE Level-2 处理流程。"),
     "btn_pause": ("Pause or resume the active processing task.", "暂停或继续当前处理任务。"),
     "btn_stop": ("Request a safe stop for the active processing task.", "请求安全停止当前处理任务。"),
-    "btn_console": ("Show or hide the process log panel.", "显示或隐藏处理日志面板。"),
+    "btn_console": (
+        "Show or hide categorized console output and session logs.",
+        "显示或隐藏分类控制台输出与会话日志。",
+    ),
     "btn_help": ("Open the searchable documentation window.", "打开可搜索帮助文档窗口。"),
     "btn_settings": ("Open theme and language preferences.", "打开主题和语言设置。"),
     "btn_nav_toggle": ("Collapse or expand the left navigation rail.", "折叠或展开左侧导航栏。"),
@@ -916,7 +983,7 @@ BUTTON_HELP: dict[str, tuple[str, str]] = {
     "btn_open_processing": ("Open the Processing Setup page.", "打开滤波处理页面。"),
     "btn_open_preview": ("Open the Preview page.", "打开预览页面。"),
     "btn_download_gfc_range": ("Download Level-2 GFC files for the selected center and time range.", "下载所选中心和时间范围的 Level-2 GFC 文件。"),
-    "btn_open_download_site": ("Open the upstream data download website.", "打开上游数据下载网站。"),
+    "btn_open_download_site": ("Browse all supported official data-provider pages.", "浏览所有受支持的官方数据提供方页面。"),
     "btn_tool_sh_to_grid": ("Convert spherical harmonic coefficients to a gridded EWH/TWSA product.", "将球谐系数转换为格网 EWH/TWSA 产品。"),
     "btn_tool_grid_to_sh": ("Convert a gridded product back to spherical harmonic coefficients when supported.", "在支持时将格网产品转换回球谐系数。"),
     "btn_lrc_load_info": ("Read metadata and dimensions from the leakage-correction input stack.", "读取泄漏校正输入栈的元数据和维度。"),

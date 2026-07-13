@@ -39,11 +39,14 @@ def _hide_long_explanatory_labels(page, *, min_len: int = 38) -> None:
         text = (label.text() or "").strip()
         if not text:
             continue
+        if bool(label.property("keepCompact")):
+            label.setVisible(True)
+            continue
         if label.objectName() in keep_object_names:
             continue
         if "\\" in text or ":\\" in text:
             continue
-        if len(text) >= min_len or label.objectName() == "PageSubtitle":
+        if len(text) >= min_len:
             _hide(label)
 
 
@@ -120,8 +123,8 @@ def _compact_leakage_page(window) -> None:
     if page is None:
         return
 
-    # Keep the three method cards and required inputs, but move detailed method
-    # text to Help. Status labels remain visible only after users read data.
+    # Keep concise, task-critical guidance beside the scientific controls.  A
+    # correction method should be understandable without opening Help.
     for attr in (
         "lbl_lrc_method_hint",
         "lbl_lrc_output_hint",
@@ -129,7 +132,10 @@ def _compact_leakage_page(window) -> None:
         "lbl_lrc_reference_info",
         "lbl_lrc_filter_hint",
     ):
-        _hide(getattr(page, attr, None))
+        label = getattr(page, attr, None)
+        if label is not None:
+            label.setProperty("keepCompact", True)
+            label.setVisible(True)
 
     # Avoid mixed English/Chinese in visible official-gain labels under Chinese UI.
     if _is_zh(window):
@@ -194,7 +200,6 @@ def _localize_visible_top_controls(window) -> None:
 def install_compact_polish(window) -> None:
     """Apply compact page presentation after all page extensions are installed."""
 
-    _hide_page_subtitles(window)
     _compact_dashboard(window)
     _compact_processing_page(window)
     _compact_leakage_page(window)
