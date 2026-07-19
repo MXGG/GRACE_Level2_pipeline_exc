@@ -39,16 +39,17 @@
       "enable": true
     },
     "p4m6": {
-      "enable": true
+      "enable": false
     },
     "fan": {
-      "enable": true
+      "enable": false
     },
     "ddk": {
-      "enable": true,
+      "enable": false,
       "type": "DDK4"
     },
     "hankel": {
+      "enable": false,
       "stack_mode": true,
       "params": {
         "N": 30,
@@ -61,6 +62,7 @@
   "inversion": {
     "Lmax": 60,
     "remove_mean": true,
+    "mean_baseline_mode": "standard_2004_2009",
     "mean_start_ym": "2004-01",
     "mean_end_ym": "2009-12",
     "lowdeg": {

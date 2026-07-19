@@ -41,6 +41,7 @@ dependencies = [
 
 [project.optional-dependencies]
 gui = [
+    "cartopy>=0.23.0",
     "PySide6>=6.7.0",
 ]
 dev = [
@@ -51,6 +52,7 @@ dev = [
     "mypy>=1.0.0",
 ]
 build = [
+    "cartopy>=0.23.0",
     "PySide6>=6.7.0",
     "pyinstaller>=5.0.0",
 ]
@@ -67,6 +69,14 @@ Releases = "https://github.com/MXGG/GRACE_Level2_pipeline_exc/releases"
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["grace_pipeline*"]
+
+[tool.setuptools.package-data]
+"grace_pipeline.ui.qt" = [
+    "assets/*.png",
+    "assets/icons/*.svg",
+    "assets/icons/navigation/*.svg",
+    "assets/icons/navigation/*.txt",
+]
 
 [tool.black]
 line-length = 100

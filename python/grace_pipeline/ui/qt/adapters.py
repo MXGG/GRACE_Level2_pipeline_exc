@@ -552,7 +552,7 @@ class QtConfigAdapter:
         if getattr(page, "dataset_edit", None) is not None:
             page.dataset_edit.setText(config.plot.get("stack_file", ""))
         if getattr(page, "projection_combo", None) is not None:
-            page.projection_combo.setCurrentText(config.plot.get("projection", "Robinson (Global)"))
+            page.projection_combo.setCurrentText(config.plot.get("projection", "Robinson"))
         if getattr(page, "time_index_slider", None) is not None:
             page.time_index_slider.setValue(int(config.plot.get("time_index", 0) or 0))
         if getattr(page, "cmap_combo", None) is not None:

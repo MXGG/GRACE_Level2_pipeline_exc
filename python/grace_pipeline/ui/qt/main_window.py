@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import contextlib
 
-from PySide6.QtCore import Qt, QSignalBlocker, QTimer
-from PySide6.QtGui import QFont, QGuiApplication
+from PySide6.QtCore import QSize, Qt, QSignalBlocker, QTimer
+from PySide6.QtGui import QAction, QFont, QGuiApplication
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -19,18 +19,30 @@ from PySide6.QtWidgets import (
     QPushButton,
     QRadioButton,
     QSizePolicy,
+    QMenu,
     QSplitter,
     QStackedWidget,
+    QStyle,
+    QSystemTrayIcon,
     QTabWidget,
     QTableWidget,
     QTextEdit,
     QToolButton,
+    QTreeWidget,
     QVBoxLayout,
     QWidget,
 )
 
+try:
+    from shiboken6 import isValid as _shiboken_is_valid
+except Exception:  # pragma: no cover - PySide6 always ships shiboken6.
+    def _shiboken_is_valid(_obj) -> bool:
+        return True
+
+from grace_pipeline.ui.qt.app_icon import install_app_icon, load_app_icon
+from grace_pipeline.ui.qt.design_system.icons import ICON_REGISTRY
 from grace_pipeline.ui.qt.mock_data import CONSOLE_LINES, NAV_ITEMS, PAGE_TITLES
-from grace_pipeline.ui.qt.i18n import translate_text
+from grace_pipeline.ui.qt.i18n import canonical_text, translate_text
 from grace_pipeline.ui.qt.pages import (
     BasinPage,
     DashboardPage,
@@ -42,7 +54,24 @@ from grace_pipeline.ui.qt.pages import (
 )
 from grace_pipeline.ui.qt.preferences import UIPreferences, load_ui_preferences, save_ui_preferences
 from grace_pipeline.ui.qt.theme import app_stylesheet, resolve_theme_mode
+from grace_pipeline.ui.qt.theme import COLOR
 from grace_pipeline.ui.qt.widgets import ElidedLabel, NavigationButton, build_badge
+
+
+NAV_RAIL_COLLAPSED_WIDTH = 56
+NAV_RAIL_MIN_WIDTH = 200
+NAV_RAIL_MAX_WIDTH = 250
+
+
+def _qt_object_is_alive(obj) -> bool:
+    try:
+        return obj is not None and _shiboken_is_valid(obj)
+    except RuntimeError:
+        return False
+
+
+def _is_deleted_qt_object_error(exc: RuntimeError) -> bool:
+    return "already deleted" in str(exc).lower()
 
 
 class MainWindow(QMainWindow):
@@ -55,6 +84,7 @@ class MainWindow(QMainWindow):
         self.ui_preferences = load_ui_preferences(settings_store) if load_persisted else UIPreferences()
         self._resolved_theme = resolve_theme_mode(self.ui_preferences.theme)
         self._style_hints_bound = False
+        self._app_icon = install_app_icon(self)
         self.setWindowTitle(self.translate_text(self._window_title_base))
         self.resize(1600, 980)
         self.setMinimumSize(1320, 820)
@@ -67,9 +97,12 @@ class MainWindow(QMainWindow):
         self._last_console_height = 220
         self._nav_collapsed = False
         self._font_scale_delta = 1
+        self._force_exit = False
+        self.tray_icon: QSystemTrayIcon | None = None
 
         self._build_shell()
         self._bind_system_theme_changes()
+        self._install_tray_icon()
         self.apply_ui_preferences(self.ui_preferences, persist=False)
         self.set_active_page("dashboard")
 
@@ -133,51 +166,67 @@ class MainWindow(QMainWindow):
         rail = QFrame()
         rail.setObjectName("NavigationRail")
         rail.setFixedWidth(240)
+        rail.setAccessibleName("Primary navigation")
+        rail.setAccessibleDescription("Pages in the GRACE Level-2 processing workflow")
 
         layout = QVBoxLayout(rail)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
-        brand = QWidget()
-        brand_layout = QVBoxLayout(brand)
-        brand_layout.setContentsMargins(24, 22, 24, 24)
-        brand_layout.setSpacing(4)
+        self.nav_brand = QWidget()
+        self.nav_brand.setObjectName("NavBrand")
+        self.nav_brand_layout = QVBoxLayout(self.nav_brand)
+        self.nav_brand_layout.setContentsMargins(24, 22, 24, 24)
+        self.nav_brand_layout.setSpacing(4)
 
-        title = QLabel("GRACE-L2")
-        title.setStyleSheet("font-size: 28px; font-weight: 700;")
-        subtitle = QLabel("PRECISION PIPELINE")
-        subtitle.setObjectName("LabelCaps")
-        brand_layout.addWidget(title)
-        brand_layout.addWidget(subtitle)
-        layout.addWidget(brand)
+        self.nav_brand_title = QLabel("GRACE-L2")
+        self.nav_brand_title.setObjectName("NavBrandTitle")
+        self.nav_brand_subtitle = QLabel("Precision Pipeline")
+        self.nav_brand_subtitle.setObjectName("LabelCaps")
+        self.nav_brand_mark = QLabel("L2")
+        self.nav_brand_mark.setObjectName("NavBrandMark")
+        self.nav_brand_mark.setAlignment(Qt.AlignCenter)
+        self.nav_brand_mark.setFixedSize(40, 40)
+        self.nav_brand_mark.setAccessibleName("GRACE Level-2")
+        self.nav_brand_mark.setToolTip("GRACE Level-2 Pipeline")
+        self.nav_brand_mark.hide()
+        self.nav_brand_layout.addWidget(self.nav_brand_title)
+        self.nav_brand_layout.addWidget(self.nav_brand_subtitle)
+        self.nav_brand_layout.addWidget(self.nav_brand_mark, alignment=Qt.AlignCenter)
+        layout.addWidget(self.nav_brand)
 
-        nav_wrap = QWidget()
-        nav_layout = QVBoxLayout(nav_wrap)
-        nav_layout.setContentsMargins(0, 12, 0, 12)
-        nav_layout.setSpacing(2)
-        for key, label in NAV_ITEMS:
-            btn = NavigationButton(label)
+        self.nav_wrap = QWidget()
+        self.nav_wrap.setObjectName("NavItems")
+        self.nav_layout = QVBoxLayout(self.nav_wrap)
+        self.nav_layout.setContentsMargins(0, 12, 0, 12)
+        self.nav_layout.setSpacing(2)
+        for item in NAV_ITEMS:
+            key, label, icon = (item + ("",))[:3] if len(item) == 2 else item
+            btn = NavigationButton(label, icon)
             btn.clicked.connect(lambda checked=False, page_key=key: self.set_active_page(page_key))
-            nav_layout.addWidget(btn)
+            self.nav_layout.addWidget(btn)
             self._nav_buttons[key] = btn
-        nav_layout.addStretch(1)
-        layout.addWidget(nav_wrap, 1)
+        self.nav_layout.addStretch(1)
+        layout.addWidget(self.nav_wrap, 1)
 
-        footer = QFrame()
-        footer.setObjectName("NavFooter")
-        foot_layout = QVBoxLayout(footer)
-        foot_layout.setContentsMargins(18, 14, 18, 14)
-        foot_layout.setSpacing(6)
-        user = QLabel("L2")
-        user.setFixedSize(30, 30)
-        user.setAlignment(Qt.AlignCenter)
-        user.setStyleSheet("background: #005db5; color: white; border-radius: 15px; font-weight: 700;")
-        foot_layout.addWidget(user, alignment=Qt.AlignLeft)
-        foot_layout.addWidget(QLabel("Local Workspace"))
-        role = QLabel("Python / MATLAB")
-        role.setObjectName("MonoText")
-        foot_layout.addWidget(role)
-        layout.addWidget(footer)
+        self.nav_footer = QFrame()
+        self.nav_footer.setObjectName("NavFooter")
+        self.nav_footer_layout = QVBoxLayout(self.nav_footer)
+        self.nav_footer_layout.setContentsMargins(18, 14, 18, 14)
+        self.nav_footer_layout.setSpacing(6)
+        self.nav_user = QLabel("L2")
+        self.nav_user.setObjectName("NavAvatar")
+        self.nav_user.setFixedSize(30, 30)
+        self.nav_user.setAlignment(Qt.AlignCenter)
+        self.nav_user.setAccessibleName("Local workspace profile")
+        self.nav_user.setToolTip("Local Workspace · Python / MATLAB")
+        self.nav_workspace_label = QLabel("Local Workspace")
+        self.nav_role_label = QLabel("Python / MATLAB")
+        self.nav_role_label.setObjectName("MonoText")
+        self.nav_footer_layout.addWidget(self.nav_user, alignment=Qt.AlignLeft)
+        self.nav_footer_layout.addWidget(self.nav_workspace_label)
+        self.nav_footer_layout.addWidget(self.nav_role_label)
+        layout.addWidget(self.nav_footer)
         return rail
 
     def _build_top_bar(self) -> QWidget:
@@ -192,11 +241,15 @@ class MainWindow(QMainWindow):
         self.btn_nav_toggle = QToolButton()
         self.btn_nav_toggle.setObjectName("IconButton")
         self.btn_nav_toggle.setText("☰")
+        self.btn_nav_toggle.setToolButtonStyle(Qt.ToolButtonIconOnly)
+        self.btn_nav_toggle.setIcon(ICON_REGISTRY.icon("panel-left-close", COLOR["text_muted"], size=22))
+        self.btn_nav_toggle.setIconSize(QSize(20, 20))
         self.btn_nav_toggle.setCheckable(True)
-        self.btn_nav_toggle.setToolTip("Collapse or expand the left navigation")
+        self.btn_nav_toggle.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        self._refresh_nav_toggle_accessibility()
         self.btn_nav_toggle.clicked.connect(self._toggle_nav_rail)
         left.addWidget(self.btn_nav_toggle)
-        self.app_title = QLabel("GRACE LEVEL-2 PIPELINE")
+        self.app_title = QLabel("GRACE Level-2 Pipeline")
         self.app_title.setObjectName("AppTitle")
         divider = QLabel("/")
         divider.setObjectName("LabelCaps")
@@ -208,7 +261,12 @@ class MainWindow(QMainWindow):
         left.addStretch(1)
         layout.addLayout(left, 1)
 
-        self.pipeline_status = build_badge("CONFIG READY", "success")
+        self.pipeline_status = build_badge("Config Ready", "success")
+        self.pipeline_status.setToolTip("Pipeline configuration status")
+        self.pipeline_status.setAccessibleName("Pipeline configuration status")
+        self.pipeline_status.setAccessibleDescription("Whether the current processing configuration is ready")
+        self.pipeline_status.setMinimumWidth(112)
+        self.pipeline_status.setAlignment(Qt.AlignCenter)
         layout.addWidget(self.pipeline_status)
 
         self.top_progress_wrap = QFrame()
@@ -233,6 +291,8 @@ class MainWindow(QMainWindow):
         self.top_progress_bar.setRange(0, 100)
         self.top_progress_bar.setValue(0)
         self.top_progress_bar.setTextVisible(False)
+        self.top_progress_bar.setAccessibleName("Pipeline progress")
+        self.top_progress_bar.setAccessibleDescription("Progress of the active GRACE processing run")
         progress_layout.addWidget(self.top_progress_label, 2)
         progress_layout.addWidget(self.top_progress_detail, 0)
         progress_layout.addWidget(self.top_progress_percent, 0)
@@ -240,16 +300,24 @@ class MainWindow(QMainWindow):
         self.top_progress_wrap.setVisible(False)
         layout.addWidget(self.top_progress_wrap, 2)
 
-        self.btn_console = QPushButton("Console")
+        self.btn_console = QPushButton("Console & Log Management")
         self.btn_console.setObjectName("GhostButton")
         self.btn_console.setCheckable(True)
-        self.btn_console.setToolTip("Show or hide process logs")
+        self.btn_console.setToolTip("Show or hide categorized console output and logs")
+        self.btn_console.setAccessibleName("Console and log management")
+        self.btn_console.setAccessibleDescription(
+            "Show or hide console output, workflow logs, data messages, warnings, and errors"
+        )
         self.btn_help = QPushButton("Help")
         self.btn_help.setObjectName("GhostButton")
         self.btn_help.setToolTip("Open the desktop workflow guide")
-        self.btn_settings = QPushButton("Settings")
+        self.btn_help.setAccessibleName("Help")
+        self.btn_help.setAccessibleDescription("Open the GRACE Level-2 workflow guide")
+        self.btn_settings = QPushButton("Appearance")
         self.btn_settings.setObjectName("GhostButton")
         self.btn_settings.setToolTip("Theme and language preferences")
+        self.btn_settings.setAccessibleName("Appearance settings")
+        self.btn_settings.setAccessibleDescription("Change theme, language, and interface fonts")
         self.btn_console.toggled.connect(self._toggle_console)
         for btn in (self.btn_help, self.btn_console, self.btn_settings):
             layout.addWidget(btn)
@@ -264,7 +332,21 @@ class MainWindow(QMainWindow):
         layout = QVBoxLayout(panel)
         # Align console body with page cards (same horizontal gutter as content pages).
         layout.setContentsMargins(24, 8, 24, 8)
-        layout.setSpacing(0)
+        layout.setSpacing(8)
+
+        header = QFrame()
+        header.setObjectName("ConsoleHeader")
+        header_layout = QHBoxLayout(header)
+        header_layout.setContentsMargins(12, 8, 12, 8)
+        header_layout.setSpacing(8)
+        self.lbl_console_session = QLabel("Session Log")
+        self.lbl_console_session.setObjectName("ConsoleHeaderTitle")
+        self.btn_open_log_folder = QPushButton("Open Log")
+        self.btn_open_log_folder.setObjectName("ConsoleButton")
+        header_layout.addWidget(self.lbl_console_session)
+        header_layout.addStretch(1)
+        header_layout.addWidget(self.btn_open_log_folder)
+        layout.addWidget(header)
 
         tabs = QTabWidget()
         tabs.setObjectName("ConsoleTabs")
@@ -272,21 +354,32 @@ class MainWindow(QMainWindow):
 
         self.console_text = QTextEdit()
         self.console_text.setReadOnly(True)
-        self.console_text.setStyleSheet("background: #121b2f; color: #91f1c4; border: none; font-family: 'JetBrains Mono', Consolas, monospace;")
+        self.console_text.setObjectName("ConsoleOutput")
+        self.console_text.setProperty("stream", "console")
         self.console_text.setPlainText("\n".join(CONSOLE_LINES))
         tabs.addTab(self.console_text, "Console")
 
         self.filters_text = QTextEdit()
         self.filters_text.setReadOnly(True)
-        self.filters_text.setStyleSheet("background: #121b2f; color: #9fb2ce; border: none; font-family: 'JetBrains Mono', Consolas, monospace;")
+        self.filters_text.setObjectName("ConsoleOutput")
+        self.filters_text.setProperty("stream", "filter")
         self.filters_text.setPlainText("[OK] Filter chain controls are linked to the active configuration.")
-        tabs.addTab(self.filters_text, "Filters")
+        self.workflow_logs_text = self.filters_text
+        tabs.addTab(self.filters_text, "Workflow Logs")
+
+        self.data_io_text = QTextEdit()
+        self.data_io_text.setReadOnly(True)
+        self.data_io_text.setObjectName("ConsoleOutput")
+        self.data_io_text.setProperty("stream", "data")
+        self.data_io_text.setPlainText("[SYSTEM] Data paths and download services are ready.")
+        tabs.addTab(self.data_io_text, "Data & I/O")
 
         self.alerts_text = QTextEdit()
         self.alerts_text.setReadOnly(True)
-        self.alerts_text.setStyleSheet("background: #121b2f; color: #f4d98a; border: none; font-family: 'JetBrains Mono', Consolas, monospace;")
-        self.alerts_text.setPlainText("SYSTEM: Desktop shell is connected to the Python workflow controller.")
-        tabs.addTab(self.alerts_text, "Alerts")
+        self.alerts_text.setObjectName("ConsoleOutput")
+        self.alerts_text.setProperty("stream", "alert")
+        self.alerts_text.setPlainText("[SYSTEM] No warnings or errors in this session.")
+        tabs.addTab(self.alerts_text, "Warnings & Errors")
 
         layout.addWidget(tabs)
         self.console_dock = panel
@@ -299,14 +392,13 @@ class MainWindow(QMainWindow):
         return widget
 
     def set_active_page(self, key: str):
-        if key == "monitor":
-            key = "dashboard"
         if key not in self._pages:
             return
         self.stack.setCurrentWidget(self._pages[key])
         self.breadcrumb.setText(PAGE_TITLES[key])
         for btn_key, btn in self._nav_buttons.items():
             btn.setChecked(btn_key == key)
+            btn.refresh_icon()
         self._apply_responsive_layout(force=(key == "preview"))
         self.refresh_translations()
 
@@ -318,11 +410,29 @@ class MainWindow(QMainWindow):
         self.refresh_translations()
 
     def _append_console_line(self, text: str, tag: str = "stdout"):
-        self.console_text.append(text)
-        if tag == "stderr":
-            self.alerts_text.append(text)
+        message = str(text or "")
+        normalized_tag = str(tag or "stdout").strip().lower()
+        self.console_text.append(message)
+        issue_prefixes = ("[ERROR]", "[WARN]", "[WARNING]", "[CRITICAL]", "[FATAL]")
+        is_issue = normalized_tag in {"stderr", "error", "warning", "alert", "critical"} or message.lstrip().upper().startswith(
+            issue_prefixes
+        )
+        if is_issue:
+            self.alerts_text.append(message)
+            return
+        data_prefixes = (
+            "[AUTH]",
+            "[CONFIG]",
+            "[DOWNLOAD]",
+            "[GFC]",
+            "[INPUT]",
+            "[OUTPUT]",
+            "[PATH]",
+        )
+        if message.lstrip().upper().startswith(data_prefixes):
+            self.data_io_text.append(message)
         else:
-            self.filters_text.append(text)
+            self.filters_text.append(message)
 
     def _toggle_console(self, checked: bool):
         self.set_console_visible(checked)
@@ -375,11 +485,50 @@ class MainWindow(QMainWindow):
 
     def set_nav_collapsed(self, collapsed: bool):
         self._nav_collapsed = bool(collapsed)
-        self.nav_rail.setVisible(not self._nav_collapsed)
-        self.nav_rail.setFixedWidth(0 if self._nav_collapsed else 240)
+        self.nav_rail.setVisible(True)
+        self._apply_nav_compact_state()
         self.btn_nav_toggle.setChecked(self._nav_collapsed)
+        self._refresh_nav_toggle_accessibility()
+        self._refresh_shell_icons()
         self._layout_bucket = None
         self._apply_responsive_layout(force=True)
+
+    def _apply_nav_compact_state(self) -> None:
+        compact = self._nav_collapsed
+        self.nav_brand_title.setVisible(not compact)
+        self.nav_brand_subtitle.setVisible(not compact)
+        self.nav_brand_mark.setVisible(compact)
+        if compact:
+            self.nav_brand_layout.setContentsMargins(6, 14, 6, 12)
+        else:
+            self.nav_brand_layout.setContentsMargins(24, 22, 24, 24)
+        self.nav_layout.setContentsMargins(6 if compact else 0, 12, 6 if compact else 0, 12)
+        for button in self._nav_buttons.values():
+            button.set_compact(compact)
+        self.nav_workspace_label.setVisible(not compact)
+        self.nav_role_label.setVisible(not compact)
+        if compact:
+            self.nav_footer_layout.setContentsMargins(0, 12, 0, 12)
+        else:
+            self.nav_footer_layout.setContentsMargins(18, 14, 18, 14)
+        self.nav_footer_layout.setAlignment(self.nav_user, Qt.AlignCenter if compact else Qt.AlignLeft)
+        self.nav_rail.setAccessibleDescription(
+            "Collapsed page icon rail" if compact else "Pages in the GRACE Level-2 processing workflow"
+        )
+
+    def _refresh_nav_toggle_accessibility(self) -> None:
+        if not hasattr(self, "btn_nav_toggle"):
+            return
+        language = str(getattr(self.ui_preferences, "language", "en") or "en").lower()
+        if language == "zh":
+            name = "展开左侧导航栏" if self._nav_collapsed else "折叠左侧导航栏"
+            description = "显示或收起工作流程页面导航"
+        else:
+            name = "Expand left navigation" if self._nav_collapsed else "Collapse left navigation"
+            description = "Show the workflow page navigation as a full panel or compact icon rail"
+        self.btn_nav_toggle.setToolTip(name)
+        self.btn_nav_toggle.setAccessibleName(name)
+        self.btn_nav_toggle.setAccessibleDescription(description)
 
     def set_run_active(self, active: bool, text: str = "", indeterminate: bool = False):
         self._set_run_button_state(active)
@@ -455,7 +604,7 @@ class MainWindow(QMainWindow):
 
     def _bind_screen_signals(self):
         handle = self.windowHandle()
-        if handle is not None and not self._screen_changed_bound:
+        if handle is not None and hasattr(handle, "screenChanged") and not self._screen_changed_bound:
             handle.screenChanged.connect(self._on_screen_changed)
             self._screen_changed_bound = True
         screen = self._current_screen()
@@ -489,23 +638,102 @@ class MainWindow(QMainWindow):
     def apply_ui_preferences(self, preferences: UIPreferences, persist: bool = True):
         theme = str(preferences.theme or "system").strip().lower()
         language = str(preferences.language or "en").strip().lower()
-        if theme not in {"system", "light", "dark"}:
+        if theme not in {"system", "light", "dark", "blue", "green", "graphite", "sepia", "violet"}:
             theme = "system"
         if language not in {"en", "zh"}:
             language = "en"
-        self.ui_preferences = UIPreferences(theme=theme, language=language)
+        ui_font = str(getattr(preferences, "ui_font", "default") or "default").strip()
+        mono_font = str(getattr(preferences, "mono_font", "default") or "default").strip()
+        self.ui_preferences = UIPreferences(theme=theme, language=language, ui_font=ui_font, mono_font=mono_font)
         if persist:
             save_ui_preferences(self.ui_preferences, settings=self._settings_store)
         app = QApplication.instance() or QGuiApplication.instance()
         if app is not None:
-            stylesheet = app_stylesheet(self.ui_preferences.theme, app=app)
+            stylesheet = app_stylesheet(
+                self.ui_preferences.theme,
+                app=app,
+                ui_font=self.ui_preferences.ui_font,
+                mono_font=self.ui_preferences.mono_font,
+            )
             self._apply_font_scale_to_app(app)
             app.setStyleSheet(stylesheet + self._font_scale_stylesheet())
         self._resolved_theme = resolve_theme_mode(self.ui_preferences.theme, app=app)
         self.setWindowTitle(self.translate_text(self._window_title_base))
+        self._refresh_shell_icons()
         self.refresh_translations()
         if getattr(self, "controller", None) is not None:
             self.controller.refresh_plot_theme()
+        QTimer.singleShot(0, lambda: self._apply_responsive_layout(force=True))
+
+    def _refresh_shell_icons(self) -> None:
+        if hasattr(self, "btn_nav_toggle"):
+            toggle_icon = "panel-left-open" if self._nav_collapsed else "panel-left-close"
+            self.btn_nav_toggle.setIcon(ICON_REGISTRY.icon(toggle_icon, COLOR["text_muted"], size=22))
+        for button in getattr(self, "_nav_buttons", {}).values():
+            if _qt_object_is_alive(button):
+                button.refresh_icon()
+
+    def _install_tray_icon(self) -> None:
+        app = QApplication.instance()
+        if app is None or self.tray_icon is not None:
+            return
+        app.setQuitOnLastWindowClosed(False)
+        if not QSystemTrayIcon.isSystemTrayAvailable():
+            return
+        icon = self._app_icon if not self._app_icon.isNull() else self.windowIcon()
+        if icon.isNull():
+            icon = load_app_icon()
+            if not icon.isNull():
+                self._app_icon = icon
+                self.setWindowIcon(icon)
+                app.setWindowIcon(icon)
+        if icon.isNull():
+            icon = app.style().standardIcon(QStyle.StandardPixmap.SP_ComputerIcon)
+        self.tray_menu = QMenu(self)
+        self.tray_open_action = QAction("Open GRACE-L2", self.tray_menu)
+        self.tray_exit_action = QAction("Exit", self.tray_menu)
+        self.tray_menu.addAction(self.tray_open_action)
+        self.tray_menu.addSeparator()
+        self.tray_menu.addAction(self.tray_exit_action)
+        self.tray_open_action.triggered.connect(self.show_from_tray)
+        self.tray_exit_action.triggered.connect(self.exit_application)
+        self.tray_icon = QSystemTrayIcon(icon, self)
+        self.tray_icon.setContextMenu(self.tray_menu)
+        self.tray_icon.activated.connect(self._on_tray_activated)
+        self.tray_icon.show()
+
+    def _refresh_tray_text(self) -> None:
+        if not _qt_object_is_alive(self.tray_icon):
+            return
+        self.tray_icon.setToolTip(self.translate_text(self._window_title_base))
+        if _qt_object_is_alive(getattr(self, "tray_open_action", None)):
+            self.tray_open_action.setText(self.translate_text("Open GRACE-L2"))
+        if _qt_object_is_alive(getattr(self, "tray_exit_action", None)):
+            self.tray_exit_action.setText(self.translate_text("Exit"))
+
+    def _on_tray_activated(self, reason) -> None:
+        if reason in (QSystemTrayIcon.ActivationReason.Trigger, QSystemTrayIcon.ActivationReason.DoubleClick):
+            self.show_from_tray()
+
+    def show_from_tray(self) -> None:
+        self.showNormal()
+        self.raise_()
+        self.activateWindow()
+
+    def exit_application(self) -> None:
+        self._force_exit = True
+        if _qt_object_is_alive(self.tray_icon):
+            self.tray_icon.hide()
+        app = QApplication.instance()
+        if app is not None:
+            app.quit()
+
+    def closeEvent(self, event):  # noqa: N802
+        if _qt_object_is_alive(self.tray_icon) and not self._force_exit:
+            event.ignore()
+            self.hide()
+            return
+        super().closeEvent(event)
 
     def _apply_font_scale_to_app(self, app) -> None:
         font = QFont(app.font())
@@ -550,8 +778,12 @@ QLabel#MetricValue {{
 }}
 QCheckBox::indicator,
 QRadioButton::indicator {{
-    width: {base + 4}px;
-    height: {base + 4}px;
+    width: 16px;
+    height: 16px;
+}}
+QCheckBox[switchRole="true"]::indicator {{
+    width: 46px;
+    height: 24px;
 }}
 """
 
@@ -582,17 +814,75 @@ QRadioButton::indicator {{
         self.setWindowTitle(self.translate_text(self._window_title_base))
         widgets = [self] + self.findChildren(QWidget)
         for widget in widgets:
-            self._translate_widget_text(widget)
-            self._translate_widget_placeholder(widget)
-            if isinstance(widget, QComboBox):
-                self._translate_combo_items(widget)
-            if isinstance(widget, QTabWidget):
-                self._translate_tab_widget(widget)
-            if isinstance(widget, QTableWidget):
-                self._translate_table_headers(widget)
-                self._translate_table_items(widget)
+            if not _qt_object_is_alive(widget):
+                continue
+            try:
+                if isinstance(widget, NavigationButton):
+                    widget.apply_language(self.translate_text)
+                    continue
+                if (
+                    widget.objectName() == "PreviewLayerTree"
+                    and hasattr(widget, "set_translator")
+                ):
+                    widget.set_translator(self.translate_text)
+                self._translate_widget_text(widget)
+                self._translate_widget_placeholder(widget)
+                if isinstance(widget, QComboBox):
+                    self._translate_combo_items(widget)
+                if isinstance(widget, QTabWidget):
+                    self._translate_tab_widget(widget)
+                if isinstance(widget, QTableWidget):
+                    self._translate_table_headers(widget)
+                    self._translate_table_items(widget)
+                if isinstance(widget, QTreeWidget):
+                    self._translate_tree_headers(widget)
+            except RuntimeError as exc:
+                if _is_deleted_qt_object_error(exc):
+                    continue
+                raise
+        self._apply_button_roles()
+        self._refresh_nav_toggle_accessibility()
+        self._refresh_tray_text()
+
+    def _apply_button_roles(self) -> None:
+        primary_terms = ("run", "download", "validate", "render", "export", "save", "generate", "apply", "ok")
+        danger_terms = ("stop", "abort", "delete", "clear", "exit", "remove")
+        path_terms = ("browse", "folder", "file", "choose")
+        soft_terms = ("visit", "open", "help", "log", "console", "appearance", "settings", "load", "view", "tools")
+        explicit_roles = {
+            "PrimaryButton",
+            "GhostButton",
+            "SoftButton",
+            "DangerGhostButton",
+            "LayerIconButton",
+            "PlotToolButton",
+        }
+        for button in self.findChildren(QPushButton):
+            if not _qt_object_is_alive(button):
+                continue
+            if isinstance(button, NavigationButton) or button.objectName() in {"IconButton", "NavButton", "ConsoleButton", "PathButton"}:
+                continue
+            role_text = canonical_text(button.text()).lower()
+            if any(term in role_text for term in danger_terms):
+                object_name = "DangerGhostButton"
+            elif button.objectName() in explicit_roles:
+                continue
+            elif any(term in role_text for term in path_terms):
+                object_name = "PathButton"
+            elif any(term in role_text for term in primary_terms):
+                object_name = "PrimaryButton"
+            elif any(term in role_text for term in soft_terms):
+                object_name = "SoftButton"
+            else:
+                continue
+            if button.objectName() != object_name:
+                button.setObjectName(object_name)
+            button.style().unpolish(button)
+            button.style().polish(button)
 
     def _translate_widget_text(self, widget: QWidget):
+        if not _qt_object_is_alive(widget):
+            return
         if bool(widget.property("skipTextTranslation")):
             return
         if not isinstance(widget, (QLabel, QPushButton, QCheckBox, QRadioButton, QToolButton)):
@@ -611,8 +901,15 @@ QRadioButton::indicator {{
         if current != translated:
             widget.setText(translated)
         widget._tr_last_text = translated
+        if isinstance(widget, QLabel):
+            buddy = widget.buddy()
+            if buddy is not None and _qt_object_is_alive(buddy):
+                buddy.setAccessibleName(translated)
+                buddy.setAccessibleDescription(translated)
 
     def _translate_widget_placeholder(self, widget: QWidget):
+        if not _qt_object_is_alive(widget):
+            return
         if not isinstance(widget, QLineEdit):
             return
         current = widget.placeholderText()
@@ -631,6 +928,8 @@ QRadioButton::indicator {{
         widget._tr_last_placeholder = translated
 
     def _translate_combo_items(self, widget: QComboBox):
+        if not _qt_object_is_alive(widget):
+            return
         current_items = [widget.itemText(index) for index in range(widget.count())]
         base_items = getattr(widget, "_tr_base_items", None)
         last_items = getattr(widget, "_tr_last_items", None)
@@ -650,6 +949,8 @@ QRadioButton::indicator {{
         widget._tr_last_items = translated_items
 
     def _translate_tab_widget(self, widget: QTabWidget):
+        if not _qt_object_is_alive(widget):
+            return
         current_tabs = [widget.tabText(index) for index in range(widget.count())]
         base_tabs = getattr(widget, "_tr_base_tabs", None)
         last_tabs = getattr(widget, "_tr_last_tabs", None)
@@ -665,6 +966,8 @@ QRadioButton::indicator {{
         widget._tr_last_tabs = translated_tabs
 
     def _translate_table_headers(self, widget: QTableWidget):
+        if not _qt_object_is_alive(widget):
+            return
         current_headers = []
         for index in range(widget.columnCount()):
             item = widget.horizontalHeaderItem(index)
@@ -684,6 +987,8 @@ QRadioButton::indicator {{
         widget._tr_last_headers = translated_headers
 
     def _translate_table_items(self, widget: QTableWidget):
+        if not _qt_object_is_alive(widget):
+            return
         for row in range(widget.rowCount()):
             for col in range(widget.columnCount()):
                 item = widget.item(row, col)
@@ -701,6 +1006,26 @@ QRadioButton::indicator {{
                 if current != translated:
                     item.setText(translated)
                 item._tr_last_text = translated
+
+    def _translate_tree_headers(self, widget: QTreeWidget):
+        if not _qt_object_is_alive(widget):
+            return
+        current_headers = []
+        header = widget.headerItem()
+        for index in range(widget.columnCount()):
+            current_headers.append(header.text(index) if header is not None else "")
+        base_headers = getattr(widget, "_tr_base_headers", None)
+        last_headers = getattr(widget, "_tr_last_headers", None)
+        if base_headers is None or len(base_headers) != widget.columnCount():
+            base_headers = list(current_headers)
+        elif current_headers != last_headers and current_headers != base_headers:
+            base_headers = list(current_headers)
+        widget._tr_base_headers = list(base_headers)
+        translated_headers = [self.translate_text(text) for text in base_headers]
+        for index, text in enumerate(translated_headers):
+            if header is not None and header.text(index) != text:
+                header.setText(index, text)
+        widget._tr_last_headers = translated_headers
 
     def _on_screen_changed(self, *_args):
         self._bind_screen_signals()
@@ -746,10 +1071,10 @@ QRadioButton::indicator {{
             return
         self._layout_bucket = bucket
 
-        nav_width = self._clamp(int(screen_w * 0.16 / dpi_scale), 200, 250)
+        nav_width = self._clamp(int(screen_w * 0.16 / dpi_scale), NAV_RAIL_MIN_WIDTH, NAV_RAIL_MAX_WIDTH)
         if self._nav_collapsed:
-            self.nav_rail.setFixedWidth(0)
-            nav_width = 0
+            nav_width = NAV_RAIL_COLLAPSED_WIDTH
+            self.nav_rail.setFixedWidth(nav_width)
         else:
             self.nav_rail.setFixedWidth(nav_width)
 
@@ -766,10 +1091,10 @@ QRadioButton::indicator {{
         content_w = max(720, self.width() - nav_width)
         content_h = max(560, self.height() - 90)
 
-        sidebar_w = self._clamp(int(content_w * (0.19 if dpi_scale <= 1.1 else 0.21)), 240, 340)
+        sidebar_w = self._clamp(int(content_w * (0.26 if dpi_scale <= 1.1 else 0.28)), 320, 560)
         if page.sidebar_panel.isVisible():
-            page.sidebar_panel.setMinimumWidth(self._clamp(sidebar_w - 18, 220, 320))
-            page.sidebar_panel.setMaximumWidth(self._clamp(sidebar_w + 18, 280, 380))
+            page.sidebar_panel.setMinimumWidth(self._clamp(sidebar_w - 120, 280, 460))
+            page.sidebar_panel.setMaximumWidth(self._clamp(sidebar_w + 180, 460, 720))
             page.page_splitter.setSizes([sidebar_w, max(860, content_w - sidebar_w)])
         else:
             page.page_splitter.setSizes([0, max(860, content_w)])

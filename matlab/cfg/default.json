@@ -69,6 +69,7 @@
     "_comment": "Spherical harmonic inversion parameters",
     "Lmax": 60,
     "remove_mean": true,
+    "mean_baseline_mode": "standard_2004_2009",
     "mean_start_ym": "2004-01",
     "mean_end_ym": "2009-12",
     "lowdeg": {
@@ -169,6 +170,19 @@
     "fm_min_improve": 0.0001,
     "fm_accel": 1.1,
     "fm_metric": "land_weighted_mean",
+    "fm_mass_conservation": "legacy_land_mean_fill",
+    "fm_output_mode": "mask_zero",
+    "FM": {
+      "nIter": 40,
+      "minIter": 3,
+      "tol_rmse_mm": 0.01,
+      "accel": 1.1,
+      "patience": 8,
+      "min_improve": 0.0001,
+      "metric": "land_weighted_mean",
+      "mass_conservation": "legacy_land_mean_fill",
+      "output_mode": "mask_zero"
+    },
     "sf_toolbox": "",
     "input": "",
     "output": "",

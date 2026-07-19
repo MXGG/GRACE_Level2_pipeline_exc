@@ -10,13 +10,23 @@ os.environ.setdefault("MPLBACKEND", "Agg")
 from PySide6.QtCore import Qt
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
+import numpy as np
+import scipy.io as sio
+try:
+    import shapefile
+except ImportError:  # pragma: no cover - optional local dependency guard
+    shapefile = None
 
 
 ROOT = Path(__file__).resolve().parents[2]
 PYTHON_ROOT = ROOT / "python"
+os.environ["GRACE_L2_HOME"] = str(ROOT)
+os.environ["GRACE_L2_DATA"] = str(ROOT / "data")
+os.environ["GRACE_L2_OUTPUT"] = str(ROOT / "outputs")
 if str(PYTHON_ROOT) not in sys.path:
     sys.path.insert(0, str(PYTHON_ROOT))
 
+from grace_pipeline.ui.qt.global_monitor import configure_global_run_monitor
 from grace_pipeline.ui.qt.main_window import MainWindow
 from grace_pipeline.ui.qt.i18n import translate_text
 from grace_pipeline.ui.qt.preferences import UIPreferences
@@ -29,6 +39,7 @@ class GuiWorkflowNavigationTest(unittest.TestCase):
 
     def setUp(self):
         self.window = MainWindow(load_persisted=False)
+        configure_global_run_monitor(self.window)
         self.window._current_screen_metrics = lambda: (1920, 1040, 1.0)
         self.window._layout_bucket = None
         self.window.resize(1600, 980)
@@ -39,17 +50,43 @@ class GuiWorkflowNavigationTest(unittest.TestCase):
         self.window.close()
         self.app.processEvents()
 
-    def test_run_output_state_is_merged_into_dashboard_navigation(self):
+    def test_run_monitor_and_data_paths_are_not_user_reachable(self):
         self.assertNotIn("monitor", self.window._nav_buttons)
+        self.assertNotIn("data_paths", self.window._nav_buttons)
 
-        self.window.set_active_page("monitor")
+        for key in ("monitor", "data_paths"):
+            self.window.set_active_page("dashboard")
+            self.app.processEvents()
+            self.window.set_active_page(key)
+            self.app.processEvents()
+            self.assertIs(self.window.stack.currentWidget(), self.window.page_processing)
+            self.assertEqual(self.window.breadcrumb.text(), "Filter Processing")
+            self.assertTrue(self.window._nav_buttons["processing"].isChecked())
+
+    def test_global_top_bar_is_run_monitor_and_processing_page_owns_run_entry(self):
+        self.assertTrue(self.window.page_dashboard.card_commands.isHidden())
+        self.assertFalse(self.window.page_dashboard.btn_run_full.isVisible())
+        self.assertFalse(self.window.page_dashboard.btn_pause_run.isVisible())
+        self.assertFalse(self.window.page_dashboard.btn_stop_run.isVisible())
+        self.assertIs(self.window.btn_run, self.window.page_processing.btn_run_filters)
+        self.assertIs(self.window.btn_pause, self.window.btn_top_pause)
+        self.assertIs(self.window.btn_stop, self.window.btn_top_stop)
+
+        self.window.set_run_active(True, text="RUNNING PIPELINE", indeterminate=False)
+        self.window.set_run_progress(25.0, detail="3/12", stage="Monthly filter", subtask="Gaussian")
         self.app.processEvents()
-        self.assertIs(self.window.stack.currentWidget(), self.window.page_dashboard)
-        self.assertEqual(self.window.breadcrumb.text(), "Dashboard")
+        self.assertTrue(self.window.top_progress_wrap.isVisible())
+        self.assertEqual(self.window.top_progress_percent.text(), "25%")
+        self.assertIn("ETC", self.window.top_progress_task.text())
+        self.assertIn("ETA", self.window.top_progress_task.text())
+        self.assertIn("Monthly filter", self.window.page_dashboard.lbl_dashboard_stage.text())
+        self.assertIn("Gaussian", self.window.page_dashboard.lbl_dashboard_stage.text())
+        self.assertTrue(self.window.btn_top_pause.isEnabled())
+        self.assertTrue(self.window.btn_top_stop.isEnabled())
 
     def test_dashboard_action_buttons_route_to_operational_pages(self):
         for button, page_key, widget in (
-            (self.window.page_dashboard.btn_open_data_paths, "data_paths", self.window.page_data_paths),
+            (self.window.page_dashboard.btn_open_data_paths, "processing", self.window.page_processing),
             (self.window.page_dashboard.btn_open_processing, "processing", self.window.page_processing),
             (self.window.page_dashboard.btn_open_preview, "preview", self.window.page_preview),
         ):
@@ -61,7 +98,7 @@ class GuiWorkflowNavigationTest(unittest.TestCase):
             self.assertTrue(self.window._nav_buttons[page_key].isChecked())
 
     def test_console_and_navigation_controls_stay_in_sync(self):
-        self.assertEqual(self.window.btn_console.text(), "Console")
+        self.assertEqual(self.window.btn_console.text(), "Log")
         self.assertEqual(self.window.btn_nav_toggle.text(), "☰")
 
         QTest.mouseClick(self.window.page_dashboard.btn_console_run, Qt.LeftButton)
@@ -118,19 +155,19 @@ class GuiWorkflowNavigationTest(unittest.TestCase):
         self.window.apply_ui_preferences(UIPreferences(theme="light", language="zh"), persist=False)
         self.app.processEvents()
 
-        self.assertEqual(self.window.page_dashboard.btn_run_full.text(), "\u8fd0\u884c\u6ee4\u6ce2")
-        self.assertEqual(self.window.page_dashboard.btn_validate_paths.text(), "\u6821\u9a8c\u8def\u5f84")
-        self.assertEqual(self.window.page_leakage.btn_run_leakage.text(), "\u8fd0\u884c\u6821\u6b63")
-        self.assertEqual(self.window.page_basin.table_basins.horizontalHeaderItem(1).text(), "\u6d41\u57df\u540d\u79f0")
-        self.assertEqual(self.window.page_basin.btn_preview_selected_basin.text(), "\u9884\u89c8\u5f53\u524d\u6d41\u57df")
-        self.assertEqual(self.window.page_basin.chk_basin_save_series.text(), "\u7a7a\u95f4\u63d0\u53d6\uff1a\u9762\u79ef\u52a0\u6743\u6d41\u57df\u65f6\u5e8f")
-        self.assertEqual(self.window.page_basin.table_basins.item(0, 1).text(), "\u4e9a\u9a6c\u900a\u6d41\u57df")
-        self.assertEqual(self.window.page_preview.chk_layer_boundaries.text(), "\u8fb9\u754c\u53e0\u52a0\u5c42")
-        self.assertEqual(self.window.page_preview.chk_layer_rivers.text(), "\u9644\u52a0\u81ea\u5b9a\u4e49 SHP")
-        self.assertEqual(translate_text("2006-03 -> 2014-10 (95 months)", "zh"), "2006-03 -> 2014-10\uff0895 \u4e2a\u6708\uff09")
+        self.assertEqual(self.window.page_processing.btn_run_filters.text(), "运行滤波")
+        self.assertEqual(self.window.page_dashboard.btn_validate_paths.text(), "校验路径")
+        self.assertEqual(self.window.page_leakage.btn_run_leakage.text(), "运行校正")
+        self.assertEqual(self.window.page_basin.table_basins.horizontalHeaderItem(1).text(), "流域名称")
+        self.assertEqual(self.window.page_basin.btn_refresh_basin_preview.text(), "预览空间分布")
+        self.assertEqual(self.window.page_basin.chk_basin_save_series.text(), "流域时序：每个边界的面积加权值")
+        self.assertEqual(self.window.page_basin.table_basins.rowCount(), 0)
+        self.assertEqual(self.window.page_preview.chk_layer_boundaries.text(), "边界叠加层")
+        self.assertEqual(self.window.page_preview.chk_layer_rivers.text(), "附加自定义 SHP")
+        self.assertEqual(translate_text("2006-03 -> 2014-10 (95 months)", "zh"), "2006-03 -> 2014-10（95 个月）")
         self.assertEqual(
             translate_text("95 GFC files | 2006-03 // 2014-10 | missing=9 (GRACE=9)", "zh"),
-            "95 \u4e2a GFC \u6587\u4ef6 | 2006-03 // 2014-10 | \u7f3a\u6d4b=9\uff08GRACE=9\uff09",
+            "95 个 GFC 文件 | 2006-03 // 2014-10 | 缺测=9（GRACE=9）",
         )
 
     def test_operational_controls_update_frontend_state(self):
@@ -161,11 +198,35 @@ class GuiWorkflowNavigationTest(unittest.TestCase):
         basin = self.window.page_basin
         self.window.set_active_page("basin")
         self.app.processEvents()
-        QTest.mouseClick(basin.btn_mode_global, Qt.LeftButton)
-        self.app.processEvents()
+        self.assertFalse(basin.btn_mode_multi.isVisible())
+        self.assertFalse(basin.btn_mode_global.isVisible())
+        self.assertFalse(basin.btn_mode_point.isVisible())
+        self.assertFalse(basin.cmb_basin_selection_mode.isVisible())
         self.assertEqual(basin.cmb_basin_selection_mode.currentText(), "Global Scan")
         self.assertTrue(basin.btn_mode_global.isChecked())
         self.assertFalse(basin.btn_mode_multi.isChecked())
+
+    def test_preview_sidebar_source_controls_do_not_overflow_on_long_error(self):
+        self.window.resize(1280, 820)
+        self.window._layout_bucket = None
+        self.window.set_active_page("preview")
+        page = self.window.page_preview
+        page.page_splitter.setSizes([320, 900])
+        page.edit_dataset_source.setText("G:/" + "/".join(["very_long_folder_name"] * 12) + "/missing_stack.nc")
+        page.lbl_stack_info.setText(
+            "Load failed. NetCDF load failed: [Errno 2] No such file or directory: "
+            + "'"
+            + page.edit_dataset_source.text()
+            + "'"
+        )
+        self.app.processEvents()
+
+        source_width = page.dataset_source_block.width()
+        actions = page.btn_dataset_browse.parentWidget()
+        self.assertLessEqual(page.edit_dataset_source.geometry().right(), source_width)
+        self.assertLessEqual(page.btn_dataset_browse.geometry().right(), actions.width())
+        self.assertLessEqual(page.btn_load_stack.geometry().right(), actions.width())
+        self.assertGreater(page.btn_dataset_browse.width(), 40)
 
     def test_run_buttons_reach_controller_guards(self):
         warnings = []
@@ -173,7 +234,7 @@ class GuiWorkflowNavigationTest(unittest.TestCase):
         self.window.controller._show_warning = lambda title, text: warnings.append((title, text))
         self.window.controller._run_in_thread = lambda scope, target, status_text: starts.append((scope, status_text))
 
-        QTest.mouseClick(self.window.page_dashboard.btn_run_full, Qt.LeftButton)
+        QTest.mouseClick(self.window.page_processing.btn_run_filters, Qt.LeftButton)
         self.app.processEvents()
         self.assertEqual(starts[-1][0], "all")
 
@@ -190,11 +251,16 @@ class GuiWorkflowNavigationTest(unittest.TestCase):
 
         QTest.mouseClick(self.window.page_leakage.btn_run_leakage, Qt.LeftButton)
         self.app.processEvents()
-        self.assertTrue(any(title == "\u6cc4\u6f0f\u6821\u6b63" for title, _ in warnings))
+        self.assertTrue(any(title == "泄漏校正" for title, _ in warnings))
 
     def test_basin_boundary_reader_populates_selectable_features(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
+            stack = root / "stack.mat"
+            lon = np.array([-20.0, 0.0, 20.0], dtype=float)
+            lat = np.array([-20.0, 0.0, 20.0], dtype=float)
+            ewh = np.ones((3, 3, 2), dtype=float)
+            sio.savemat(stack, {"lon": lon, "lat": lat, "ewh": ewh, "t": np.array([2003.0, 2003.1], dtype=float)})
             boundary = root / "sample_boundary.txt"
             boundary.write_text(
                 "\n".join(["-10 -10", "10 -10", "10 10", "-10 10", "-10 -10"]),
@@ -202,14 +268,20 @@ class GuiWorkflowNavigationTest(unittest.TestCase):
             )
 
             page = self.window.page_basin
+            page.edit_data_file.setText(str(stack))
+            self.window.controller.on_load_basin_info()
             page.edit_boundary_file.setText(str(boundary))
             self.window.controller.on_load_basin_boundary_info()
             self.app.processEvents()
 
             self.assertEqual(page.table_basins.rowCount(), 1)
             self.assertEqual(page.table_basins.item(0, 1).text(), "poly_1")
+            self.assertIn("grid cells", page.table_basins.item(0, 2).text())
             self.assertEqual(page.table_basins.currentRow(), 0)
+            self.assertEqual(page.cmb_preview_basin.currentText(), "poly_1")
+            self.assertEqual(page.slider_basin_time_index.maximum(), 1)
             self.assertIn("1 feature", page.lbl_boundary_info.text())
+            self.assertIn("Mask:", page.lbl_mask_info.text())
 
     def test_basin_boundary_directory_resolves_to_supported_file(self):
         with tempfile.TemporaryDirectory() as td:
@@ -229,6 +301,62 @@ class GuiWorkflowNavigationTest(unittest.TestCase):
 
             self.assertEqual(page.edit_boundary_file.text(), str(boundary))
             self.assertIn("1 feature", page.lbl_boundary_info.text())
+
+    @unittest.skipIf(shapefile is None, "pyshp is not installed")
+    def test_basin_shapefile_with_multiple_features_populates_preview_table(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            shp = root / "basins.shp"
+            writer = shapefile.Writer(str(shp))
+            writer.field("Name", "C")
+            writer.poly([[[-10, -10], [10, -10], [10, 10], [-10, 10], [-10, -10]]])
+            writer.record("center")
+            writer.poly([[[15, 15], [25, 15], [25, 25], [15, 25], [15, 15]]])
+            writer.record("corner")
+            writer.close()
+
+            page = self.window.page_basin
+            page.edit_boundary_file.setText(str(shp))
+            self.window.controller.on_load_basin_boundary_info()
+            self.app.processEvents()
+
+            self.assertEqual(page.table_basins.rowCount(), 2)
+            self.assertEqual(page.table_basins.item(0, 1).text(), "center")
+            self.assertEqual(page.table_basins.item(1, 1).text(), "corner")
+            self.assertEqual(page.cmb_preview_basin.count(), 2)
+            self.assertIn("2 feature", page.lbl_boundary_info.text())
+
+    @unittest.skipIf(shapefile is None, "pyshp is not installed")
+    def test_basin_shapefile_name_field_combo_uses_discovered_field(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            shp = root / "large_basin_style.shp"
+            writer = shapefile.Writer(str(shp))
+            writer.field("OBJECTID", "N")
+            writer.field("whymap_riv", "C")
+            writer.field("whymap_r_2", "C")
+            writer.poly([[[-10, -10], [10, -10], [10, 10], [-10, 10], [-10, -10]]])
+            writer.record(1, "KHATANGA", "Khatanga")
+            writer.poly([[[15, 15], [25, 15], [25, 25], [15, 25], [15, 15]]])
+            writer.record(2, "LENA", "")
+            writer.close()
+
+            page = self.window.page_basin
+            page.edit_boundary_file.setText(str(shp))
+            self.window.controller.on_load_basin_boundary_info()
+            self.app.processEvents()
+
+            self.assertEqual(page.cmb_basin_name_field.currentText(), "whymap_r_2")
+            fields = [page.cmb_basin_name_field.itemText(i) for i in range(page.cmb_basin_name_field.count())]
+            self.assertIn("OBJECTID", fields)
+            self.assertIn("whymap_r_2", fields)
+            self.assertEqual(page.table_basins.item(0, 1).text(), "Khatanga")
+            self.assertEqual(page.table_basins.item(1, 1).text(), "LENA")
+
+    def test_basin_temporal_options_are_hidden_from_user_flow(self):
+        page = self.window.page_basin
+        self.assertTrue(hasattr(page, "card_temporal"))
+        self.assertFalse(page.card_temporal.isVisible())
 
 
 if __name__ == "__main__":

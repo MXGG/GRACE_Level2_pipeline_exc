@@ -20,5 +20,5 @@ packaging/
 
 - Build outputs should not be committed.
 - Release assets should be generated from this directory and uploaded to GitHub Releases.
-- Installer scripts should not live in the repository root.
+- The current supported Inno Setup entrypoint is `installer/grace-l2.iss`; the root `grace-l2.iss` is only a deprecation stub to prevent accidental builds with the old relative paths.
 - Platform-specific scripts should not be mixed with source code directories.

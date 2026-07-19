@@ -1,26 +1,20 @@
-"""
-Configuration management for GRACE pipeline.
-Handles loading JSON configs with placeholder resolution and merging.
-"""
+"""Configuration loading and defaults for the GRACE Level-2 pipeline."""
+
+from __future__ import annotations
 
 import configparser
 import json
 import os
 import re
 import sys
+from copy import deepcopy
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, Optional, Union
 
 
-def _path_value(value: Optional[str]) -> Optional[Path]:
-    """Return an expanded path value without requiring the path to exist."""
-    if not value:
-        return None
-    try:
-        return Path(value).expanduser().resolve()
-    except Exception:
-        return None
+# This file is intentionally self-contained. It is imported by CLI, GUI, and HPC
+# wrappers before most optional scientific dependencies are loaded.
 
 
 def _existing_path(value: Optional[str]) -> Optional[Path]:
@@ -35,39 +29,13 @@ def _existing_path(value: Optional[str]) -> Optional[Path]:
     return None
 
 
-def _read_install_ini(start: Optional[Path] = None) -> Dict[str, str]:
-    """Read installer path hints from grace-l2.ini when present."""
-    starts = []
-    if start is not None:
-        starts.extend([start, *start.parents])
-    if getattr(sys, "frozen", False):
-        exe_dir = Path(sys.executable).resolve().parent
-        starts.extend([exe_dir, *exe_dir.parents])
-
-    seen = set()
-    for base in starts:
-        if base in seen:
-            continue
-        seen.add(base)
-        ini_path = base / "grace-l2.ini"
-        if not ini_path.exists():
-            continue
-        parser = configparser.ConfigParser()
-        try:
-            parser.read(ini_path, encoding="utf-8")
-            if parser.has_section("Paths"):
-                return {k.lower(): v for k, v in parser.items("Paths")}
-        except Exception:
-            continue
-    return {}
-
-
-def get_bundle_dir() -> Path:
-    """Return the PyInstaller bundle directory, or a sensible source fallback."""
-    meipass = getattr(sys, "_MEIPASS", None)
-    if meipass:
-        return Path(meipass).resolve()
-    return get_root_dir()
+def _path_value(value: Optional[str]) -> Optional[Path]:
+    if not value:
+        return None
+    try:
+        return Path(value).expanduser().resolve()
+    except Exception:
+        return None
 
 
 def _looks_like_repo_root(path: Path) -> bool:
@@ -79,41 +47,56 @@ def _looks_like_repo_root(path: Path) -> bool:
     )
 
 
+def _ini_path(root: Path) -> Path:
+    return root / "grace-l2.ini"
+
+
+def _read_ini_path(root: Path, key: str) -> Optional[Path]:
+    ini = _ini_path(root)
+    if not ini.exists():
+        return None
+    parser = configparser.ConfigParser()
+    try:
+        parser.read(ini, encoding="utf-8-sig")
+        value = parser.get("Paths", key, fallback="").strip()
+    except Exception:
+        return None
+    if not value:
+        return None
+    path = Path(value).expanduser()
+    if not path.is_absolute():
+        path = root / path
+    return path.resolve()
+
+
 def get_root_dir() -> Path:
-    """
-    Return the active project/install root.
-
-    Frozen installer layout:
-        <root>/dist/grace-pipeline-gui.exe
-        <root>/configs
-        <root>/data
-        <root>/outputs
-
-    Source layout:
-        repository root containing configs/, python/, and matlab/.
-    """
+    """Return the active repository/install root directory."""
     env_root = _existing_path(os.environ.get("GRACE_L2_HOME"))
     if env_root:
         return env_root
-
     if getattr(sys, "frozen", False):
         exe_dir = Path(sys.executable).resolve().parent
-        ini = _read_install_ini(exe_dir)
-        ini_root = _existing_path(ini.get("homedir"))
-        if ini_root:
-            return ini_root
-
         candidates = [exe_dir.parent, exe_dir] if exe_dir.name.lower() == "dist" else [exe_dir, exe_dir.parent]
         for candidate in candidates:
             if _looks_like_repo_root(candidate):
                 return candidate.resolve()
         return candidates[0].resolve()
-
     cwd = Path.cwd().resolve()
     for candidate in [cwd, *cwd.parents]:
         if _looks_like_repo_root(candidate):
             return candidate.resolve()
+    # For editable/pip-style CLI usage outside a repository tree, the working
+    # directory is the user's runtime root. Falling back to the installed package
+    # path would place default data/output paths under site-packages.
     return cwd
+
+
+def get_bundle_dir() -> Path:
+    """Return the PyInstaller bundle directory, or a source-layout fallback."""
+    meipass = getattr(sys, "_MEIPASS", None)
+    if meipass:
+        return Path(meipass).resolve()
+    return get_root_dir()
 
 
 def get_data_dir(root_dir: Optional[Union[str, Path]] = None) -> Path:
@@ -122,7 +105,7 @@ def get_data_dir(root_dir: Optional[Union[str, Path]] = None) -> Path:
     env_data = _existing_path(os.environ.get("GRACE_L2_DATA"))
     if env_data:
         return env_data
-    ini_data = _existing_path(_read_install_ini(root).get("datadir"))
+    ini_data = _read_ini_path(root, "DataDir")
     if ini_data:
         return ini_data
     bundle_data = get_bundle_dir() / "data" if getattr(sys, "frozen", False) else None
@@ -132,28 +115,25 @@ def get_data_dir(root_dir: Optional[Union[str, Path]] = None) -> Path:
 
 
 def get_output_dir(root_dir: Optional[Union[str, Path]] = None) -> Path:
-    """Return the active output directory for source or installed runs.
-
-    Unlike input/data directories, output paths are allowed to be absent at
-    startup. The pipeline or doctor command can create them later.
-    """
+    """Return the active output directory."""
     root = Path(root_dir).resolve() if root_dir is not None else get_root_dir()
     env_output = _path_value(os.environ.get("GRACE_L2_OUTPUT"))
     if env_output:
         return env_output
-    ini_output = _path_value(_read_install_ini(root).get("outputdir"))
+    ini_output = _read_ini_path(root, "OutputDir")
     if ini_output:
         return ini_output
+    # Canonical repository/runtime output directory is plural `outputs`.
     return root / "outputs"
 
 
 def get_config_dir(root_dir: Optional[Union[str, Path]] = None) -> Path:
-    """Return the canonical user-facing config directory."""
+    """Return the canonical config directory."""
     root = Path(root_dir).resolve() if root_dir is not None else get_root_dir()
     env_cfg = _existing_path(os.environ.get("GRACE_L2_CONFIG"))
     if env_cfg:
         return env_cfg
-    ini_cfg = _existing_path(_read_install_ini(root).get("configdir"))
+    ini_cfg = _read_ini_path(root, "ConfigDir")
     if ini_cfg:
         return ini_cfg
     for candidate in [root / "configs", root / "cfg", root / "matlab" / "cfg"]:
@@ -163,15 +143,14 @@ def get_config_dir(root_dir: Optional[Union[str, Path]] = None) -> Path:
 
 
 def find_default_config(root_dir: Optional[Union[str, Path]] = None) -> Optional[Path]:
-    """Find default.json in canonical, installed, bundled, or legacy layouts."""
+    """Find default.json in source, installed, bundled, or legacy layouts."""
     root = Path(root_dir).resolve() if root_dir is not None else get_root_dir()
     bundle = get_bundle_dir()
-    config_dir = get_config_dir(root)
     candidates = [
-        config_dir / "default.json",
         root / "configs" / "default.json",
         root / "cfg" / "default.json",
         root / "matlab" / "cfg" / "default.json",
+        get_config_dir(root) / "default.json",
         bundle / "configs" / "default.json",
         bundle / "cfg" / "default.json",
         bundle / "matlab" / "cfg" / "default.json",
@@ -187,13 +166,11 @@ def find_default_config(root_dir: Optional[Union[str, Path]] = None) -> Optional
 
 
 def resolve_placeholders(obj: Any, root_dir: str) -> Any:
-    """Recursively resolve ${ROOT} and other environment placeholders."""
+    """Recursively resolve ${ROOT} and environment placeholders."""
     if isinstance(obj, str):
         obj = obj.replace("${ROOT}", root_dir)
-        pattern = r"\$\{([^}]+)\}"
-        for match in re.findall(pattern, obj):
-            env_val = os.environ.get(match, "")
-            obj = obj.replace(f"${{{match}}}", env_val)
+        for match in re.findall(r"\$\{([^}]+)\}", obj):
+            obj = obj.replace(f"${{{match}}}", os.environ.get(match, ""))
         return obj
     if isinstance(obj, dict):
         return {k: resolve_placeholders(v, root_dir) for k, v in obj.items()}
@@ -202,37 +179,45 @@ def resolve_placeholders(obj: Any, root_dir: str) -> Any:
     return obj
 
 
-def remap_root_paths(obj: Any, source_root: str, target_root: str) -> Any:
-    """Remap absolute paths rooted at source_root to target_root recursively."""
-    if not source_root or not target_root:
+def _remap_paths_from_saved_root(obj: Any, saved_root: str, runtime_root: str) -> Any:
+    saved_root = str(saved_root or "").strip()
+    runtime_root = str(runtime_root or "").strip()
+    if not saved_root or not runtime_root or saved_root == runtime_root:
         return obj
+    try:
+        saved_norm = str(Path(saved_root).expanduser())
+        runtime_norm = str(Path(runtime_root).expanduser())
+    except Exception:
+        saved_norm = saved_root
+        runtime_norm = runtime_root
+    saved_norm = saved_norm.rstrip("\\/")
+    runtime_norm = runtime_norm.rstrip("\\/")
 
-    src_win = source_root.replace("/", "\\").rstrip("\\")
-    src_posix = source_root.replace("\\", "/").rstrip("/")
-    dst = str(Path(target_root).resolve())
+    def remap_string(value: str) -> str:
+        text = value
+        for prefix in {saved_root.rstrip("\\/"), saved_norm}:
+            if not prefix:
+                continue
+            if text == prefix:
+                return runtime_norm
+            if text.startswith(prefix + "\\") or text.startswith(prefix + "/"):
+                return runtime_norm + text[len(prefix):]
+        return text
 
     if isinstance(obj, str):
-        s = obj
-        replaced = False
-        for src in (src_win, src_posix):
-            if src and src in s:
-                s = s.replace(src, dst)
-                replaced = True
-        if replaced and os.name != "nt":
-            s = s.replace("\\", "/")
-        return s
+        return remap_string(obj)
     if isinstance(obj, dict):
-        return {k: remap_root_paths(v, source_root, target_root) for k, v in obj.items()}
+        return {key: _remap_paths_from_saved_root(value, saved_root, runtime_root) for key, value in obj.items()}
     if isinstance(obj, list):
-        return [remap_root_paths(item, source_root, target_root) for item in obj]
+        return [_remap_paths_from_saved_root(item, saved_root, runtime_root) for item in obj]
     return obj
 
 
 def merge_configs(base: Dict, override: Dict) -> Dict:
     """Deep merge override config into base config."""
-    result = base.copy()
-    for key, value in override.items():
-        if key in result and isinstance(result[key], dict) and isinstance(value, dict):
+    result = deepcopy(base or {})
+    for key, value in (override or {}).items():
+        if isinstance(value, dict) and isinstance(result.get(key), dict):
             result[key] = merge_configs(result[key], value)
         else:
             result[key] = value
@@ -241,7 +226,6 @@ def merge_configs(base: Dict, override: Dict) -> Dict:
 
 @dataclass
 class PathConfig:
-    """Path configuration."""
     ROOT: str = ""
     GFC: str = ""
     OUTPUT: str = ""
@@ -253,7 +237,6 @@ class PathConfig:
 
 @dataclass
 class TimeConfig:
-    """Time range configuration."""
     auto_detect_gfc: bool = True
     start_ym: str = "2002-04"
     end_ym: str = "2017-06"
@@ -263,7 +246,6 @@ class TimeConfig:
 
 @dataclass
 class GridConfig:
-    """Output grid configuration."""
     lon: tuple = (-179.5, 179.5)
     lat: tuple = (-89.5, 89.5)
     dlon: float = 1.0
@@ -273,9 +255,9 @@ class GridConfig:
 
 @dataclass
 class InversionConfig:
-    """Spherical harmonic inversion parameters."""
     Lmax: int = 60
     remove_mean: bool = True
+    mean_baseline_mode: str = "standard_2004_2009"
     mean_start_ym: str = ""
     mean_end_ym: str = ""
     lowdeg: Dict = field(default_factory=dict)
@@ -284,14 +266,12 @@ class InversionConfig:
 
 @dataclass
 class GaussianFilterConfig:
-    """Gaussian filter settings."""
     enable: bool = True
     radius_km: float = 300.0
 
 
 @dataclass
 class P4M6FilterConfig:
-    """P4M6 destriping filter settings."""
     enable: bool = True
     poly_deg: int = 4
     m_start: int = 6
@@ -299,7 +279,6 @@ class P4M6FilterConfig:
 
 @dataclass
 class DDKFilterConfig:
-    """DDK filter settings."""
     enable: bool = True
     type: str = "DDK4"
     data_dir: str = ""
@@ -307,8 +286,7 @@ class DDKFilterConfig:
 
 @dataclass
 class HSAFFilterConfig:
-    """HSAF (Hankel-SVD Adaptive Filter) settings."""
-    enable: bool = True
+    enable: bool = False
     variant: str = "global"
     mode: str = "profile"
     engine: str = "matlab_v3"
@@ -319,7 +297,6 @@ class HSAFFilterConfig:
 
 @dataclass
 class FilterConfig:
-    """All filter configurations."""
     gaussian: GaussianFilterConfig = field(default_factory=GaussianFilterConfig)
     p4m6: P4M6FilterConfig = field(default_factory=P4M6FilterConfig)
     fan: Dict = field(default_factory=dict)
@@ -330,13 +307,39 @@ class FilterConfig:
 
 
 @dataclass
+class CoefficientExportConfig:
+    enabled: bool = False
+    format: str = "icgem_gfc"
+    coefficient_content: str = "anomaly"
+    max_degree: Optional[int] = None
+    norm: str = "fully_normalized"
+    errors: str = "no"
+    tide_system: str = "zero_tide"
+    earth_gravity_constant: float = 3.986004415e14
+    radius: float = 6.37813646e6
+    earth_density: float = 5517.0
+    water_density: float = 1000.0
+    unit_for_grid_inverse: str = "mmEWH"
+    allow_grid_to_cs: bool = True
+    require_global_grid: bool = True
+    roundtrip_check: bool = True
+    output_dir: str = "monthly_gfc"
+    filename_template: str = "GRACE_L2_{center}_{year_month}_{method}_L{max_degree}_{content}.gfc"
+
+
+@dataclass
 class IOConfig:
-    """Input/output settings."""
+    output_formats: list = field(default_factory=lambda: ["mat"])
     save_monthly_mat: bool = True
     save_stack_mat: bool = True
     save_stack_hdf5: bool = False
+    save_netcdf: bool = False
+    save_geotiff: bool = False
     export_txt: bool = False
+    export_csv: bool = False
+    export_json_summary: bool = True
     txt_format: str = "lonlatval"
+    coefficient_export: CoefficientExportConfig = field(default_factory=CoefficientExportConfig)
     resume: bool = False
     return_stacks: bool = False
     return_basin: bool = False
@@ -345,9 +348,81 @@ class IOConfig:
 
 @dataclass
 class ParallelConfig:
-    """Parallel processing settings."""
     enable: bool = True
     n_workers: int = 4
+
+
+DEFAULT_CONFIG: Dict[str, Any] = {
+    "path": {
+        "ROOT": "",
+        "GFC": "data/GRACE/GSM",
+        "OUTPUT": "outputs",
+        "AUX": "data/Aux",
+        "DDK": "data/DDK",
+        "BOUNDARY": "data/Boundary/boundary_cache",
+    },
+    "time": {"auto_detect_gfc": True, "start_ym": "2002-04", "end_ym": "2017-06", "product_type": "GSM", "file_ext": ".gfc"},
+    "grid": {"lon": [-179.5, 179.5], "lat": [-89.5, 89.5], "dlon": 1.0, "dlat": 1.0, "unit": "mmEWH"},
+    "inversion": {
+        "Lmax": 60,
+        "remove_mean": True,
+        "mean_baseline_mode": "standard_2004_2009",
+        "mean_start_ym": "2004-01",
+        "mean_end_ym": "2009-12",
+        "lowdeg": {
+            "enable": True,
+            "replace_C20": True,
+            "replace_degree1": True,
+            "replace_C10": True,
+            "replace_C30": False,
+            "files": {"C20": "data/GRACE/LowDegree/TN-14_C30_C20_GSFC_SLR.txt", "DEGREE1": "data/GRACE/LowDegree/TN-13_GEOC_CSR_RL06.txt"},
+        },
+        "gia": {"enable": False, "file": "data/GRACE/GIA/GIA_Stokes_ICE-6G_D.txt", "Lmax": 60},
+    },
+    "filter": {
+        "gaussian": {"enable": True, "radius_km": 300},
+        "p4m6": {"enable": False, "poly_deg": 4, "m_start": 6},
+        "fan": {"enable": False, "radius1_km": 300, "radius2_km": 300},
+        "ddk": {"enable": False, "type": "DDK4", "data_dir": "data/DDK"},
+        "hankel": {"enable": False, "variant": "global", "engine": "matlab_v3", "mode": "profile", "params": {"N": 30, "P": 10, "K": 6, "J": 1}},
+        "pre_hankel_input": "P4M6",
+    },
+    "basin": {"analysis_enable": False, "boundary_file": "", "name": ""},
+    "leakage": {"enable": False},
+    "metrics": {"enable": False, "compute_spectrum": False},
+    "io": {
+        "output_formats": ["mat"],
+        "save_monthly_mat": True,
+        "save_stack_mat": True,
+        "save_stack_hdf5": False,
+        "save_netcdf": False,
+        "save_geotiff": False,
+        "export_txt": False,
+        "export_csv": False,
+        "export_json_summary": True,
+        "txt_format": "lonlatval",
+        "coefficient_export": {
+            "enabled": False,
+            "format": "icgem_gfc",
+            "coefficient_content": "anomaly",
+            "max_degree": None,
+            "norm": "fully_normalized",
+            "errors": "no",
+            "tide_system": "zero_tide",
+            "unit_for_grid_inverse": "mmEWH",
+            "allow_grid_to_cs": True,
+            "require_global_grid": True,
+            "roundtrip_check": True,
+            "output_dir": "monthly_gfc"
+        },
+        "resume": False,
+        "return_stacks": False,
+        "return_basin": False,
+        "return_metrics": False
+    },
+    "plot": {"quicklook": False, "metrics_ts": False, "metrics_maps": False, "stack_mean": False, "stack_trend_amp": False, "basin_overlay": False},
+    "parallel": {"enable": True, "nWorkers": 4},
+}
 
 
 class Config:
@@ -358,7 +433,6 @@ class Config:
         self._parse_config(config_dict)
 
     def _parse_config(self, cfg: Dict):
-        """Parse configuration dictionary into typed attributes."""
         path_cfg = cfg.get("path", {})
         self.path = PathConfig(
             ROOT=path_cfg.get("ROOT", ""),
@@ -392,6 +466,7 @@ class Config:
         self.inversion = InversionConfig(
             Lmax=inv_cfg.get("Lmax", 60),
             remove_mean=inv_cfg.get("remove_mean", True),
+            mean_baseline_mode=inv_cfg.get("mean_baseline_mode", "standard_2004_2009"),
             mean_start_ym=inv_cfg.get("mean_start_ym", inv_cfg.get("mean_start", "")),
             mean_end_ym=inv_cfg.get("mean_end_ym", inv_cfg.get("mean_end", "")),
             lowdeg=inv_cfg.get("lowdeg", {}),
@@ -399,29 +474,20 @@ class Config:
         )
 
         filter_cfg = cfg.get("filter", {})
-        self.filter = FilterConfig(
-            pre_hankel_input=filter_cfg.get("pre_hankel_input", "P4M6"),
-            combinations=filter_cfg.get("combinations", {}),
-        )
+        self.filter = FilterConfig(pre_hankel_input=filter_cfg.get("pre_hankel_input", "P4M6"), combinations=filter_cfg.get("combinations", {}))
         if "gaussian" in filter_cfg:
             g = filter_cfg["gaussian"]
-            self.filter.gaussian = GaussianFilterConfig(
-                enable=g.get("enable", True), radius_km=g.get("radius_km", 300.0)
-            )
+            self.filter.gaussian = GaussianFilterConfig(enable=g.get("enable", True), radius_km=g.get("radius_km", 300.0))
         if "p4m6" in filter_cfg:
             p = filter_cfg["p4m6"]
-            self.filter.p4m6 = P4M6FilterConfig(
-                enable=p.get("enable", True), poly_deg=p.get("poly_deg", 4), m_start=p.get("m_start", 6)
-            )
+            self.filter.p4m6 = P4M6FilterConfig(enable=p.get("enable", True), poly_deg=p.get("poly_deg", 4), m_start=p.get("m_start", 6))
         if "ddk" in filter_cfg:
             d = filter_cfg["ddk"]
-            self.filter.ddk = DDKFilterConfig(
-                enable=d.get("enable", True), type=d.get("type", "DDK4"), data_dir=d.get("data_dir", "")
-            )
+            self.filter.ddk = DDKFilterConfig(enable=d.get("enable", True), type=d.get("type", "DDK4"), data_dir=d.get("data_dir", ""))
         if "hankel" in filter_cfg:
             h = filter_cfg["hankel"]
             self.filter.hankel = HSAFFilterConfig(
-                enable=h.get("enable", True),
+                enable=h.get("enable", False),
                 variant=h.get("variant", "global"),
                 mode=h.get("mode", "profile"),
                 engine=h.get("engine", "matlab_v3"),
@@ -432,12 +498,50 @@ class Config:
         self.filter.fan = filter_cfg.get("fan", {})
 
         io_cfg = cfg.get("io", {})
+        coeff_raw = io_cfg.get("coefficient_export", {}) if isinstance(io_cfg, dict) else {}
+        if not isinstance(coeff_raw, dict):
+            coeff_raw = {}
+        coeff_lmax = coeff_raw.get("max_degree", None)
+        if coeff_lmax in ("", 0):
+            coeff_lmax = None
+        elif coeff_lmax is not None:
+            coeff_lmax = int(coeff_lmax)
         self.io = IOConfig(
+            output_formats=list(io_cfg.get("output_formats", ["mat"]) or ["mat"]),
             save_monthly_mat=io_cfg.get("save_monthly_mat", True),
             save_stack_mat=io_cfg.get("save_stack_mat", True),
             save_stack_hdf5=io_cfg.get("save_stack_hdf5", False),
+            save_netcdf=io_cfg.get("save_netcdf", False),
+            save_geotiff=io_cfg.get("save_geotiff", False),
             export_txt=io_cfg.get("export_txt", False),
+            export_csv=io_cfg.get("export_csv", False),
+            export_json_summary=io_cfg.get("export_json_summary", True),
             txt_format=io_cfg.get("txt_format", "lonlatval"),
+            coefficient_export=CoefficientExportConfig(
+                enabled=bool(coeff_raw.get("enabled", False)),
+                format=str(coeff_raw.get("format", "icgem_gfc") or "icgem_gfc"),
+                coefficient_content=str(coeff_raw.get("coefficient_content", "anomaly") or "anomaly"),
+                max_degree=coeff_lmax,
+                norm=str(coeff_raw.get("norm", "fully_normalized") or "fully_normalized"),
+                errors=str(coeff_raw.get("errors", "no") or "no"),
+                tide_system=str(coeff_raw.get("tide_system", "zero_tide") or "zero_tide"),
+                earth_gravity_constant=float(coeff_raw.get("earth_gravity_constant", 3.986004415e14)),
+                radius=float(coeff_raw.get("radius", 6.37813646e6)),
+                earth_density=float(coeff_raw.get("earth_density", 5517.0)),
+                water_density=float(coeff_raw.get("water_density", 1000.0)),
+                unit_for_grid_inverse=str(coeff_raw.get("unit_for_grid_inverse", self.grid.unit) or self.grid.unit),
+                allow_grid_to_cs=bool(coeff_raw.get("allow_grid_to_cs", True)),
+                require_global_grid=bool(coeff_raw.get("require_global_grid", True)),
+                roundtrip_check=bool(coeff_raw.get("roundtrip_check", True)),
+                output_dir=str(coeff_raw.get("output_dir", "monthly_gfc") or "monthly_gfc"),
+                filename_template=str(
+                    coeff_raw.get(
+                        "filename_template",
+                        "GRACE_L2_{center}_{year_month}_{method}_L{max_degree}_{content}.gfc",
+                    )
+                    or "GRACE_L2_{center}_{year_month}_{method}_L{max_degree}_{content}.gfc"
+                ),
+            ),
             resume=io_cfg.get("resume", False),
             return_stacks=io_cfg.get("return_stacks", False),
             return_basin=io_cfg.get("return_basin", False),
@@ -445,10 +549,7 @@ class Config:
         )
 
         par_cfg = cfg.get("parallel", {})
-        self.parallel = ParallelConfig(
-            enable=par_cfg.get("enable", True),
-            n_workers=par_cfg.get("nWorkers", par_cfg.get("n_workers", 4)),
-        )
+        self.parallel = ParallelConfig(enable=par_cfg.get("enable", True), n_workers=par_cfg.get("nWorkers", par_cfg.get("n_workers", 4)))
 
         self.reference = cfg.get("reference", {})
         self.gldas = cfg.get("gldas", {})
@@ -460,14 +561,11 @@ class Config:
         self.fm = cfg.get("fm", {})
 
     def to_dict(self) -> Dict[str, Any]:
-        """Convert config back to dictionary."""
         return self._raw
 
     def get(self, key: str, default: Any = None) -> Any:
-        """Get a config value by key path (e.g., 'filter.gaussian.radius_km')."""
-        keys = key.split(".")
         value = self._raw
-        for k in keys:
+        for k in key.split("."):
             if isinstance(value, dict) and k in value:
                 value = value[k]
             else:
@@ -479,7 +577,10 @@ def _load_json_file(path: Union[str, Path], label: str) -> Dict[str, Any]:
     path_obj = Path(path).expanduser()
     if not path_obj.exists():
         raise FileNotFoundError(f"Explicit {label} config file not found: {path_obj}")
-    with open(path_obj, "r", encoding="utf-8") as f:
+    # PowerShell 5.1 Set-Content -Encoding UTF8 writes a UTF-8 BOM. Accept it so
+    # user-created JSON configs work consistently across Windows PowerShell,
+    # PowerShell 7, Notepad, MATLAB, CLI, and GUI workflows.
+    with open(path_obj, "r", encoding="utf-8-sig") as f:
         return json.load(f)
 
 
@@ -488,12 +589,7 @@ def load_config(
     default_config: Optional[Union[str, Path]] = None,
     root_dir: Optional[Union[str, Path]] = None,
 ) -> Config:
-    """Load configuration from JSON files.
-
-    A missing explicitly supplied user/default config is an error. This prevents
-    silent fallback to defaults when a CLI, GUI, or HPC caller intended to use a
-    specific run configuration.
-    """
+    """Load configuration from JSON files."""
     if root_dir is None:
         root_dir = get_root_dir()
     root_path = Path(root_dir).resolve()
@@ -504,28 +600,25 @@ def load_config(
     if default_config is None:
         default_config = find_default_config(root_path)
 
-    base_cfg: Dict[str, Any] = {}
+    base_cfg: Dict[str, Any] = deepcopy(DEFAULT_CONFIG)
     if default_config:
-        base_cfg = _load_json_file(default_config, "default")
+        base_cfg = merge_configs(base_cfg, _load_json_file(default_config, "default"))
 
     user_cfg: Dict[str, Any] = {}
     if user_config:
         user_cfg = _load_json_file(user_config, "user")
 
     merged = merge_configs(base_cfg, user_cfg)
+    saved_root = str((merged.get("path") or {}).get("ROOT") or "").strip()
+    if saved_root and saved_root not in {"${ROOT}", root_dir_str}:
+        merged = _remap_paths_from_saved_root(merged, saved_root, root_dir_str)
+        merged.setdefault("path", {})["ROOT"] = root_dir_str
     resolved = resolve_placeholders(merged, root_dir_str)
-
-    current_root = str(root_path)
-    configured_root = str(resolved.get("path", {}).get("ROOT", "") or "")
-    if configured_root and configured_root != current_root:
-        resolved = remap_root_paths(resolved, configured_root, current_root)
 
     if not resolved.get("path"):
         resolved["path"] = {}
-
     path_cfg = resolved["path"]
-    if not path_cfg.get("ROOT"):
-        path_cfg["ROOT"] = root_dir_str
+    path_cfg["ROOT"] = root_dir_str
     if not path_cfg.get("GFC"):
         path_cfg["GFC"] = str(data_dir / "GRACE" / "GSM")
     if not path_cfg.get("OUTPUT"):
@@ -535,11 +628,25 @@ def load_config(
     if not path_cfg.get("BOUNDARY"):
         path_cfg["BOUNDARY"] = str(data_dir / "Boundary")
 
-    if "filter" not in resolved:
-        resolved["filter"] = {}
-    if "ddk" not in resolved["filter"]:
-        resolved["filter"]["ddk"] = {}
+    for key in ["GFC", "OUTPUT", "AUX", "DDK", "BOUNDARY"]:
+        value = path_cfg.get(key)
+        if value and not Path(value).is_absolute():
+            path_cfg[key] = str(root_path / value)
+
+    resolved.setdefault("filter", {}).setdefault("ddk", {})
     if not resolved["filter"]["ddk"].get("data_dir"):
         resolved["filter"]["ddk"]["data_dir"] = path_cfg["DDK"]
+    elif not Path(resolved["filter"]["ddk"]["data_dir"]).is_absolute():
+        resolved["filter"]["ddk"]["data_dir"] = str(root_path / resolved["filter"]["ddk"]["data_dir"])
+
+    inv_cfg = resolved.setdefault("inversion", {})
+    lowdeg = inv_cfg.setdefault("lowdeg", {})
+    low_files = lowdeg.setdefault("files", {})
+    for key, value in list(low_files.items()):
+        if value and not Path(value).is_absolute():
+            low_files[key] = str(root_path / value)
+    gia_cfg = inv_cfg.setdefault("gia", {})
+    if gia_cfg.get("file") and not Path(gia_cfg["file"]).is_absolute():
+        gia_cfg["file"] = str(root_path / gia_cfg["file"])
 
     return Config(resolved)

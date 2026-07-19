@@ -1,5 +1,5 @@
 function io_save_mat(fp, varName, varargin)
-%IO_SAVE_MAT Save variable(s) to MAT with -v7.3 by default.
+%IO_SAVE_MAT Save variable(s) to MAT with -v7.3 by default and temp rename.
 % Usage:
 %   io_save_mat(fp, 'P')
 %   io_save_mat(fp, 'Stack')
@@ -11,5 +11,17 @@ function io_save_mat(fp, varName, varargin)
         vn = vars{i};
         S.(vn) = evalin('caller', vn);
     end
-    save(fp, '-struct', 'S', '-v7.3');
+    outDir = fileparts(fp);
+    if ~isempty(outDir) && ~isfolder(outDir)
+        mkdir(outDir);
+    end
+    tmp = [fp '.tmp'];
+    if exist(tmp, 'file'); delete(tmp); end
+    try
+        save(tmp, '-struct', 'S', '-v7.3');
+        movefile(tmp, fp, 'f');
+    catch ME
+        if exist(tmp, 'file'); delete(tmp); end
+        rethrow(ME);
+    end
 end

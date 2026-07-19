@@ -2,6 +2,7 @@ import os
 import sys
 import tempfile
 import unittest
+import importlib.util
 from pathlib import Path
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -14,10 +15,14 @@ from PySide6.QtWidgets import QApplication
 
 ROOT = Path(__file__).resolve().parents[2]
 PYTHON_ROOT = ROOT / "python"
+os.environ["GRACE_L2_HOME"] = str(ROOT)
+os.environ["GRACE_L2_DATA"] = str(ROOT / "data")
+os.environ["GRACE_L2_OUTPUT"] = str(ROOT / "outputs")
 if str(PYTHON_ROOT) not in sys.path:
     sys.path.insert(0, str(PYTHON_ROOT))
 
 from grace_pipeline.ui.qt.main_window import MainWindow
+from grace_pipeline.basin import BasinBoundary, make_mask
 
 
 class GuiEmbeddedToolsTest(unittest.TestCase):
@@ -49,6 +54,7 @@ class GuiEmbeddedToolsTest(unittest.TestCase):
                 [
                     "product_type GSM",
                     "modelname TEST",
+                    "max_degree 2",
                     "end_of_head",
                     "gfc 0 0 1.0 0.0",
                     "gfc 1 0 0.0 0.0",
@@ -100,6 +106,26 @@ class GuiEmbeddedToolsTest(unittest.TestCase):
         sio.savemat(stack, {"ewh": ewh, "lon": lon, "lat": lat, "t": t})
         return stack
 
+    def _create_temporal_fit_stack(self, folder: Path) -> Path:
+        lon = np.array([-20.0, 0.0, 20.0], dtype=float)
+        lat = np.array([-20.0, 0.0, 20.0], dtype=float)
+        t_years = 2002.0 + np.arange(8, dtype=float) / 12.0
+        ewh = np.zeros((3, 3, t_years.size), dtype=float)
+        for k, year in enumerate(t_years):
+            ewh[:, :, k] = 5.0 + 0.2 * k + np.sin(2.0 * np.pi * year)
+        t = np.array([f"2002-{month:02d}" for month in range(1, 9)], dtype=object)
+        stack = folder / "temporal_fit_stack.mat"
+        sio.savemat(stack, {"ewh": ewh, "lon": lon, "lat": lat, "t": t})
+        return stack
+
+    def _create_single_epoch_stack(self, folder: Path) -> Path:
+        lon = np.array([-20.0, 0.0, 20.0], dtype=float)
+        lat = np.array([-20.0, 0.0, 20.0], dtype=float)
+        ewh = np.ones((3, 3, 1), dtype=float)
+        stack = folder / "single_epoch_stack.mat"
+        sio.savemat(stack, {"ewh": ewh, "lon": lon, "lat": lat, "t": np.array(["2002-04"], dtype=object)})
+        return stack
+
     def _create_sample_sh_analysis_stack(self, folder: Path) -> Path:
         lon = np.linspace(-25.0, 25.0, 6, dtype=float)
         lat = np.linspace(-25.0, 25.0, 6, dtype=float)
@@ -131,59 +157,32 @@ class GuiEmbeddedToolsTest(unittest.TestCase):
         )
         return boundary
 
-    def test_processing_sh_to_grid_tool_runs_and_writes_output(self):
-        with tempfile.TemporaryDirectory() as td:
-            root = Path(td)
-            gfc_dir = root / "gfc"
-            gfc_dir.mkdir(parents=True, exist_ok=True)
-            gfc = self._create_sample_gfc(gfc_dir)
+    def _create_two_sample_boundaries(self, folder: Path) -> Path:
+        boundary = folder / "two_boundaries.txt"
+        boundary.write_text(
+            "\n".join(
+                [
+                    "-10 -10",
+                    "10 -10",
+                    "10 10",
+                    "-10 10",
+                    "-10 -10",
+                    "nan nan",
+                    "15 15",
+                    "25 15",
+                    "25 25",
+                    "15 25",
+                    "15 15",
+                ]
+            ),
+            encoding="utf-8",
+        )
+        return boundary
 
-            self.window.set_active_page("processing")
-            self.window.page_data_paths.edit_main_output_root.setText(str(root / "output"))
-            self.window.page_data_paths.edit_gfc_input_dir.setText(str(gfc_dir))
-            self.window.page_preview.edit_dataset_source.setText(str(gfc))
-            self.window.page_processing.slider_degree_order.setValue(2)
-            self.app.processEvents()
-
-            self.window.controller.on_tool_sh_to_grid()
-            self.app.processEvents()
-
-            out_dir = root / "output" / "local" / "tools" / "sh_grid"
-            files = list(out_dir.glob("*.mat"))
-            self.assertTrue(files, "Expected SH->Grid tool to produce MAT output.")
-            self.assertIn("completed", self.window.page_processing.lbl_sh_tool_status.text().lower())
-
-    def test_processing_sh_to_grid_removes_gfc_static_mean_before_ewh(self):
-        with tempfile.TemporaryDirectory() as td:
-            root = Path(td)
-            gfc_dir = root / "gfc"
-            gfc_dir.mkdir(parents=True, exist_ok=True)
-            source = self._create_dated_sample_gfc(
-                gfc_dir,
-                "GSM-2_2006060-2006090_GRAC_UTCSR_BA01_0600.gfc",
-                c30=2.0e-10,
-            )
-            self._create_dated_sample_gfc(
-                gfc_dir,
-                "GSM-2_2006091-2006120_GRAC_UTCSR_BA01_0600.gfc",
-                c30=-2.0e-10,
-            )
-
-            self.window.set_active_page("processing")
-            self.window.page_data_paths.edit_main_output_root.setText(str(root / "output"))
-            self.window.page_data_paths.edit_gfc_input_dir.setText(str(gfc_dir))
-            self.window.page_processing.edit_sh_tool_source.setText(str(source))
-            self.window.page_processing.slider_degree_order.setValue(3)
-            self.app.processEvents()
-
-            self.window.controller.on_tool_sh_to_grid()
-            self.app.processEvents()
-
-            out_file = next((root / "output" / "local" / "tools" / "sh_grid").glob("*.mat"))
-            payload = sio.loadmat(out_file, squeeze_me=True, struct_as_record=False)
-            grid = np.asarray(payload["grid_data"], dtype=float)
-            self.assertLess(float(np.nanmax(np.abs(grid))), 100.0)
-            self.assertIn("anomaly_removed=True", self.window.filters_text.toPlainText())
+    def test_processing_sh_to_grid_tool_is_hidden(self):
+        self.window.set_active_page("processing")
+        self.assertFalse(self.window.page_processing.btn_tool_sh_to_grid.isVisible())
+        self.assertFalse(self.window.page_processing.btn_tool_sh_to_grid.isEnabled())
 
     def test_processing_grid_to_sh_tool_runs_and_writes_output(self):
         with tempfile.TemporaryDirectory() as td:
@@ -210,9 +209,41 @@ class GuiEmbeddedToolsTest(unittest.TestCase):
             self.assertEqual(int(payload["Lmax"].squeeze()), 2)
             self.assertIn("completed", self.window.page_processing.lbl_sh_tool_status.text().lower())
 
+    def test_processing_grid_to_sh_tool_writes_gfc_when_template_matches(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            stack = self._create_sample_sh_analysis_stack(root)
+            gfc_dir = root / "gfc"
+            gfc_dir.mkdir()
+            template = self._create_sample_gfc(gfc_dir)
+            template.rename(gfc_dir / "GSM-2_200205_TEST.gfc")
+
+            self.window.set_active_page("processing")
+            self.window.page_data_paths.edit_main_output_root.setText(str(root / "output"))
+            self.window.page_data_paths.edit_gfc_input_dir.setText(str(gfc_dir))
+            self.window.page_processing.edit_sh_tool_source.setText(str(stack))
+            self.window.page_preview.slider_time_index.setValue(1)
+            self.window.page_processing.slider_degree_order.setValue(2)
+            self.app.processEvents()
+
+            self.window.controller.on_tool_grid_to_sh()
+            self.app.processEvents()
+
+            out_dir = root / "output" / "local" / "tools" / "grid_sh"
+            gfc_files = list(out_dir.glob("*.gfc"))
+            self.assertTrue(gfc_files, "Expected Grid->SH tool to write GFC output when a template is available.")
+            text = gfc_files[0].read_text(encoding="utf-8")
+            self.assertIn("gfc", text)
+            self.assertIn("max_degree", text)
+
     def test_processing_filter_checkboxes_expand_parameter_panels(self):
         self.window.set_active_page("processing")
         page = self.window.page_processing
+
+        self.assertEqual(self.window.controller._enabled_filter_names(), ["Gaussian"])
+        self.assertEqual(page.btn_filter_p4m6.text(), "PnMl")
+        self.assertEqual(page.btn_filter_gaussian_pnmn.text(), "Gaussian+PnMl")
+        self.assertEqual(page.btn_filter_fan_pnmn.text(), "FAN+PnMl")
 
         for checkbox in (
             page.btn_filter_gaussian,
@@ -292,6 +323,140 @@ class GuiEmbeddedToolsTest(unittest.TestCase):
             self.assertTrue(list(harmonic_dir.glob("*.txt")), "Expected Harmonic TXT output.")
             self.assertTrue(list(harmonic_dir.glob("*.mat")), "Expected Harmonic MAT output.")
 
+    def test_basin_run_writes_masked_grid_product(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            stack = self._create_sample_stack(root)
+            boundary = self._create_sample_boundary(root)
+            out_dir = root / "output" / "basin"
+
+            self.window.set_active_page("basin")
+            self.window.page_basin.edit_data_file.setText(str(stack))
+            self.window.page_basin.edit_boundary_file.setText(str(boundary))
+            self.window.page_basin.edit_export_path.setText(str(out_dir))
+            self.window.page_basin.chk_basin_enable.setChecked(True)
+            self.window.page_basin.chk_basin_save_series.setChecked(True)
+            self.window.page_basin.chk_basin_save_stats.setChecked(True)
+            self.window.page_basin.chk_basin_save_mask_grid.setChecked(True)
+            self.app.processEvents()
+
+            self.window.controller.pull_ui_to_host()
+            self.window.controller.host._msg_info = lambda *_args, **_kwargs: None
+            self.window.controller.host._msg_warn = lambda *_args, **_kwargs: None
+            self.window.controller.host._msg_error = lambda *_args, **_kwargs: None
+            self.window.controller.host.run_basin_analysis()
+
+            grid_files = list(out_dir.glob("*_grid.mat"))
+            self.assertTrue(grid_files, "Expected masked basin grid MAT output.")
+            payload = sio.loadmat(grid_files[0])
+            self.assertIn("grid", payload)
+            self.assertIn("mask", payload)
+            self.assertIn("time", payload)
+            self.assertIn("lon", payload)
+            self.assertIn("lat", payload)
+            self.assertIn("source_lon_index", payload)
+            self.assertIn("source_lat_index", payload)
+            self.assertIn("bbox_lonlat", payload)
+            self.assertEqual(payload["grid"].shape[2], 3)
+            self.assertLessEqual(payload["grid"].shape[0], 3)
+            self.assertLessEqual(payload["grid"].shape[1], 3)
+            mask = np.asarray(payload["mask"], dtype=bool)
+            grid = np.asarray(payload["grid"], dtype=float)
+            self.assertTrue(np.isfinite(grid[mask, :]).any())
+            if np.any(~mask):
+                self.assertTrue(np.isnan(grid[~mask, :]).all())
+
+    def test_basin_run_writes_cropped_residual_grid_product(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            stack = self._create_temporal_fit_stack(root)
+            boundary = self._create_sample_boundary(root)
+            out_dir = root / "output" / "basin"
+
+            self.window.set_active_page("basin")
+            self.window.page_basin.edit_data_file.setText(str(stack))
+            self.window.page_basin.edit_boundary_file.setText(str(boundary))
+            self.window.page_basin.edit_export_path.setText(str(out_dir))
+            self.window.page_basin.chk_basin_enable.setChecked(True)
+            self.window.page_basin.chk_basin_save_series.setChecked(True)
+            self.window.page_basin.chk_basin_save_stats.setChecked(True)
+            self.window.page_basin.chk_basin_save_mask_grid.setChecked(True)
+            self.app.processEvents()
+
+            self.window.controller.pull_ui_to_host()
+            self.window.controller.host._msg_info = lambda *_args, **_kwargs: None
+            self.window.controller.host._msg_warn = lambda *_args, **_kwargs: None
+            self.window.controller.host._msg_error = lambda *_args, **_kwargs: None
+            self.window.controller.host.run_basin_analysis()
+
+            grid_files = list(out_dir.glob("*_grid.mat"))
+            self.assertTrue(grid_files, "Expected temporal masked basin grid MAT output.")
+            payload = sio.loadmat(grid_files[0])
+            self.assertIn("trend", payload)
+            self.assertIn("amp_ann", payload)
+            self.assertIn("amp_semi", payload)
+            self.assertIn("residual_rms", payload)
+            self.assertIn("time", payload)
+            self.assertEqual(payload["grid"].shape[2], 8)
+            self.assertEqual(payload["residual_rms"].shape, payload["mask"].shape)
+            self.assertLess(payload["grid"].shape[0] * payload["grid"].shape[1], 9)
+
+    def test_basin_run_skips_trend_products_for_single_epoch_grid(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            stack = self._create_single_epoch_stack(root)
+            boundary = self._create_sample_boundary(root)
+            out_dir = root / "output" / "basin"
+
+            self.window.set_active_page("basin")
+            self.window.page_basin.edit_data_file.setText(str(stack))
+            self.window.page_basin.edit_boundary_file.setText(str(boundary))
+            self.window.page_basin.edit_export_path.setText(str(out_dir))
+            self.window.page_basin.chk_basin_enable.setChecked(True)
+            self.window.page_basin.chk_basin_save_stats.setChecked(True)
+            self.window.page_basin.chk_basin_save_mask_grid.setChecked(True)
+            self.app.processEvents()
+
+            self.window.controller.pull_ui_to_host()
+            self.window.controller.host._msg_info = lambda *_args, **_kwargs: None
+            self.window.controller.host._msg_warn = lambda *_args, **_kwargs: None
+            self.window.controller.host._msg_error = lambda *_args, **_kwargs: None
+            self.window.controller.host.run_basin_analysis()
+
+            grid_files = list(out_dir.glob("*_grid.mat"))
+            self.assertTrue(grid_files, "Expected single-epoch masked grid MAT output.")
+            payload = sio.loadmat(grid_files[0])
+            self.assertIn("grid", payload)
+            self.assertIn("mean", payload)
+            self.assertNotIn("trend", payload)
+            self.assertNotIn("amp_ann", payload)
+            self.assertFalse(list(out_dir.glob("*_stats.txt")), "Single-epoch input should not write trend/amplitude stats.")
+
+    def test_basin_run_processes_all_boundary_features_by_default(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            stack = self._create_sample_stack(root)
+            boundary = self._create_two_sample_boundaries(root)
+            out_dir = root / "output" / "basin"
+
+            self.window.set_active_page("basin")
+            self.window.page_basin.edit_data_file.setText(str(stack))
+            self.window.page_basin.edit_boundary_file.setText(str(boundary))
+            self.window.page_basin.edit_export_path.setText(str(out_dir))
+            self.window.page_basin.chk_basin_enable.setChecked(True)
+            self.window.page_basin.chk_basin_save_series.setChecked(True)
+            self.window.page_basin.chk_basin_save_mask_grid.setChecked(True)
+            self.app.processEvents()
+
+            self.window.controller.pull_ui_to_host()
+            self.window.controller.host._msg_info = lambda *_args, **_kwargs: None
+            self.window.controller.host._msg_warn = lambda *_args, **_kwargs: None
+            self.window.controller.host._msg_error = lambda *_args, **_kwargs: None
+            self.window.controller.host.run_basin_analysis()
+
+            self.assertEqual(len(list(out_dir.glob("*_grid.mat"))), 2)
+            self.assertEqual(len(list(out_dir.glob("*_ts.mat"))), 2)
+
     def test_basin_grid_metadata_loads_mat_without_variable_dialog(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
@@ -312,6 +477,96 @@ class GuiEmbeddedToolsTest(unittest.TestCase):
             self.assertIn("Loaded: diagnostic_grid.mat", self.window.page_basin.lbl_basin_info.text())
             self.assertIn("Shape: 3 x 3 x 1", self.window.page_basin.lbl_basin_grid_shape.text())
             self.assertIn("Variable: mean", self.window.page_basin.lbl_basin_variable.text())
+
+    def test_basin_mask_matches_zero_to_360_mascon_grid(self):
+        boundary = BasinBoundary(
+            name="western_basin",
+            lon=np.array([-118.0, -112.0, -112.0, -118.0, -118.0], dtype=float),
+            lat=np.array([35.0, 35.0, 42.0, 42.0, 35.0], dtype=float),
+        )
+        lon = np.arange(0.5, 360.0, 1.0, dtype=float)
+        lat = np.arange(-89.5, 90.0, 1.0, dtype=float)
+
+        mask = make_mask(boundary, lon, lat)
+
+        self.assertGreater(int(np.count_nonzero(mask)), 0)
+        covered_lon = lon[np.where(mask)[0]]
+        self.assertTrue(np.nanmin(covered_lon) > 240.0)
+
+    def test_preview_time_label_uses_stack_time_metadata(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            stack = self._create_sample_stack(root)
+
+            self.window.set_active_page("preview")
+            self.window.page_preview.edit_dataset_source.setText(str(stack))
+            self.app.processEvents()
+
+            self.window.controller.on_load_stack_info()
+            self.app.processEvents()
+            self.assertIn("2002-04", self.window.page_preview.lbl_time_index.text())
+
+            self.window.page_preview.slider_time_index.setValue(1)
+            self.window.controller.on_preview_index_changed(1)
+            self.app.processEvents()
+            self.assertIn("2002-05", self.window.page_preview.lbl_time_index.text())
+
+    def test_mascon_day_time_fallback_uses_2002_reference(self):
+        years, labels = self.window.controller.host._resolve_time(
+            np.array([107.0, 129.5], dtype=float),
+            2,
+            meta={"time_calendar": "gregorian"},
+        )
+
+        self.assertEqual(labels[:2], ["2002-04", "2002-05"])
+        self.assertGreater(float(years[0]), 2002.0)
+
+    @unittest.skipUnless(importlib.util.find_spec("netCDF4") is not None, "netCDF4 not available")
+    def test_preview_mascon_netcdf_time_units_are_displayed_as_months(self):
+        import netCDF4 as nc
+
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            path = root / "CSR_GRACE_GRACE-FO_RL06_Mascons_all-corrections.nc"
+            lon = np.array([0.25, 0.75], dtype=np.float32)
+            lat = np.array([-0.25, 0.25], dtype=np.float32)
+            time_values = np.array([107.0, 1961.5], dtype=np.float64)
+            data = np.zeros((2, 2, 2), dtype=np.float32)
+
+            with nc.Dataset(path, "w") as ds:
+                ds.createDimension("time", 2)
+                ds.createDimension("lat", 2)
+                ds.createDimension("lon", 2)
+                v_lon = ds.createVariable("lon", "f4", ("lon",))
+                v_lat = ds.createVariable("lat", "f4", ("lat",))
+                v_time = ds.createVariable("time", "f8", ("time",))
+                v_data = ds.createVariable("lwe_thickness", "f4", ("time", "lat", "lon"))
+                v_lon.units = "degrees_east"
+                v_lat.units = "degrees_north"
+                v_time.units = "days since 2002-01-01T00:00:00Z"
+                v_time.calendar = "gregorian"
+                v_data.units = "cm"
+                v_lon[:] = lon
+                v_lat[:] = lat
+                v_time[:] = time_values
+                v_data[:] = data
+
+            self.window.set_active_page("preview")
+            self.window.page_preview.edit_dataset_source.setText(str(path))
+            self.app.processEvents()
+
+            self.window.controller.on_load_stack_info()
+            self.app.processEvents()
+            self.assertIn(
+                "Time coverage: 2002-04–2007-05",
+                self.window.page_preview.lbl_stack_info.text(),
+            )
+            self.assertIn("1 / 2 | 2002-04", self.window.page_preview.lbl_time_index.text())
+
+            self.window.page_preview.slider_time_index.setValue(1)
+            self.window.controller.on_preview_index_changed(1)
+            self.app.processEvents()
+            self.assertIn("2 / 2 | 2007-05", self.window.page_preview.lbl_time_index.text())
 
     def test_leakage_page_can_sync_input_from_preview_and_basin(self):
         with tempfile.TemporaryDirectory() as td:

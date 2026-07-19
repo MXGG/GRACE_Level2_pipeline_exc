@@ -15,12 +15,16 @@ from PySide6.QtWidgets import QApplication
 
 ROOT = Path(__file__).resolve().parents[2]
 PYTHON_ROOT = ROOT / "python"
+os.environ["GRACE_L2_HOME"] = str(ROOT)
+os.environ["GRACE_L2_DATA"] = str(ROOT / "data")
+os.environ["GRACE_L2_OUTPUT"] = str(ROOT / "outputs")
 if str(PYTHON_ROOT) not in sys.path:
     sys.path.insert(0, str(PYTHON_ROOT))
 
 from grace_pipeline.infra.config import Config
 from grace_pipeline.services.gfc_download import DownloadResult
 from grace_pipeline.ui.qt.main_window import MainWindow
+from grace_pipeline.ui.qt.global_monitor import configure_global_run_monitor
 from grace_pipeline.ui.qt.path_defaults import DEFAULT_DATA_PATHS
 from grace_pipeline.ui.qt.preferences import UIPreferences
 import grace_pipeline.ui.qt.controller as qt_controller
@@ -51,7 +55,7 @@ class DataPathsUiTest(unittest.TestCase):
         return os.path.normpath(str(path))
 
     def test_page_initializes_with_real_project_paths(self):
-        self.assertEqual(self.window._nav_buttons["data_paths"].text(), "Data Paths")
+        self.assertNotIn("data_paths", self.window._nav_buttons)
         self.assertEqual(self.window.breadcrumb.text(), "Data Paths")
 
         expected = {
@@ -95,7 +99,8 @@ class DataPathsUiTest(unittest.TestCase):
 
         self.assertEqual(self.page.badge_boundary_root.text(), "OK")
         self.assertEqual(self.page.badge_gfc_input.text(), "Verified")
-        self.assertEqual(self.page.badge_ddk_data.text(), "Verified")
+        self.assertFalse(self.page.row_ddk_data_dir.isVisible())
+        self.assertEqual(self.page.badge_ddk_data.text(), "Built-in")
         self.assertEqual(self.page.badge_aux_path.text(), "OK")
         self.assertEqual(self.page.badge_boundary_path.text(), "OK")
         self.assertEqual(self.page.badge_degree1.text(), "OK")
@@ -109,6 +114,20 @@ class DataPathsUiTest(unittest.TestCase):
             len([btn for btn in self.page.findChildren(type(self.page.btn_validate_paths)) if btn.text() == "Validate All Paths"]),
             1,
         )
+
+    def test_processing_export_formats_update_io_config(self):
+        page = self.window.page_processing
+        page.chk_export_mat.setChecked(True)
+        page.chk_export_txt.setChecked(True)
+        page.chk_export_nc.setChecked(True)
+        page.chk_export_hdf5.setChecked(True)
+
+        cfg_dict = self.window.controller.collect_config_dict({})
+        self.assertEqual(cfg_dict["io"]["output_formats"], ["mat", "txt", "nc", "hdf5"])
+        self.assertTrue(cfg_dict["io"]["save_monthly_mat"])
+        self.assertTrue(cfg_dict["io"]["save_stack_mat"])
+        self.assertTrue(cfg_dict["io"]["export_txt"])
+        self.assertTrue(cfg_dict["io"]["save_stack_hdf5"])
 
     def test_push_config_to_ui_repairs_stale_paths(self):
         stale = copy.deepcopy(getattr(self.window.controller.host.cfg, "_raw", {}))
@@ -138,7 +157,7 @@ class DataPathsUiTest(unittest.TestCase):
         self.page.edit_ddk_data_dir.editingFinished.emit()
         self.app.processEvents()
         self.assertEqual(self.page.edit_ddk_data_dir.text(), self._native(DEFAULT_DATA_PATHS["DDK"]))
-        self.assertEqual(self.page.badge_ddk_data.text(), "Verified")
+        self.assertEqual(self.page.badge_ddk_data.text(), "Built-in")
         self.assertEqual(self.page.edit_ddk_data_dir.cursorPosition(), 0)
 
         self.page.edit_mascon_gad.setText("CSR_GRACE_GRACE-FO_RL0603_Mascons_GAD-component.nc")
@@ -196,11 +215,17 @@ class DataPathsUiTest(unittest.TestCase):
         x_positions = [widget.mapTo(self.window, QPoint(0, 0)).x() for widget in widgets]
         self.assertEqual(len(set(x_positions)), 1)
 
-    def test_run_output_page_is_merged_into_dashboard_navigation(self):
+    def test_run_monitor_page_is_available_from_navigation(self):
+        configure_global_run_monitor(self.window)
         self.assertNotIn("monitor", self.window._nav_buttons)
-        self.window.set_active_page("monitor")
+        self.assertTrue(hasattr(self.window, "btn_top_pause"))
+        self.assertTrue(hasattr(self.window, "btn_top_stop"))
+        self.assertTrue(hasattr(self.window, "top_progress_bar"))
         self.app.processEvents()
-        self.assertIs(self.window.stack.currentWidget(), self.window.page_dashboard)
+        self.assertFalse(self.window.btn_top_pause.isEnabled())
+        self.assertFalse(self.window.btn_top_stop.isEnabled())
+        self.assertEqual(self.window.top_progress_label.text(), "Idle")
+        self.assertNotIn("Processing tile 42 of 180", self.window.page_monitor.text_live_logs.toPlainText())
 
     def test_dashboard_preview_only_shows_output_structure(self):
         self.window.controller.on_log("[HSAF][stack] 32/163 slices processed...", "stdout")
@@ -211,9 +236,8 @@ class DataPathsUiTest(unittest.TestCase):
         self.assertIn("[HSAF][stack] 32/163 slices processed...", self.window.console_text.toPlainText())
         self.assertEqual(self.window.page_dashboard.lbl_dashboard_counts.text(), "32 / 163")
         self.assertEqual(self.window.page_dashboard.lbl_dashboard_stage.text(), "HSAF stack 32/163")
-        self.assertIn("Output Root:", self.window.page_dashboard.lbl_preview_root.text())
-        self.assertIn("Stacks:", self.window.page_dashboard.lbl_preview_stacks.text())
-        self.assertIn("Logs:", self.window.page_dashboard.lbl_preview_logs.text())
+        self.assertEqual(str(ROOT / "outputs"), self.window.page_dashboard.lbl_preview_root.text())
+        self.assertGreater(self.window.page_dashboard.output_tree.topLevelItemCount(), 0)
 
     def test_pipeline_progress_prefers_stage_counts_over_internal_work_units(self):
         original_run_pipeline = qt_controller.run_pipeline
@@ -284,7 +308,7 @@ class DataPathsUiTest(unittest.TestCase):
         self.assertFalse(self.window.btn_run.isEnabled())
         self.assertTrue(self.window.btn_pause.isEnabled())
         self.assertTrue(self.window.btn_stop.isEnabled())
-        self.assertEqual(self.window.pipeline_status.text(), "RUNNING PIPELINE")
+        self.assertEqual(self.window.pipeline_status.text(), "Running Pipeline")
         self.assertEqual(self.window.top_progress_label.full_text(), "Running monthly loop")
         self.assertEqual(self.window.top_progress_detail.text(), "1 / 4")
         self.assertEqual(self.window.top_progress_percent.text(), "25%")
@@ -329,7 +353,7 @@ class DataPathsUiTest(unittest.TestCase):
         page.edit_start_date.setText("2005-01-01")
         page.edit_end_date.setText("2010-12-01")
         page.chk_remove_mean.setChecked(True)
-        page.cmb_anomaly_baseline.setCurrentText("Full Span")
+        self.window.controller._set_combo_value(page.cmb_anomaly_baseline, "input_full")
         page.chk_lowdeg_enable.setChecked(True)
         page.chk_replace_degree1.setChecked(False)
         page.chk_replace_c20.setChecked(True)
@@ -340,6 +364,7 @@ class DataPathsUiTest(unittest.TestCase):
         self.assertFalse(cfg_dict["time"]["auto_detect_gfc"])
         self.assertEqual(cfg_dict["time"]["start_ym"], "2005-01")
         self.assertEqual(cfg_dict["time"]["end_ym"], "2010-12")
+        self.assertEqual(cfg_dict["inversion"]["mean_baseline_mode"], "input_full")
         self.assertEqual(cfg_dict["inversion"]["mean_start_ym"], "")
         self.assertEqual(cfg_dict["inversion"]["mean_end_ym"], "")
         self.assertFalse(cfg_dict["inversion"]["lowdeg"]["replace_degree1"])
@@ -348,13 +373,22 @@ class DataPathsUiTest(unittest.TestCase):
         self.assertTrue(cfg_dict["inversion"]["gia"]["enable"])
 
         page.chk_manual_time_override.setChecked(False)
-        page.cmb_anomaly_baseline.setCurrentText("2004-01 ~ 2009-12")
+        self.window.controller._set_combo_value(page.cmb_anomaly_baseline, "standard_2004_2009")
         cfg_dict = self.window.controller.collect_config_dict({})
         self.assertTrue(cfg_dict["time"]["auto_detect_gfc"])
         self.assertEqual(cfg_dict["time"]["start_ym"], page.edit_start_date.text()[:7])
         self.assertEqual(cfg_dict["time"]["end_ym"], page.edit_end_date.text()[:7])
+        self.assertEqual(cfg_dict["inversion"]["mean_baseline_mode"], "standard_2004_2009")
         self.assertEqual(cfg_dict["inversion"]["mean_start_ym"], "2004-01")
         self.assertEqual(cfg_dict["inversion"]["mean_end_ym"], "2009-12")
+
+        self.window.controller._set_combo_value(page.cmb_anomaly_baseline, "custom")
+        page.edit_mean_start_ym.setText("1999-01")
+        page.edit_mean_end_ym.setText("2099-12")
+        cfg_dict = self.window.controller.collect_config_dict({})
+        self.assertEqual(cfg_dict["inversion"]["mean_baseline_mode"], "custom")
+        self.assertEqual(cfg_dict["inversion"]["mean_start_ym"], cfg_dict["time"]["start_ym"])
+        self.assertEqual(cfg_dict["inversion"]["mean_end_ym"], cfg_dict["time"]["end_ym"])
 
     def test_auto_low_degree_selects_tn13_from_detected_gsm_center(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -425,6 +459,7 @@ class DataPathsUiTest(unittest.TestCase):
             original_download = qt_controller.download_gfc_range
             original_run = self.window.controller._run_in_thread
             original_has_auth = qt_controller.has_earthdata_credentials
+            original_confirm = self.window.controller._confirm_download_request
 
             def fake_download_gfc_range(**kwargs):
                 calls.append(kwargs)
@@ -441,10 +476,12 @@ class DataPathsUiTest(unittest.TestCase):
 
             qt_controller.download_gfc_range = fake_download_gfc_range
             self.window.controller._run_in_thread = inline_run
+            self.window.controller._confirm_download_request = lambda **_kwargs: "start"
             qt_controller.has_earthdata_credentials = lambda: True
             self.addCleanup(setattr, qt_controller, "download_gfc_range", original_download)
             self.addCleanup(setattr, self.window.controller, "_run_in_thread", original_run)
             self.addCleanup(setattr, qt_controller, "has_earthdata_credentials", original_has_auth)
+            self.addCleanup(setattr, self.window.controller, "_confirm_download_request", original_confirm)
 
             self.page.edit_gfc_input_dir.setText(str(gfc_dir))
             self.page.edit_download_dir.setText(str(gfc_dir))
@@ -466,7 +503,7 @@ class DataPathsUiTest(unittest.TestCase):
             self.assertEqual(calls[0]["center"], "CSR")
             self.assertEqual(calls[0]["low_degree_dir"], low_dir)
             self.assertEqual(self.page.edit_degree1_path.text(), self._native(deg_csr))
-            self.assertIn("新增 1 个", self.page.lbl_gfc_download_status.text())
+            self.assertIn("1 new", self.page.lbl_gfc_download_status.text())
 
     def test_mascon_download_sources_include_gsfc_and_resolution(self):
         self.page.cmb_download_product.setCurrentText("Mascon NC")
@@ -481,10 +518,10 @@ class DataPathsUiTest(unittest.TestCase):
             ["0.25°", "0.5°", "1°"],
         )
 
-        self.page.cmb_download_product.setCurrentText("GSM 文件")
+        self.page.cmb_download_product.setCurrentText("GSM files")
         self.window.controller._sync_download_source_controls(update_options=True)
         centers = [self.page.cmb_gfc_center.itemText(i) for i in range(self.page.cmb_gfc_center.count())]
-        self.assertEqual(centers, ["自动", "CSR", "JPL", "GFZ", "HUST", "ITSG"])
+        self.assertEqual(centers, ["Auto", "CSR", "JPL", "GFZ", "HUST", "ITSG"])
         self.assertFalse(self.page.cmb_mascon_resolution.isVisible())
 
     def test_mascon_download_passes_selected_resolution(self):
@@ -496,6 +533,7 @@ class DataPathsUiTest(unittest.TestCase):
             calls = []
             original_download = qt_controller.download_mascon_nc
             original_run = self.window.controller._run_in_thread
+            original_confirm = self.window.controller._confirm_download_request
 
             def fake_download_mascon_nc(**kwargs):
                 calls.append(kwargs)
@@ -513,8 +551,10 @@ class DataPathsUiTest(unittest.TestCase):
 
             qt_controller.download_mascon_nc = fake_download_mascon_nc
             self.window.controller._run_in_thread = inline_run
+            self.window.controller._confirm_download_request = lambda **_kwargs: "start"
             self.addCleanup(setattr, qt_controller, "download_mascon_nc", original_download)
             self.addCleanup(setattr, self.window.controller, "_run_in_thread", original_run)
+            self.addCleanup(setattr, self.window.controller, "_confirm_download_request", original_confirm)
 
             self.page.cmb_download_product.setCurrentText("Mascon NC")
             self.window.controller._sync_download_source_controls(update_options=True)
@@ -529,6 +569,39 @@ class DataPathsUiTest(unittest.TestCase):
             self.assertEqual(calls[0]["source"], "GSFC")
             self.assertEqual(calls[0]["resolution"], "0.5")
             self.assertEqual(self.page.edit_mascon_reference.text(), self._native(mascon_file))
+
+    def test_download_source_button_opens_selected_product_page(self):
+        opened = []
+        original_open = qt_controller.webbrowser.open
+        qt_controller.webbrowser.open = lambda url: opened.append(url) or True
+        self.addCleanup(setattr, qt_controller.webbrowser, "open", original_open)
+
+        self.page.cmb_download_product.setCurrentText("Mascon NC")
+        self.window.controller._sync_download_source_controls(update_options=True)
+        self.page.cmb_gfc_center.setCurrentText("GSFC")
+        self.window.controller.on_open_download_site()
+
+        self.assertTrue(opened)
+        self.assertIn("gsfc", opened[-1].lower())
+
+        self.page.cmb_download_product.setCurrentText("GSM files")
+        self.window.controller._sync_download_source_controls(update_options=True)
+        self.page.cmb_gfc_center.setCurrentText("HUST")
+        self.window.controller.on_open_download_site()
+        self.assertIn("icgem", opened[-1].lower())
+
+    def test_ddk_filter_requires_kernel_files_when_enabled(self):
+        configure_global_run_monitor(self.window)
+        with tempfile.TemporaryDirectory() as tmp:
+            warnings = []
+            self.window.controller._show_warning = lambda title, text: warnings.append((title, text))
+            self.page.edit_ddk_data_dir.setText(str(Path(tmp) / "empty_ddk"))
+            Path(self.page.edit_ddk_data_dir.text()).mkdir()
+            self.window.page_processing.btn_filter_ddk.setChecked(True)
+            self.window.controller.on_run_pipeline()
+
+        self.assertTrue(warnings)
+        self.assertIn("Wbd_*", warnings[-1][1])
 
     def test_console_ignores_page_navigation_noise(self):
         self.window.console_text.clear()
@@ -567,12 +640,22 @@ class DataPathsUiTest(unittest.TestCase):
         self.window.apply_ui_preferences(UIPreferences(theme="light", language="zh"), persist=False)
         self.app.processEvents()
 
-        self.assertNotEqual(self.window._nav_buttons["data_paths"].text(), "Data Paths")
+        self.assertNotIn("data_paths", self.window._nav_buttons)
         self.assertNotEqual(self.window.breadcrumb.text(), "Data Paths")
         self.assertNotEqual(self.window.btn_settings.text(), "Settings")
         self.assertNotEqual(self.window.console_tabs.tabText(0), "Console")
         self.assertNotEqual(self.page.btn_toggle_reference_roots.text(), "Show Root Paths")
         self.assertNotEqual(self.page.btn_validate_paths.text(), "Validate All Paths")
+        self.assertIn("总览", self.window._nav_buttons["dashboard"].text())
+
+        self.window.apply_ui_preferences(UIPreferences(theme="blue", language="en"), persist=False)
+        self.app.processEvents()
+
+        self.assertEqual(self.window.ui_preferences.theme, "blue")
+        self.assertIn("#f3f8ff", self.app.styleSheet())
+        self.assertIn("Dashboard", self.window._nav_buttons["dashboard"].text())
+        self.assertEqual(self.window.btn_settings.text(), "Appearance")
+        self.assertEqual(self.window.console_tabs.tabText(0), "Console")
 
     def test_preferences_persist_across_windows(self):
         settings_file = Path(tempfile.mkdtemp()) / "ui_settings.ini"
@@ -584,7 +667,7 @@ class DataPathsUiTest(unittest.TestCase):
         first._current_screen_metrics = lambda: (1920, 1040, 1.0)
         first.resize(1600, 980)
         first.show()
-        first.apply_ui_preferences(UIPreferences(theme="dark", language="zh"), persist=True)
+        first.apply_ui_preferences(UIPreferences(theme="graphite", language="zh"), persist=True)
         self.app.processEvents()
         first.close()
         self.app.processEvents()
@@ -598,11 +681,12 @@ class DataPathsUiTest(unittest.TestCase):
         self.app.processEvents()
         self.addCleanup(second.close)
 
-        self.assertEqual(second.ui_preferences.theme, "dark")
+        self.assertEqual(second.ui_preferences.theme, "graphite")
         self.assertEqual(second.ui_preferences.language, "zh")
         self.assertEqual(second._resolved_theme, "dark")
-        self.assertNotEqual(second._nav_buttons["data_paths"].text(), "Data Paths")
-        self.assertIn("#0d1726", self.app.styleSheet())
+        self.assertNotIn("data_paths", second._nav_buttons)
+        self.assertNotEqual(second.breadcrumb.text(), "Data Paths")
+        self.assertIn("#101214", self.app.styleSheet())
 
 
 if __name__ == "__main__":

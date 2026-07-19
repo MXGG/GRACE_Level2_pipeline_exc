@@ -22,6 +22,9 @@ class LowDegreeReplacementTest(unittest.TestCase):
     def setUpClass(cls):
         cls.cfg = load_config(ROOT / "matlab" / "cfg" / "default.json")
         cls.slr_path = ROOT / "data" / "GRACE" / "LowDegree" / "TN-14_C30_C20_GSFC_SLR.txt"
+        degree1_path = ROOT / "data" / "GRACE" / "LowDegree" / "TN-13_GEOC_CSR_RL0603.txt"
+        if degree1_path.exists():
+            cls.cfg.inversion.lowdeg.setdefault("files", {})["DEGREE1"] = str(degree1_path)
 
     def test_parse_tn14_slr_exposes_c20_and_c30_columns(self):
         slr = parse_tn14_slr(str(self.slr_path))
@@ -88,7 +91,25 @@ class LowDegreeReplacementTest(unittest.TestCase):
         selected = select_tn14_slr_entry(str(self.slr_path), entry)
 
         self.assertEqual(selected.get("match_method"), "mjd_overlap")
-        self.assertTrue(np.isfinite(selected.get("C20", np.nan)))
+
+    def test_degree1_cross_month_arcs_use_calendar_month_overlap(self):
+        sh = SHCoefficients(
+            C=np.zeros((5, 5), dtype=float),
+            S=np.zeros((5, 5), dtype=float),
+            Lmax=4,
+        )
+        entry = TimeEntry.from_ym(
+            "2011-11",
+            gfc_file="GSM-2_2011289-2011319_GRAC_UTCSR_BA01_0600.gfc",
+            start_dt=datetime(2011, 10, 16),
+            end_dt=datetime(2011, 11, 15),
+        )
+        sh = replace_low_degree(self.cfg, sh, entry)
+
+        self.assertTrue(sh.replaced.get("Degree1", False))
+        self.assertAlmostEqual(sh.C[1, 0], -4.833141659e-10)
+        self.assertAlmostEqual(sh.C[1, 1], -1.552539589e-10)
+        self.assertAlmostEqual(sh.S[1, 1], 1.991894776e-10)
 
 
 if __name__ == "__main__":

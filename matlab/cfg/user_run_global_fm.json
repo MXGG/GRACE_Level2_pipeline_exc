@@ -53,11 +53,17 @@
   "leakage": {
     "enable": true,
     "method": "FM",
-    "apply_to": ["RAW","P4M6","GAUSS","FAN","P4M6_GAUSS","P4M6_FAN","DDK","HSAF"],
+    "apply_to": ["RAW","P4M6","GAUSS","FAN","P4M6_GAUSS","P4M6_FAN","DDK4","HSAF"],
     "Lmax": 60,
     "grid_interval": 1,
+    "fm_accel": 1.1,
+    "fm_metric": "land_weighted_mean",
+    "fm_mass_conservation": "legacy_land_mean_fill",
     "FM": {
-      "nIter": 2
+      "nIter": 2,
+      "accel": 1.1,
+      "metric": "land_weighted_mean",
+      "mass_conservation": "legacy_land_mean_fill"
     }
   },
   "inversion": {

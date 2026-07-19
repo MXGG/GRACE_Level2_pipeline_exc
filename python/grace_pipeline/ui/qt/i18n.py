@@ -11,26 +11,135 @@ TRANSLATIONS = {
         "GRACE LEVEL-2 PIPELINE": "GRACE 二级处理流程",
         "PRECISION PIPELINE": "精密处理流程",
         "Dashboard": "总览",
+        "Workflow Overview": "流程总览",
+        "Configuration Status": "配置状态",
+        "Available Months": "可用月份",
+        "Primary Filter": "主要滤波",
+        "Output Directory": "输出目录",
+        "Latest Artifact": "最新产物",
+        "Processing Workflow": "处理流程",
+        "Preprocessing": "预处理",
+        "Preview Export": "预览导出",
+        "Inputs and output root": "输入与输出根目录",
+        "Low-degree and GIA": "低阶项与 GIA",
+        "Boundary and statistics": "边界与统计",
+        "Map and figure output": "地图与图件输出",
+        "Start Pipeline": "启动流程",
+        "Check Config": "检查配置",
+        "Output Results": "输出结果",
+        "Copy": "复制",
+        "Open": "打开",
+        "Copy Path": "复制路径",
+        "Zoom in": "放大",
+        "Zoom out": "缩小",
+        "Copy Structure": "复制结构",
+        "Directory": "目录",
+        "Count": "数量",
+        "Monthly MAT": "月度 MAT",
+        "Stacks": "数据栈",
+        "Plots": "图件",
+        "Logs": "日志",
+        "Leakage": "泄漏校正",
+        "Basin": "流域分析",
+        "Runtime Environment": "运行环境",
+        "Program Version": "程序版本",
+        "Runtime": "运行平台",
+        "Current User": "当前用户",
+        "Memory Usage": "内存占用",
+        "Configuration": "配置",
+        "System Time": "系统时间",
+        "Not configured": "未配置",
+        "Set": "已设置",
+        "Waiting for output": "等待输出",
+        "Waiting for pipeline outputs": "等待流程输出",
+        "No recent artifact": "暂无最新产物",
+        "No active task.": "暂无活动任务。",
+        "No active task. Check configuration, then start processing when ready.": "暂无活动任务。检查配置后即可启动处理。",
+        "Load data paths": "加载数据路径",
+        "Configure when needed": "按需配置",
+        "Configure basin outputs": "配置流域输出",
+        "Render after outputs exist": "输出生成后渲染",
+        "Regional correction": "区域校正",
+        "Boundary analysis": "边界分析",
+        "Disabled": "未启用",
+        "Optional": "可选",
+        "Choose": "选择",
+        "Check": "检查",
+        "Waiting": "等待",
         "Data Paths": "数据路径",
         "Data Paths Configuration": "数据路径配置",
         "Processing Setup": "处理设置",
+        "Filter Method": "滤波方法",
+        "Parameter Settings": "参数设置",
+        "Gaussian Radius (km)": "Gaussian 半径 (km)",
+        "DDK Type": "DDK 类型",
+        "Grid Products": "格网产品",
+        "Coefficient Products": "系数产品",
+        "Summary / Tables": "摘要 / 表格",
+        "C/S coefficients (.gfc)": "C/S 系数 (.gfc)",
+        "Content": "内容",
+        "Max Degree": "最大阶次",
+        "TXT legacy": "TXT 兼容",
+        "JSON Summary": "JSON 摘要",
+        "Select a filter method to show its parameters.": "选择一个滤波方法后显示参数。",
+        "HSAF runs after the configured pre-Hankel input; P4M6 is the recommended default.": "HSAF 会在配置的前置输入之后运行；推荐默认输入为 P4M6。",
         "Leakage Correction": "泄漏校正",
         "Basin Analysis": "流域分析",
         "Basin Workflow": "流域工作流",
         "Preview": "预览",
         "Preview & Analysis": "预览与分析",
+        "Data & Time": "数据与时间",
+        "Layers at the top draw above layers below. Right-click a layer for management and properties.": "上方图层绘制在下方图层之上。右键单击图层可进行管理和属性设置。",
+        "Map Decorations": "地图装饰",
+        "Vector Overlays": "矢量叠加层",
+        "Data Layers": "数据图层",
+        "Legends, color scales, graticules, annotations, and map furniture": "图例、色标、经纬网、标注和地图整饰",
+        "Coastlines, boundaries, points, lines, and polygons": "海岸线、边界、点、线和面",
+        "GRACE grids and other raster data": "GRACE 格网和其他栅格数据",
+        "Preview layers": "预览图层",
+        "Map layers grouped by type. Layers nearer the top draw above layers below them.": "按类型分组的地图图层；越靠上的图层绘制层级越高。",
+        "layer(s)": "个图层",
+        "layers": "个图层",
+        "layer": "图层",
+        "group": "分组",
+        "Layer Management": "图层管理",
+        "Layer Properties": "图层属性",
+        "Layer Name": "图层名称",
+        "Source": "数据源",
+        "Type & Status": "类型与状态",
+        "Opacity": "透明度",
+        "Value": "数值",
+        "Show layer": "显示图层",
+        "Rendering Variable": "渲染变量",
+        "Zoom to Layer": "缩放至图层",
+        "Rename": "重命名",
+        "Duplicate": "复制图层",
+        "Properties": "属性",
+        "Hidden": "隐藏",
+        "Built-in layer": "内置图层",
+        "Current variable": "当前变量",
+        "Auto variable": "自动变量",
+        "File layer": "文件图层",
+        "Line": "线",
+        "Imported raster data uses the current preview colormap, value range, and exact preview month.": "导入的栅格数据使用当前预览页的色带、值域和精确预览月份。",
         "Run Output": "运行输出",
         "Project overview, pipeline actions, and recent execution state.": "项目概览、流程操作与最近运行状态。",
+        "Project overview, recent execution state, and resolved outputs.": "项目概览、最近运行状态和已解析输出。",
         "Define directory pointers and reference datasets required by the pipeline.": "配置流程运行所需的输入目录、输出目录和参考数据。",
+        "Internal configuration page for path widgets used by Filter Processing.": "滤波处理使用的路径控件配置页。",
         "Configure time coverage, grid geometry, inversion setup, and filters.": "配置时间范围、网格、反演和滤波链。",
+        "Configure input/output paths, time coverage, grid geometry, inversion setup, and filters.": "配置输入输出路径、时间范围、网格、反演和滤波方法。",
         "Choose a correction workflow, inspect input metadata, and hand results to Preview.": "选择校正工作流，检查输入元数据，并将结果交给预览页查看。",
         "Control basin extraction, temporal handling, and output policies.": "控制流域提取、时间处理和输出策略。",
+        "Read GRACE grids, build basin masks, extract basin series, and estimate trend or seasonal signals.": "读取 GRACE 网格、构建流域掩膜、提取流域序列并估计趋势或季节信号。",
         "Inspect stacked products, switch projections, and manage map overlays.": "检查栈产品、切换投影并管理地图叠加层。",
         "Track live progress, inspect outputs, and review process logs.": "跟踪实时进度、检查输出并查看处理日志。",
+        "Internal run monitor compatibility page.": "内部运行监控兼容页。",
         "Project Configuration Summary": "项目配置摘要",
         "Project Name": "项目名称",
         "Last Edited": "最近更新",
-        "UID": "配置指纹",
+        "UID": "配置编号",
+        "Configuration ID": "配置编号",
         "Workflow Map": "工作流",
         "Data": "数据",
         "Pipeline Controls": "\u6d41\u7a0b\u63a7\u5236",
@@ -62,10 +171,100 @@ TRANSLATIONS = {
         "Validate All Paths": "校验全部路径",
         "Preview Results": "预览结果",
         "Console": "控制台",
+        "Log": "日志",
+        "Console & Log Management": "控制台与日志管理",
+        "Workflow Logs": "工作流日志",
+        "Data & I/O": "数据与输入输出",
+        "Warnings & Errors": "警告与错误",
+        "Session Log": "会话日志",
+        "Open Log": "打开日志",
+        "Open Log Folder": "打开日志目录",
         "Menu": "菜单",
         "Show Menu": "显示菜单",
         "Help": "帮助",
         "Settings": "设置",
+        "Appearance": "外观",
+        "System": "跟随系统",
+        "Light": "浅色",
+        "Dark": "深色",
+        "Blue": "蓝色",
+        "Green": "绿色",
+        "Graphite": "石墨",
+        "Sepia": "暖色",
+        "Violet": "紫色",
+        "Theme": "主题",
+        "Language": "语言",
+        "Interface Font": "界面字体",
+        "Path / Log Font": "路径 / 日志字体",
+        "Default UI font": "默认界面字体",
+        "Default mono font": "默认等宽字体",
+        "English": "英语",
+        "Chinese": "中文",
+        "Apply": "应用",
+        "Cancel": "取消",
+        "Open GRACE-L2": "打开 GRACE-L2",
+        "Exit": "退出程序",
+        "Download Confirmation": "下载确认",
+        "Confirm the dataset before downloading.": "下载前请确认数据集、时间范围和保存路径。",
+        "Start Download": "开始下载",
+        "Re-authorize Earthdata": "重新授权 Earthdata",
+        "Open Data Website": "打开数据网页",
+        "Official Sources": "官方数据源",
+        "Official Data Sources": "官方数据源",
+        "Open an official provider page": "打开官方数据提供方页面",
+        "Level-2 Spherical Harmonics": "Level-2 球谐系数",
+        "Mascon NetCDF": "Mascon NetCDF",
+        "Manage Earthdata Authorization": "管理 Earthdata 授权",
+        "Create an Earthdata Account": "创建 Earthdata 账户",
+        "Current provider: {provider}": "当前数据提供方：{provider}",
+        "Opened official data page: {source}.": "已打开官方数据页面：{source}。",
+        "Data provider": "数据提供方",
+        "Product": "产品",
+        "Month range": "月份范围",
+        "Save to": "保存到",
+        "Earthdata authorization": "Earthdata 授权",
+        "Not required": "不需要",
+        "Not configured": "未配置",
+        "Official source URL": "官方来源网址",
+        "Open Official Data Page": "打开官方数据页面",
+        "Select Month": "选择年月",
+        "Filter Path Configuration": "滤波路径配置",
+        "Choose Folder...": "选择文件夹...",
+        "Download": "下载",
+        "Data Download": "数据下载",
+        "Main Output Root": "主输出目录",
+        "Start Month": "开始月份",
+        "End Month": "结束月份",
+        "Baseline Start Month": "基准开始月份",
+        "Baseline End Month": "基准结束月份",
+        "Boundary Files (*.shp *.bln *.txt);;All Files (*)": "边界文件 (*.shp *.bln *.txt);;所有文件 (*)",
+        "First boundary": "第一个边界",
+        "first boundary feature": "第一个边界要素",
+        "Earthdata Authorization": "Earthdata 授权",
+        "Earthdata authorization is required or has expired.": "需要 Earthdata 授权，或现有授权已失效。",
+        "Earthdata authorization is required for this download.": "本次下载需要有效的 Earthdata 授权。",
+        "Current authorization": "当前授权",
+        "Local token store": "本地令牌存储",
+        "Legacy netrc file": "旧版 netrc 文件",
+        "Open NASA Earthdata in your browser, sign in, create a user token, and paste it below. The token is stored locally and is never written to the processing JSON configuration.": "请在浏览器中打开 NASA Earthdata，登录并创建用户令牌，然后粘贴到下方。令牌仅保存在本机，不会写入处理流程的 JSON 配置。",
+        "Open Earthdata Token Guide": "打开 Earthdata 令牌指南",
+        "A local label, for example: earthdata": "本地标签，例如：earthdata",
+        "Paste the Earthdata user token": "粘贴 Earthdata 用户令牌",
+        "Set this token as active": "将此令牌设为当前授权",
+        "Clear saved Earthdata tokens": "清除已保存的 Earthdata 令牌",
+        "Clear legacy .netrc Earthdata credentials": "清除旧版 .netrc Earthdata 凭据",
+        "Account label": "账户标签",
+        "User token": "用户令牌",
+        "Save Authorization": "保存授权",
+        "Earthdata authorization data was cleared from: {locations}.": "已从以下位置清除 Earthdata 授权数据：{locations}。",
+        "Earthdata authorization saved locally: {path}.": "Earthdata 授权已保存到本机：{path}。",
+        "not required": "不需要",
+        "Custom Range": "自定义范围",
+        "PnMl": "PnMl",
+        "Gaussian+PnMl": "Gaussian+PnMl",
+        "FAN+PnMl": "FAN+PnMl",
+    "Visit Data Page": "访问数据网页",
+    "Data Page": "数据网页",
         "Output Root": "输出根目录",
         "Local execution | Output directories resolved from active config.": "本地执行 | 输出目录由当前配置解析。",
         "Data Availability": "数据可用性",
@@ -77,6 +276,20 @@ TRANSLATIONS = {
         "Run Failed": "运行失败",
         "Idle": "空闲",
         "Ready": "就绪",
+        "Config Ready": "配置就绪",
+        "Config Saved": "配置已保存",
+        "Running": "运行中",
+        "Running Pipeline": "流程运行中",
+        "Running Basin": "流域分析运行中",
+        "Running Leakage": "泄漏校正运行中",
+        "Running SH to Grid Tool": "球谐转网格工具运行中",
+        "Running Grid to SH Tool": "网格转球谐工具运行中",
+        "Running Grid to Series Tool": "流域序列工具运行中",
+        "Running Harmonic Tool": "谐波拟合工具运行中",
+        "Finalizing Outputs": "正在整理输出",
+        "Finalizing": "整理中",
+        "Error": "错误",
+        "Stop Requested": "已请求停止",
         "READY": "就绪",
         "CONFIG READY": "配置就绪",
         "CONFIG SAVED": "配置已保存",
@@ -113,7 +326,7 @@ TRANSLATIONS = {
         "Latest Artifact: waiting for pipeline outputs.": "最新产物：等待流程输出。",
         "Output Root: not resolved yet.": "输出根目录：尚未解析。",
         "Local Output: not resolved yet.": "本地输出：尚未解析。",
-        "Stacks: not resolved yet.": "栈文件：尚未解析。",
+        "Stacks: not resolved yet.": "数据栈：尚未解析。",
         "Monthly MAT: not resolved yet.": "月度 MAT：尚未解析。",
         "Plots: not resolved yet.": "图件：尚未解析。",
         "Logs: not resolved yet.": "日志：尚未解析。",
@@ -185,17 +398,21 @@ TRANSLATIONS = {
         "Run SH -> Grid Synthesis": "运行球谐到网格合成",
         "Run Grid -> SH Analysis": "运行网格到球谐分析",
         "Filter Chain Setup": "滤波链设置",
+        "Data Export Formats": "数据导出格式",
+        "Output Formats": "输出格式",
+        "Choose additional filter output formats for downstream tools. MAT remains enabled by default.": "选择供下游工具使用的附加滤波输出格式。MAT 默认保持启用。",
         "Blue filters are written to the final stack. Select any filter button to edit only that method's parameters below.": "蓝色滤波产品会写入最终栈；点击某个滤波按钮只编辑该方法参数。",
-        "PnMn": "P4M6",
-        "Gaussian+PnMn": "Gaussian+P4M6",
-        "FAN+PnMn": "FAN+P4M6",
+        "PnMn": "PnMl",
+        "Gaussian+PnMn": "Gaussian+PnMl",
+        "FAN+PnMn": "FAN+PnMl",
         "Gaussian smoothing damps high-degree SH coefficients with an isotropic radius.": "Gaussian 平滑用各向同性半径衰减高阶球谐系数。",
         "Gaussian Radius (km)": "Gaussian 半径（km）",
-        "PnMn decorrelation removes even/odd polynomial trends by order m in SH coefficient space.": "P4M6 去相关在球谐系数空间按阶次移除偶/奇多项式趋势。",
+        "PnMn decorrelation removes even/odd polynomial trends by order m in SH coefficient space.": "PnMl 去相关在球谐系数空间按阶次移除偶/奇多项式趋势。",
         "Polynomial Degree P": "多项式次数 P",
         "Start Order M": "起始阶次 M",
         "DDK uses precomputed decorrelation kernels. DDK1 is strongest; DDK8 is weakest.": "DDK 使用预计算去相关核；DDK1 最强，DDK8 最弱。",
         "DDK Variant": "DDK 类型",
+        "DDK Type": "DDK 类型",
         "FAN applies degree Gaussian smoothing followed by order-direction smoothing.": "FAN 先进行度方向 Gaussian 平滑，再进行阶方向平滑。",
         "FAN Radius-1 (km)": "FAN 半径 1（km）",
         "FAN Radius-2 (km)": "FAN 半径 2（km）",
@@ -203,9 +420,21 @@ TRANSLATIONS = {
         "HSAF Input": "HSAF 输入",
         "HSAF Strategy": "HSAF 策略",
         "HSAF Iterations": "HSAF 迭代次数",
+        "Parameter Settings": "参数设置",
+        "Gaussian Parameters": "Gaussian 参数",
+        "PnMl Parameters": "PnMl 参数",
+        "Gaussian+PnMl Parameters": "Gaussian+PnMl 参数",
+        "DDK Parameters": "DDK 参数",
+        "FAN Parameters": "FAN 参数",
+        "FAN+PnMl Parameters": "FAN+PnMl 参数",
+        "HSAF Parameters": "HSAF 参数",
+        "Select a filter method to show its parameters.": "选择一个滤波方法后显示参数。",
         "Global Fixed": "全局固定",
         "Latitude Adaptive": "纬度自适应",
         "Global fixed parameters": "全局固定参数",
+        "Zone 1": "区域 1",
+        "Zone 2": "区域 2",
+        "Zone 3": "区域 3",
         "Latitude-adaptive parameters. Empty fields fall back to the loaded defaults for that zone.": "纬度自适应参数；空字段使用该带默认值。",
         "Window N": "窗口 N",
         "Embedding P": "嵌入 P",
@@ -311,7 +540,7 @@ TRANSLATIONS = {
         "Basin Definition": "流域定义",
         "Load Basin Info": "读取流域信息",
         "Input not loaded.": "输入未读取。",
-        "Source Stack File": "源栈文件",
+        "Source Stack File": "源数据栈文件",
         "Boundary File": "边界文件",
         "Basin Selection Mode": "流域选择模式",
         "Output Options": "输出选项",
@@ -330,23 +559,108 @@ TRANSLATIONS = {
         "Run Basin Analysis": "运行流域分析",
         "Supplemental utility aligned to Fengwei toolbox: extract basin series and estimate trend/seasonal amplitudes.": "辅助工具：提取流域时序并估计趋势/季节振幅。",
         "Preview Controls": "预览控制",
+        "Preview": "预览",
+        "Data Source": "数据源",
         "Dataset Source": "数据源",
         "Load Stack Info": "读取栈信息",
         "Stack Status": "栈状态",
+        "Data Status": "数据状态",
         "Stack not loaded.": "栈未读取。",
         "Data Variable": "数据变量",
+        "Plot Variable": "绘图变量",
+        "Variable": "绘图变量",
         "Time Index": "时间索引",
+        "Time Slice": "时间索引/切片",
         "Projection": "投影",
         "Colormap": "色带",
+        "Color Scale Settings": "色带设置",
         "Color Min": "色标最小值",
         "Color Max": "色标最大值",
+        "Minimum": "最小值",
+        "Maximum": "最大值",
         "Use Detected Extent": "使用检测范围",
+        "Use Data Extent": "使用数据覆盖范围",
+        "Spatial Extent": "空间范围",
+        "Spatial Grid Configuration": "空间网格配置",
+        "Enable Spatial Grid": "启用空间网格配置",
+        "Lon Min": "最小经度",
+        "Lon Max": "最大经度",
+        "Lat Min": "最小纬度",
+        "Lat Max": "最大纬度",
+        "Size": "尺寸",
         "Layer Stack": "图层",
+        "Layers": "图层",
         "Data: Mass Anomaly": "数据：质量异常",
+        "Mass Anomaly Data": "质量异常数据",
         "Coastlines": "海岸线",
+        "Boundary / Grid Files": "边界 / 格网文件",
+        "Data / Feature Files": "数据 / 要素文件",
+        "Boundary Overlays": "边界叠加层",
         "Basin Boundaries": "流域边界",
-        "Grid Lines": "网格线",
+        "Grid Lines": "经纬网",
+        "Graticule": "经纬网",
+        "Graticule Settings": "经纬网设置",
+        "Enable Graticule": "启用经纬网",
+        "Longitude Interval": "经度间隔",
+        "Latitude Interval": "纬度间隔",
+        "Line Width": "线宽",
+        "Tick Length": "刻度长度",
+        "Tick Width": "刻度宽度",
+        "Label Font Size": "标注字号",
+        "Font Family": "字体",
+        "Line Style": "线型",
+        "Line Color": "线条颜色",
+        "Tick Direction": "刻度方向",
+        "Box Style": "边框样式",
+        "Dashed": "虚线",
+        "Solid": "实线",
+        "Dotted": "点线",
+        "No Line": "无线条",
+        "Out": "向外",
+        "In": "向内",
+        "Both": "双向",
+        "Plain": "普通",
+        "Fancy": "花式",
+        "Off": "关闭",
+        "Default": "默认",
+        "Show Labels": "显示标注",
+        "Color Scale": "色标尺",
+        "Color Bar": "色标尺",
+        "Show Color Bar": "显示色标尺",
+        "Uses the selected color scale and value range.": "使用当前色带和数值范围。",
         "River Networks": "河网",
+        "Add": "添加",
+        "Import Data": "导入数据",
+        "Import Feature": "导入要素",
+        "Import Data / Feature": "导入数据 / 要素",
+        "Select data or feature file": "选择数据或要素文件",
+        "Remove": "删除",
+        "Delete": "删除",
+        "Up": "上移",
+        "Down": "下移",
+        "Top": "置顶",
+        "Move up": "上移",
+        "Move down": "下移",
+        "Move to top": "置顶",
+        "Visible": "可见",
+        "Layer": "图层",
+        "Layer Type": "类型",
+        "Type": "类型",
+        "Config": "配置",
+        "Actions": "操作",
+        "Plot Variable": "绘图变量",
+        "Opacity": "透明度",
+        "The layer uses the current preview colormap and value range.": "该图层使用当前预览页的色带和数值范围。",
+        "Path": "路径",
+        "Raster": "栅格",
+        "Vector": "矢量",
+        "Grid": "网格",
+        "Boundary": "边界",
+        "Decorator": "装饰",
+        "Annotation": "标注",
+        "Select boundary or grid file": "选择边界或网格文件",
+        "Boundary / Grid Files (*.shp *.bln *.txt *.nc *.nc4 *.cdf *.h5 *.hdf5 *.mat);;All Files (*)": "边界/网格文件 (*.shp *.bln *.txt *.nc *.nc4 *.cdf *.h5 *.hdf5 *.mat);;所有文件 (*)",
+        "Data / Feature Files (*.shp *.bln *.txt *.nc *.nc4 *.cdf *.h5 *.hdf5 *.mat);;All Files (*)": "数据/要素文件 (*.shp *.bln *.txt *.nc *.nc4 *.cdf *.h5 *.hdf5 *.mat);;所有文件 (*)",
         "Render Preview": "渲染预览",
         "Export Figure": "导出图像",
         "Hide Controls": "隐藏控制",
@@ -391,7 +705,7 @@ TRANSLATIONS = {
         "Not configured": "\u672a\u914d\u7f6e",
         "Not resolved": "\u672a\u89e3\u6790",
         "None": "\u65e0",
-        "In-Memory Config": "\u5185\u5b58\u914d\u7f6e",
+        "In-Memory Config": "当前临时配置",
         "Active variable": "\u5f53\u524d\u53d8\u91cf",
         "Load failed": "\u52a0\u8f7d\u5931\u8d25",
         "Active": "\u542f\u7528",
@@ -417,7 +731,7 @@ TRANSLATIONS = {
         "Workflow Scope": "\u5de5\u4f5c\u6d41\u8303\u56f4",
         "Use this module for GRACE gridded mass anomalies, basin masks, area-weighted series, trend, and seasonal amplitude.": "\u7528\u4e8e GRACE \u7f51\u683c\u8d28\u91cf\u5f02\u5e38\u3001\u6d41\u57df\u63a9\u819c\u3001\u9762\u79ef\u52a0\u6743\u65f6\u95f4\u5e8f\u5217\u3001\u8d8b\u52bf\u548c\u5b63\u8282\u632f\u5e45\u5206\u6790\u3002",
         "Grid Data": "\u7f51\u683c\u6570\u636e",
-        "Grid Stack": "\u7f51\u683c\u6808\u6587\u4ef6",
+        "Grid Stack": "网格数据栈",
         "Read Grid Metadata": "\u8bfb\u53d6\u7f51\u683c\u5143\u6570\u636e",
         "Grid Shape": "\u7f51\u683c\u5c3a\u5bf8",
         "Time Coverage": "\u65f6\u95f4\u8303\u56f4",
@@ -456,16 +770,35 @@ TRANSLATIONS = {
         "Quick Analysis Tools": "\u5feb\u901f\u5206\u6790\u5de5\u5177",
         "Extract Basin Series": "\u63d0\u53d6\u6d41\u57df\u65f6\u5e8f",
         "Estimate Trend / Amplitude": "\u4f30\u8ba1\u8d8b\u52bf / \u632f\u5e45",
-        "Tools use the selected grid stack and boundary, then write series and harmonic-fit outputs under output/local/tools.": "\u5de5\u5177\u4f7f\u7528\u5f53\u524d\u7f51\u683c\u6808\u548c\u8fb9\u754c\uff0c\u5e76\u5c06\u65f6\u5e8f\u4e0e\u8c10\u6ce2\u62df\u5408\u7ed3\u679c\u5199\u5165 output/local/tools\u3002",
+        "Tools use the selected grid stack and boundary, then write series and harmonic-fit outputs under outputs/local/tools.": "\u5de5\u5177\u4f7f\u7528\u5f53\u524d\u7f51\u683c\u6808\u548c\u8fb9\u754c\uff0c\u5e76\u5c06\u65f6\u5e8f\u4e0e\u8c10\u6ce2\u62df\u5408\u7ed3\u679c\u5199\u5165 outputs/local/tools\u3002",
         "Run Analysis": "\u8fd0\u884c\u5206\u6790",
         "1. Grid Input": "1. \u7f51\u683c\u6570\u636e\u8f93\u5165",
+        "2. Boundary Mask Extraction": "2. \u8fb9\u754c\u63a9\u819c\u63d0\u53d6",
         "2. Basin Boundary and Mask": "2. \u6d41\u57df\u8fb9\u754c\u4e0e\u63a9\u819c",
+        "3. Basin Spatial Preview": "3. \u6d41\u57df\u7a7a\u95f4\u9884\u89c8",
+        "4. Basin Products and Output": "4. \u6d41\u57df\u4ea7\u54c1\u4e0e\u8f93\u51fa",
         "3. Analysis Products and Output": "3. \u5206\u6790\u4ea7\u54c1\u4e0e\u8f93\u51fa",
         "Selected Basin Spatial Preview": "\u5f53\u524d\u6d41\u57df\u7a7a\u95f4\u9884\u89c8",
+        "Preview: load grid and boundary, then choose a basin and time slice.": "\u9884\u89c8\uff1a\u8bfb\u53d6\u7f51\u683c\u548c\u8fb9\u754c\u540e\uff0c\u9009\u62e9\u6d41\u57df\u548c\u65f6\u95f4\u5207\u7247\u3002",
         "Preview: select one basin on the left, then render its spatial distribution and mask.": "\u9884\u89c8\uff1a\u5728\u5de6\u4fa7\u9009\u62e9\u4e00\u4e2a\u6d41\u57df\uff0c\u7136\u540e\u6e32\u67d3\u5b83\u7684\u7a7a\u95f4\u5206\u5e03\u548c\u63a9\u819c\u3002",
+        "Preview Spatial Distribution": "\u9884\u89c8\u7a7a\u95f4\u5206\u5e03",
+        "Basin": "\u6d41\u57df",
+        "Time Slice": "\u65f6\u95f4\u5207\u7247",
+        "Time slice: 1 / 1": "\u65f6\u95f4\u5207\u7247\uff1a1 / 1",
         "Preview Selected Basin": "\u9884\u89c8\u5f53\u524d\u6d41\u57df",
         "Refresh Selected Basin Preview": "\u5237\u65b0\u5f53\u524d\u6d41\u57df\u9884\u89c8",
         "Selected Basin(s)": "\u5df2\u9009\u6d41\u57df",
+        "Preview Basin": "\u9884\u89c8\u6d41\u57df",
+        "Preview basin: first boundary feature": "\u9884\u89c8\u6d41\u57df\uff1a\u7b2c\u4e00\u4e2a\u8fb9\u754c\u8981\u7d20",
+        "Mask: load grid and boundary to generate automatically": "\u63a9\u819c\uff1a\u8bfb\u53d6\u7f51\u683c\u548c\u8fb9\u754c\u540e\u81ea\u52a8\u751f\u6210",
+        "Basin time series: area-weighted values for each boundary": "\u6d41\u57df\u65f6\u5e8f\uff1a\u6bcf\u4e2a\u8fb9\u754c\u7684\u9762\u79ef\u52a0\u6743\u503c",
+        "Trend and amplitude products: basin statistics and spatial trend maps": "\u8d8b\u52bf\u4e0e\u632f\u5e45\u4ea7\u54c1\uff1a\u6d41\u57df\u7edf\u8ba1\u548c\u7a7a\u95f4\u8d8b\u52bf\u56fe",
+        "Trend, amplitude, and residual products: basin statistics and spatial maps": "\u8d8b\u52bf\u3001\u632f\u5e45\u4e0e\u6b8b\u5dee\u4ea7\u54c1\uff1a\u6d41\u57df\u7edf\u8ba1\u548c\u7a7a\u95f4\u56fe",
+        "Masked spatial grids: basin mask, clipped grid stack, mean, trend, and amplitude": "\u63a9\u819c\u7a7a\u95f4\u7f51\u683c\uff1a\u6d41\u57df\u63a9\u819c\u3001\u88c1\u526a\u7f51\u683c\u6808\u3001\u5747\u503c\u3001\u8d8b\u52bf\u548c\u632f\u5e45",
+        "Masked spatial grids: basin bounding box, clipped stack, mean, trend, amplitude, and residual": "\u63a9\u819c\u7a7a\u95f4\u7f51\u683c\uff1a\u6d41\u57df\u5916\u63a5\u77e9\u5f62\u3001\u88c1\u526a\u7f51\u683c\u6808\u3001\u5747\u503c\u3001\u8d8b\u52bf\u3001\u632f\u5e45\u548c\u6b8b\u5dee",
+        "Run Analysis processes all loaded boundary features. Single-epoch grids export masked spatial data; trend and amplitude maps require a time series.": "\u8fd0\u884c\u5206\u6790\u4f1a\u5904\u7406\u6240\u6709\u5df2\u8bfb\u53d6\u7684\u8fb9\u754c\u8981\u7d20\u3002\u5355\u5386\u5143\u7f51\u683c\u53ea\u5bfc\u51fa\u63a9\u819c\u7a7a\u95f4\u6570\u636e\uff1b\u8d8b\u52bf\u548c\u632f\u5e45\u56fe\u9700\u8981\u65f6\u95f4\u5e8f\u5217\u3002",
+        "Run Analysis processes all loaded boundary features. Single-epoch or short grids export masked spatial data; trend and amplitude maps require at least 6 time samples.": "\u8fd0\u884c\u5206\u6790\u4f1a\u5904\u7406\u6240\u6709\u5df2\u8bfb\u53d6\u7684\u8fb9\u754c\u8981\u7d20\u3002\u5355\u5386\u5143\u6216\u77ed\u65f6\u95f4\u5e8f\u5217\u7f51\u683c\u53ea\u5bfc\u51fa\u63a9\u819c\u7a7a\u95f4\u6570\u636e\uff1b\u8d8b\u52bf\u548c\u632f\u5e45\u56fe\u9700\u8981\u81f3\u5c11 6 \u4e2a\u65f6\u95f4\u6837\u672c\u3002",
+        "Run Analysis processes all loaded boundary features. Spatial products are cropped to each basin bounding box and preserve lon/lat/time. Trend, amplitude, and residual maps require at least 6 time samples.": "\u8fd0\u884c\u5206\u6790\u4f1a\u5904\u7406\u6240\u6709\u5df2\u8bfb\u53d6\u7684\u8fb9\u754c\u8981\u7d20\u3002\u7a7a\u95f4\u4ea7\u54c1\u4f1a\u88c1\u526a\u5230\u6bcf\u4e2a\u6d41\u57df\u7684\u5916\u63a5\u77e9\u5f62\uff0c\u5e76\u4fdd\u7559\u7ecf\u7eac\u5ea6\u548c\u65f6\u95f4\u4fe1\u606f\u3002\u8d8b\u52bf\u3001\u632f\u5e45\u548c\u6b8b\u5dee\u56fe\u9700\u8981\u81f3\u5c11 6 \u4e2a\u65f6\u95f4\u6837\u672c\u3002",
         "Spatial extraction: area-weighted basin time series": "\u7a7a\u95f4\u63d0\u53d6\uff1a\u9762\u79ef\u52a0\u6743\u6d41\u57df\u65f6\u5e8f",
         "Amplitude/trend analysis: trend, annual, and semiannual statistics": "\u632f\u5e45/\u8d8b\u52bf\u5206\u6790\uff1a\u8d8b\u52bf\u3001\u5e74\u5468\u671f\u548c\u534a\u5e74\u5468\u671f\u7edf\u8ba1",
         "Spatial grid output: mask and diagnostic grids": "\u7a7a\u95f4\u7f51\u683c\u8f93\u51fa\uff1a\u63a9\u819c\u548c\u8bca\u65ad\u7f51\u683c",
@@ -502,7 +835,7 @@ PREFIX_TRANSLATIONS = {
         "I/O: ": "输入/输出：",
         "Output Root: ": "输出根目录：",
         "Local Output: ": "本地输出：",
-        "Stacks: ": "栈文件：",
+        "Stacks: ": "数据栈：",
         "Monthly MAT: ": "月度 MAT：",
         "Plots: ": "图件：",
         "Logs: ": "日志：",
@@ -521,6 +854,7 @@ PREFIX_TRANSLATIONS = {
         "Variable: ": "\u53d8\u91cf\uff1a",
         "Loaded: ": "\u5df2\u8bfb\u53d6\uff1a",
         "Preview target: ": "\u9884\u89c8\u76ee\u6807\uff1a",
+        "Preview basin: ": "\u9884\u89c8\u6d41\u57df\uff1a",
         "Selected basin: ": "\u5f53\u524d\u6d41\u57df\uff1a",
         "Selected basins: ": "\u5df2\u9009\u6d41\u57df\uff1a",
         "Preview: ": "\u9884\u89c8\uff1a",
@@ -530,11 +864,448 @@ PREFIX_TRANSLATIONS = {
     }
 }
 
+LANGUAGE_SYSTEM_TERMS_ZH = {
+    # Dashboard overview installed by shell_enhancements.py. Keep English
+    # source strings as canonical keys so language switching can normalize both
+    # construction-time and dynamically patched labels.
+    "System and project status": "系统与项目状态",
+    "Data and outputs": "数据与输出",
+    "Output structure": "输出结构",
+    "Current run": "当前运行",
+    "Correction method": "校正方法",
+    "2. Correction method": "2. 选择校正方法",
+    "Configuration": "配置名称",
+    "Last updated": "最近更新",
+    "Last Edited": "最近更新",
+    "Configuration fingerprint": "配置指纹",
+    "State": "状态",
+    "User": "当前用户",
+    "Version": "程序版本",
+    "Time": "系统时间",
+    "Memory": "内存占用",
+    "Filter chain": "滤波链",
+    "Available months": "可用月份",
+    "Output root": "输出根目录",
+    "Latest artifact": "最近产物",
+    "Root": "根目录",
+    "Local": "本地输出",
+    "Stacks": "数据栈",
+    "Monthly": "月度产品",
+    "Figures": "图件",
+    "Runtime": "运行环境",
+    "Running environment": "运行环境",
+    "In-Memory Config": "当前临时配置",
+    "Current temporary configuration": "当前临时配置",
+    "Python / MATLAB": "Python / MATLAB",
+    "Version / User": "版本 / 用户",
+
+    # Filter/download workflow.
+    "Filter Processing": "滤波处理",
+    "Filter Input Paths": "滤波输入路径",
+    "Filter Output Paths": "滤波输出路径",
+    "Auxiliary Filter Files": "辅助滤波文件",
+    "GFC Input Directory": "GFC 输入目录",
+    "DDK Data Directory": "DDK 数据目录",
+    "Detected Range": "检测范围",
+    "Remote Sync": "远程同步",
+    "Main Output Root": "主输出根目录",
+    "Open Logs": "打开日志",
+    "Data Download": "数据下载",
+    "Download": "下载",
+    "Download GFC": "下载 GFC",
+    "Download Mascon": "下载 Mascon",
+    "Select download folder...": "选择下载文件夹...",
+    "Choose download folder...": "选择下载文件夹...",
+    "Download Folder...": "下载文件夹...",
+    "Folder...": "文件夹...",
+    "Choose Folder": "选择文件夹",
+    "Folder": "文件夹",
+    "Path": "路径",
+    "Web": "网页",
+    "Downloading data": "下载数据",
+    "Download Data": "下载数据",
+    "Set a download folder first.": "请先设置下载文件夹。",
+    "Set a valid start/end month before downloading files.": "请先设置有效的下载开始月份和结束月份。",
+    "Download date range is outside the configured processing range.": "下载月份范围超出当前配置的处理时间范围。",
+    "Mascon NC downloads currently support CSR, JPL, and GSFC.": "Mascon NC 下载目前支持 CSR、JPL 和 GSFC。",
+    "Mascon NC downloads support CSR, JPL, and GSFC; resolution must match the published product.": "Mascon NC 支持 CSR、JPL、GSFC；分辨率需与机构发布产品匹配。",
+    "Download in progress": "正在下载",
+    "Download complete": "下载完成",
+    "new": "新增",
+    "existing": "已存在",
+    "center": "机构",
+    "Auto": "自动",
+    "GSM files": "GSM 文件",
+    "Download folder": "下载文件夹",
+    "Time Slice": "时间索引/切片",
+    "Plot Variable": "绘图变量",
+    "Data Source": "数据源",
+    "Data Status": "数据状态",
+    "Use Data Extent": "使用数据覆盖范围",
+
+    # Leakage correction terminology. These are UI workflow labels, while file
+    # formats, product names, and algorithm abbreviations remain unchanged.
+    "Correction Dataset": "待校正数据",
+    "1. Correction dataset": "1. 待校正数据",
+    "Official scale/gain factor": "官方尺度/增益因子",
+    "Official scale/gain factor grid": "官方尺度/增益因子网格",
+    "Apply an official scale/gain factor grid by location to the correction dataset.": "读取官方尺度/增益因子网格，并按格网位置应用于待校正数据。",
+    "Estimate a regional scale factor from a boundary and a reference model or synthetic field.": "基于区域边界与参考模型或合成场估计区域尺度因子。",
+    "Simulate leakage response from a boundary, filter method, Lmax, and reference field.": "基于区域边界、滤波方法、Lmax 和参考场模拟泄漏响应。",
+    "Scale/Gain Factor Grid": "尺度/增益因子网格",
+    "Forward modelling": "正演建模",
+    "Forward-modeling": "正演建模",
+    "Forward-modelling iteration settings": "正演建模迭代设置",
+    "Filter method": "滤波方法",
+    "Reference Model or Synthetic Field": "参考模型或合成场",
+    "Reference or Trend Field": "参考场或趋势场",
+    "Developer / experimental options": "开发者 / 实验选项",
+    "Read Reference": "读取参考数据",
+    "Read Input Metadata": "读取输入信息",
+    "Run Leakage Correction": "运行泄漏校正",
+    "Regional scale factor": "区域尺度因子",
+    "3. Output and run": "3. 输出与运行",
+    "Output files: corrected_stack, difference_stack, summary.json, diagnostics, and preview_manifest.json.": "输出文件：corrected_stack、difference_stack、summary.json、diagnostics 和 preview_manifest.json。",
+    "Use an official scale/gain grid to apply grid-wise amplitude restoration to the correction dataset.": "适用于已获得官方尺度/增益因子网格的情形。程序按格网位置对待校正数据进行幅值恢复。",
+    "Use a regional boundary and a reference model or synthetic field to estimate a scale factor for basin-scale analysis.": "适用于流域、湖泊等区域统计。程序基于区域边界及参考模型或合成场估计区域尺度因子。",
+    "Use a regional boundary, filter method, Lmax, and reference or trend field to simulate the leakage response before correction.": "适用于高级区域校正。程序基于区域边界、滤波方法、Lmax 及参考场或趋势场模拟滤波前后的泄漏响应。",
+    "Use Processing Setup": "沿用滤波处理设置",
+    "Gaussian filtering requires a smoothing radius.": "选择 Gaussian 时需设置平滑半径。",
+    "DDK filtering requires the DDK kernel type.": "选择 DDK 时需设置 DDK 类型。",
+    "Fan filtering uses the parameters from the processing setup.": "Fan 滤波参数沿用滤波处理页设置。",
+    "PnMm/P4M6 parameters are taken from the processing setup.": "PnMm/P4M6 参数沿用滤波处理页设置。",
+    "HSAF parameters are taken from the processing setup.": "HSAF 参数沿用滤波处理页设置。",
+    "The filter method follows the processing setup.": "滤波方法沿用滤波处理页设置。",
+    "The selected filter method uses the processing setup.": "所选滤波方法沿用滤波处理页设置。",
+    "Reference model stack; leave blank to use the synthetic-field workflow": "参考模型栈；留空时采用合成场方案",
+    "Reference field, model field, or trend field": "参考场、模型场或趋势场",
+    "After the run finishes, inspect the corrected result's spatial distribution and time series in Preview.": "运行完成后，可在预览页检查校正结果的空间分布和时间序列。",
+
+    # Common status fragments that previously leaked across language modes.
+    "Input loaded": "输入已读取",
+    "Read failed": "读取失败",
+    "Reference file is not set.": "尚未设置参考文件。",
+    "Reference file does not exist.": "参考文件不存在。",
+    "Boundary file is not set.": "尚未设置边界文件。",
+    "Boundary read failed": "边界读取失败",
+    "Time range": "时间范围",
+    "Grid Extent": "经纬度范围",
+    "Please select an input stack file first.": "请先选择输入栈文件。",
+    "Please select a basin boundary file first.": "请先选择流域边界文件。",
+    "Regional mode has no boundary file; switched to global recovery automatically.": "区域模式缺少边界文件，已自动切换为全球恢复模式。",
+    "Input loading failed. Check the file path and stack structure.": "输入读取失败，请检查文件路径和栈数据结构。",
+    "Read the correction dataset first. This step reports dimensions, variable name, time coverage, and grid extent.": "请先读取待校正数据。本步骤用于确认数据维度、变量名称、时间范围和经纬度范围。",
+}
+
+LANGUAGE_SYSTEM_PREFIX_ZH = {
+    "Latest artifact: ": "最近产物：",
+    "Latest Artifact: ": "最新产物：",
+    "Root: ": "根目录：",
+    "Local: ": "本地输出：",
+    "Monthly: ": "月度产品：",
+    "Figures: ": "图件：",
+    "Runtime: ": "运行环境：",
+    "Downloading ": "正在下载 ",
+    "Download complete: ": "下载完成：",
+    "Session Log: ": "会话日志：",
+}
+
+# Canonical scientific and GIS terminology used by Preview and the global
+# shell.  Keep one authoritative vocabulary here instead of allowing each
+# page to invent near-synonyms such as "stack", "time index/slice", or
+# "latency".  English aliases below normalize legacy construction-time text
+# before either language is rendered.
+ACADEMIC_PREVIEW_TERMS_ZH = {
+    # Mission and product terminology.  Product levels are proper names in
+    # GRACE/GRACE-FO documentation and therefore remain "Level-2" in Chinese.
+    "GRACE Level-2 Pipeline": "GRACE Level-2 数据处理流程",
+    "GRACE LEVEL-2 PIPELINE": "GRACE Level-2 数据处理流程",
+    "Level-2 Spherical Harmonics": "Level-2 球谐系数产品",
+    "GRACE Level-2 (JPL Release)": "GRACE Level-2（JPL 产品）",
+    "C30 (GRACE-FO only)": "C30（仅适用于 GRACE-FO）",
+    "Equivalent Water Height": "等效水高",
+    "Equivalent Water Height (EWH)": "等效水高（EWH）",
+    "Equivalent water height (EWH)": "等效水高（EWH）",
+    "Equivalent water height": "等效水高",
+    "equivalent-water-height": "等效水高",
+
+    # Preview information architecture and data/time controls.
+    "Preview & Analysis": "预览与分析",
+    "Inspect gridded time-series products, compare map projections, and manage overlay layers.": "查看格网时间序列产品、比较地图投影并管理叠加图层。",
+    "Data & Time": "数据与时间",
+    "Select a gridded MAT, NetCDF, or HDF5 dataset": "选择 MAT、NetCDF 或 HDF5 格网数据集",
+    "Read Dataset Metadata": "读取数据集元数据",
+    "Dataset not loaded.": "数据集尚未读取。",
+    "No dataset loaded": "未读取数据集",
+    "Dimensions": "维度",
+    "Time coverage": "时间范围",
+    "Please select a gridded dataset first.": "请先选择格网数据集。",
+    "Grid Data Stack Status": "格网数据栈状态",
+    "Data Read Status": "数据读取状态",
+    "Grid data stack is not loaded.": "格网数据栈尚未读取。",
+    "Please select a stack file first.": "请先选择数据栈文件。",
+    "Data Variable": "数据变量",
+    "Time Index": "时次索引",
+    "Time Slice": "时次",
+    "Month unavailable": "月份信息不可用",
+    "1 / 1 | Month unavailable": "1 / 1 | 月份信息不可用",
+    "Exact Month": "同月精确匹配",
+    "Nearest Month": "最近邻月份",
+    "Missing Month Fallback": "缺测月份处理",
+    "Single-slice layer treated as static.": "单时次图层按静态图层处理。",
+    "Layer contains no time slices.": "该图层不包含任何时次。",
+
+    # Projection and spatial-domain terminology follows common GIS usage.
+    "Map Projection": "地图投影",
+    "Map Projection Settings": "地图投影设置",
+    "Robinson projection | no dataset": "Robinson 投影 | 未读取数据集",
+    "Projection Parameters": "投影参数",
+    "Central longitude": "中央经线",
+    "Central latitude": "中心纬度",
+    "Standard parallels": "标准纬线",
+    "Lat 1": "纬线 1",
+    "Lat 2": "纬线 2",
+    "Extent": "显示范围",
+    "Azimuth": "方位角",
+    "Elevation": "仰角",
+    "Zoom": "缩放比例",
+    "Use Detected Extent": "采用检测到的空间范围",
+    "Use Data Extent": "自动采用数据覆盖范围",
+    "Spatial Extent": "空间范围",
+    "Spatial Extent & Graticule": "空间范围与经纬网",
+    "Enable Spatial Extent & Graticule": "启用空间范围与经纬网设置",
+    "3D Globe: use mouse drag to rotate and wheel or Zoom to scale.": "3D 地球：拖动鼠标旋转，滚轮或“缩放”控制视图比例。",
+
+    # Layer-tree terminology mirrors ArcGIS/QGIS conventions.
+    "Layers higher in the list are rendered above lower layers. Right-click a layer to manage it or edit its properties.": "图层列表越靠上，绘制层级越高。右键单击图层可进行管理或编辑属性。",
+    "Map Decorations": "地图整饰",
+    "Vector Overlays": "矢量叠加图层",
+    "Data Layers": "栅格数据图层",
+    "Legends, color scales, graticules, annotations, and map furniture": "图例、色标、经纬网、标注与其他地图整饰要素",
+    "Coastlines, boundaries, points, lines, and polygons": "海岸线、边界以及点、线、面矢量要素",
+    "GRACE/GRACE-FO gridded products and other raster datasets": "GRACE/GRACE-FO 格网产品及其他栅格数据集",
+    "Map layers are grouped by type; layers higher in the list are rendered above lower layers.": "地图图层按类型分组；列表越靠上，绘制层级越高。",
+    "Mass Anomaly Raster": "质量变化栅格",
+    "Current variable": "当前绘图变量",
+    "Auto variable": "自动选择变量",
+    "Raster Data / Vector Features": "栅格数据 / 矢量要素",
+    "Import Raster / Vector Layer": "导入栅格 / 矢量图层",
+    "Select a raster dataset or vector feature file": "选择栅格数据集或矢量要素文件",
+    "Raster / Vector Files (*.shp *.bln *.txt *.nc *.nc4 *.cdf *.h5 *.hdf5 *.mat);;All Files (*)": "栅格/矢量文件 (*.shp *.bln *.txt *.nc *.nc4 *.cdf *.h5 *.hdf5 *.mat);;所有文件 (*)",
+    "Layer Type": "图层类型",
+    "Decorator": "地图整饰",
+    "Coastline": "海岸线",
+    "Shapefile": "Shapefile",
+    "Colorbar": "色标",
+    "Move to top": "移至顶层",
+    "Imported raster layers use the Preview page's current colormap and display range and render only the exact selected month.": "导入的栅格图层沿用当前预览的色带与显示值域，并仅渲染与所选时次完全同月的数据。",
+
+    # Symbology, map readout, and publication export.
+    "Color Scale": "色标",
+    "Color Scale Settings": "色标设置",
+    "Color Bar": "色标",
+    "Show Color Bar": "显示色标",
+    "Uses the selected color scale and value range.": "使用所选色带与显示值域。",
+    "The layer uses the current preview colormap and value range.": "该图层采用当前预览的色带与显示值域。",
+    "Map Status": "地图状态",
+    "Cursor Position": "光标位置",
+    "Grid Value": "格网值",
+    "Render Time": "渲染耗时",
+    "Render the selected month and visible layers on the map canvas.": "在地图画布中渲染所选月份及所有可见图层。",
+    "Export the current map using publication-quality settings.": "使用出版级参数导出当前地图图件。",
+    "Preview Export": "预览图件导出",
+    "Export Figure": "导出图像",
+    "Output file": "输出文件",
+    "Format": "文件格式",
+    "Canvas size": "画布尺寸",
+    "No rendered figure is available. Render Preview first.": "当前无可导出的地图图件。请先渲染预览。",
+    "Robinson Projection: June 2018": "Robinson 投影：2018 年 6 月",
+
+    # Layer state terms shown in tooltips and accessibility descriptions.
+    "Loading": "正在读取",
+    "Exact": "精确同月匹配",
+    "Nearest": "最近邻月份匹配",
+    "Positional-Unverified": "按位置匹配（未经月份核验）",
+    "Static": "静态",
+    "Unavailable": "不可用",
+    "Unmatched": "月份不匹配",
+    "Skipped": "已跳过",
+    "Unsupported": "不支持",
+    "Warning": "警告",
+}
+
+ACADEMIC_PREVIEW_PREFIX_ZH = {
+    "Index: ": "时次：",
+    "Stack Status: ": "格网数据栈状态：",
+    "Month match: ": "月份匹配：",
+}
+
+# Construction-time and older enhancement hooks still emit several retired
+# labels.  Normalize them to the approved English source before translation so
+# language switching removes mixed or ambiguous terminology without changing
+# persisted data values.
+CANONICAL_ALIASES = {
+    "GRACE 二级处理流程": "GRACE Level-2 Pipeline",
+    "GRACE Level-2 数据处理流程": "GRACE Level-2 Pipeline",
+    "等效水高（EWH）": "Equivalent water height (EWH)",
+    "Inspect stacked products, switch projections, and manage map overlays.": "Inspect gridded time-series products, compare map projections, and manage overlay layers.",
+    "Load Stack Info": "Read Dataset Metadata",
+    "Read Data": "Read Dataset Metadata",
+    "Read Dataset": "Read Dataset Metadata",
+    "Read Grid Metadata": "Read Dataset Metadata",
+    "读取栈信息": "Read Dataset Metadata",
+    "读取数据": "Read Dataset Metadata",
+    "Stack Status": "Grid Data Stack Status",
+    "栈状态": "Grid Data Stack Status",
+    "Stack not loaded.": "Dataset not loaded.",
+    "Grid data stack is not loaded.": "Dataset not loaded.",
+    "栈未读取。": "Dataset not loaded.",
+    "数据栈未读取。": "Dataset not loaded.",
+    "Data Status": "Data Read Status",
+    "数据状态": "Data Read Status",
+    "时间索引/切片": "Time Slice",
+    "时间切片": "Time Slice",
+    "Projection": "Map Projection",
+    "投影方式": "Map Projection",
+    "Projection Settings": "Map Projection Settings",
+    "中心经度": "Central longitude",
+    "俯仰角": "Elevation",
+    "缩放": "Zoom",
+    "Spatial Grid Configuration": "Spatial Extent & Graticule",
+    "空间网格配置": "Spatial Extent & Graticule",
+    "Enable Spatial Grid": "Enable Spatial Extent & Graticule",
+    "启用空间网格配置": "Enable Spatial Extent & Graticule",
+    "使用数据范围": "Use Data Extent",
+    "色标尺": "Color Scale",
+    "色带设置": "Color Scale Settings",
+    "Layers at the top draw above layers below. Right-click a layer for management and properties.": "Layers higher in the list are rendered above lower layers. Right-click a layer to manage it or edit its properties.",
+    "Map layers grouped by type. Layers nearer the top draw above layers below them.": "Map layers are grouped by type; layers higher in the list are rendered above lower layers.",
+    "GRACE grids and other raster data": "GRACE/GRACE-FO gridded products and other raster datasets",
+    "Mass Anomaly Data": "Mass Anomaly Raster",
+    "Data: Mass Anomaly": "Mass Anomaly Raster",
+    "Data / Feature Files": "Raster Data / Vector Features",
+    "Import Data / Feature": "Import Raster / Vector Layer",
+    "Select data or feature file": "Select a raster dataset or vector feature file",
+    "Data / Feature Files (*.shp *.bln *.txt *.nc *.nc4 *.cdf *.h5 *.hdf5 *.mat);;All Files (*)": "Raster / Vector Files (*.shp *.bln *.txt *.nc *.nc4 *.cdf *.h5 *.hdf5 *.mat);;All Files (*)",
+    "Imported raster data uses the current preview colormap, value range, and exact preview month.": "Imported raster layers use the Preview page's current colormap and display range and render only the exact selected month.",
+    "Cursor": "Cursor Position",
+    "光标": "Cursor Position",
+    "Value": "Grid Value",
+    "数值": "Grid Value",
+    "Latency": "Render Time",
+    "延迟": "Render Time",
+}
+
+TRANSLATIONS.setdefault("zh", {}).update(LANGUAGE_SYSTEM_TERMS_ZH)
+TRANSLATIONS.setdefault("zh", {}).update(ACADEMIC_PREVIEW_TERMS_ZH)
+PREFIX_TRANSLATIONS.setdefault("zh", {}).update(LANGUAGE_SYSTEM_PREFIX_ZH)
+PREFIX_TRANSLATIONS.setdefault("zh", {}).update(ACADEMIC_PREVIEW_PREFIX_ZH)
+
+
+def canonical_text(text: str) -> str:
+    """Return the English source text for a translated UI string when known."""
+
+    value = str(text or "")
+    if not value:
+        return value
+    seen_aliases: set[str] = set()
+    while value in CANONICAL_ALIASES and value not in seen_aliases:
+        seen_aliases.add(value)
+        value = CANONICAL_ALIASES[value]
+    if any(value in table for table in TRANSLATIONS.values()):
+        return value
+    reverse = getattr(canonical_text, "_reverse", None)
+    if reverse is None:
+        reverse = {}
+        for table in TRANSLATIONS.values():
+            for source, translated in table.items():
+                reverse[str(translated)] = str(source)
+        canonical_text._reverse = reverse
+    if value in reverse:
+        return reverse[value]
+    source_casefold = getattr(canonical_text, "_source_casefold", None)
+    if source_casefold is None:
+        source_casefold = {}
+        for table in TRANSLATIONS.values():
+            for source in table:
+                source_text = str(source)
+                source_casefold.setdefault(source_text.casefold(), source_text)
+        canonical_text._source_casefold = source_casefold
+    folded = value.casefold()
+    if folded in source_casefold:
+        return source_casefold[folded]
+    prefix_reverse = getattr(canonical_text, "_prefix_reverse", None)
+    if prefix_reverse is None:
+        prefix_reverse = {}
+        for table in PREFIX_TRANSLATIONS.values():
+            for source, translated in table.items():
+                prefix_reverse[str(translated)] = str(source)
+        canonical_text._prefix_reverse = prefix_reverse
+    for translated_prefix, source_prefix in prefix_reverse.items():
+        if translated_prefix and value.startswith(translated_prefix):
+            return source_prefix + canonical_text(value[len(translated_prefix) :])
+    podaac_login_zh = re.match(r"^([A-Z0-9_.-]+) GSM 使用 PO\.DAAC；Earthdata 登录态：(.+)。$", value)
+    if podaac_login_zh:
+        center, login = podaac_login_zh.groups()
+        return f"{center} GSM uses PO.DAAC; Earthdata login: {login}."
+    podaac_required_zh = re.match(r"^([A-Z0-9_.-]+) GSM 使用 PO\.DAAC；下载前(?:会请求|可能需要) Earthdata 登录。$", value)
+    if podaac_required_zh:
+        return f"{podaac_required_zh.group(1)} GSM uses PO.DAAC; Earthdata login will be requested before downloading."
+    icgem_download_zh = re.match(r"^([A-Z0-9_.-]+) GSM 使用 ICGEM 下载，无需 Earthdata 登录。$", value)
+    if icgem_download_zh:
+        return f"{icgem_download_zh.group(1)} GSM uses ICGEM; Earthdata login is not required."
+    download_running_zh = re.match(r"^正在下载 ([A-Z0-9_.-]+) ([A-Z0-9_.-]+)：(\d{4}-\d{2}) 到 (\d{4}-\d{2})\.\.\.$", value)
+    if download_running_zh:
+        center, product, start, end = download_running_zh.groups()
+        return f"Downloading {center} {product}: {start} to {end}..."
+    download_done_zh = re.match(r"^([A-Z0-9_.-]+) 下载完成：新增 (\d+) 个，已存在 (\d+) 个；机构=([A-Z0-9_.-]+)。$", value)
+    if download_done_zh:
+        product, new_count, existing_count, center = download_done_zh.groups()
+        return f"{product} download complete: {new_count} new, {existing_count} existing; center={center}."
+    return value
+
 
 def translate_text(text: str, language: str = "en") -> str:
-    value = str(text or "")
+    raw_value = str(text or "")
+    dataset_summary = re.match(
+        r"^(?:Dimensions:|维度[：:])\s*(.+?)(?:\s*\|\s*(?:Time coverage:|时间范围[：:])\s*([^|]+))?"
+        r"(\s*\|\s*[0-9.]+\s*(?:KB|MB|GB))?$",
+        raw_value,
+    )
+    if dataset_summary:
+        dimensions, coverage, file_size = dataset_summary.groups()
+        if language == "zh":
+            summary = f"维度：{dimensions.strip()}"
+            if coverage:
+                summary += f" | 时间范围：{coverage.strip()}"
+        else:
+            summary = f"Dimensions: {dimensions.strip()}"
+            if coverage:
+                summary += f" | Time coverage: {coverage.strip()}"
+        if file_size:
+            summary += f" | {file_size.rsplit('|', 1)[-1].strip()}"
+        return summary
+    value = canonical_text(raw_value)
     if not value or language == "en":
         return value
+    podaac_login = re.match(r"^([A-Z0-9_.-]+) GSM uses PO\.DAAC; Earthdata login: (.+)\.$", value)
+    if language == "zh" and podaac_login:
+        center, login = podaac_login.groups()
+        return f"{center} GSM 使用 PO.DAAC；Earthdata 登录态：{login}。"
+    podaac_required = re.match(r"^([A-Z0-9_.-]+) GSM uses PO\.DAAC; Earthdata login (?:will be requested|may be required) before downloading\.$", value)
+    if language == "zh" and podaac_required:
+        return f"{podaac_required.group(1)} GSM 使用 PO.DAAC；下载前会请求 Earthdata 登录。"
+    icgem_download = re.match(r"^([A-Z0-9_.-]+) GSM uses ICGEM; Earthdata login is not required\.$", value)
+    if language == "zh" and icgem_download:
+        return f"{icgem_download.group(1)} GSM 使用 ICGEM 下载，无需 Earthdata 登录。"
+    download_running = re.match(r"^Downloading ([A-Z0-9_.-]+) ([A-Z0-9_.-]+): (\d{4}-\d{2}) to (\d{4}-\d{2})\.\.\.$", value)
+    if language == "zh" and download_running:
+        center, product, start, end = download_running.groups()
+        return f"正在下载 {center} {product}：{start} 到 {end}..."
+    download_done = re.match(r"^([A-Z0-9_.-]+) download complete: (\d+) new, (\d+) existing; center=([A-Z0-9_.-]+)\.$", value)
+    if language == "zh" and download_done:
+        product, new_count, existing_count, center = download_done.groups()
+        return f"{product} 下载完成：新增 {new_count} 个，已存在 {existing_count} 个；机构={center}。"
     month_range = re.match(r"^(\d{4}-\d{2}) -> (\d{4}-\d{2}) \((\d+) months\)$", value)
     if language == "zh" and month_range:
         start, end, count = month_range.groups()
@@ -543,9 +1314,25 @@ def translate_text(text: str, language: str = "en") -> str:
     if language == "zh" and gfc_summary:
         count, start, end, missing, grace_missing = gfc_summary.groups()
         return f"{count} \u4e2a GFC \u6587\u4ef6 | {start} // {end} | \u7f3a\u6d4b={missing}\uff08GRACE={grace_missing}\uff09"
+    gfc_summary_simple = re.match(r"^(\d+) GFC files \| (\d{4}-\d{2}) -> (\d{4}-\d{2}) \| missing=(\d+)$", value)
+    if language == "zh" and gfc_summary_simple:
+        count, start, end, missing = gfc_summary_simple.groups()
+        return f"{count} 个 GFC 文件 | {start} -> {end} | 缺测={missing}"
     preview_target = re.match(r"^Preview target: (.+)\. Click Preview Selected Basin to render\.$", value)
     if language == "zh" and preview_target:
         return f"\u9884\u89c8\u76ee\u6807\uff1a{preview_target.group(1)}\u3002\u70b9\u51fb\u201c\u9884\u89c8\u5f53\u524d\u6d41\u57df\u201d\u6e32\u67d3\u3002"
+    preview_target_simple = re.match(r"^Preview target: (.+)\.$", value)
+    if language == "zh" and preview_target_simple:
+        return f"\u9884\u89c8\u76ee\u6807\uff1a{preview_target_simple.group(1)}\u3002"
+    preview_basin = re.match(r"^Preview basin: (.+)$", value)
+    if language == "zh" and preview_basin:
+        basin_name = translate_text(preview_basin.group(1), language)
+        return f"\u9884\u89c8\u6d41\u57df\uff1a{basin_name}"
+    time_slice = re.match(r"^Time slice: (\d+) / (\d+)(?: \| (.+))?$", value)
+    if language == "zh" and time_slice:
+        idx, total, label = time_slice.groups()
+        suffix = f" | {label}" if label else ""
+        return f"\u65f6\u95f4\u5207\u7247\uff1a{idx} / {total}{suffix}"
     selected_many = re.match(r"^Selected basins: (\d+) features; preview uses (.+)$", value)
     if language == "zh" and selected_many:
         count, name = selected_many.groups()
@@ -554,9 +1341,45 @@ def translate_text(text: str, language: str = "en") -> str:
     if language == "zh" and preview_rendered:
         name, cells = preview_rendered.groups()
         return f"\u9884\u89c8\uff1a{name} | \u533a\u57df\u89c6\u56fe | \u63a9\u819c\u683c\u70b9={cells}"
+    preview_slice = re.match(r"^Preview: (.+) \| slice (\d+) \| mask cells=(\d+)$", value)
+    if language == "zh" and preview_slice:
+        name, idx, cells = preview_slice.groups()
+        return f"\u9884\u89c8\uff1a{name} | \u5207\u7247 {idx} | \u63a9\u819c\u683c\u70b9={cells}"
     boundary_loaded = re.match(r"^Boundary loaded: (\d+) feature\(s\)$", value)
     if language == "zh" and boundary_loaded:
         return f"\u8fb9\u754c\u5df2\u8bfb\u53d6\uff1a{boundary_loaded.group(1)} \u4e2a\u8981\u7d20"
+    layer_month_unmatched = re.match(
+        r"^No layer month is within (\d+) month\(s\) of (\d{4}-\d{2}); "
+        r"nearest is ([^ ]+) \(([^ ]+) month\(s\)\)\.$",
+        value,
+    )
+    if language == "zh" and layer_month_unmatched:
+        tolerance, target, nearest, distance = layer_month_unmatched.groups()
+        return (
+            f"图层中没有与目标月份 {target} 相差不超过 {tolerance} 个月的数据；"
+            f"最近月份为 {nearest}（相差 {distance} 个月）。"
+        )
+    positional_slice = re.match(
+        r"^Using in-range positional slice (\d+)/(\d+); "
+        r"(target month unavailable|layer time metadata is not interpretable)\.$",
+        value,
+    )
+    if language == "zh" and positional_slice:
+        index, total, reason = positional_slice.groups()
+        reason_zh = (
+            "目标月份不可用"
+            if reason == "target month unavailable"
+            else "图层时间元数据无法解析"
+        )
+        return f"{reason_zh}；按位置使用第 {index}/{total} 个时次（未经月份核验）。"
+    positional_outside = re.match(
+        r"^Requested positional slice (\d+) is outside the layer's 1\.\.(\d+) "
+        r"range; the index was not clamped\.$",
+        value,
+    )
+    if language == "zh" and positional_outside:
+        index, total = positional_outside.groups()
+        return f"请求的第 {index} 个时次超出图层的 1..{total} 范围；未将索引强制调整到末时次。"
     table = TRANSLATIONS.get(language, {})
     if value in table:
         return table[value]

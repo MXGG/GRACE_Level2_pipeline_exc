@@ -30,8 +30,8 @@ GRACE Level-2 Pipeline 是一套面向 GRACE/GRACE-FO 卫星重力 Level-2 数�
 | `python/` | Python 包、PySide6 GUI、命令行入口、打包脚本和测试 |
 | `matlab/` | MATLAB 后端、统一 JSON 配置、HPC SLURM 脚本和算法模块 |
 | `data/` | GFC 输入、低阶项替换、Mascon 参考、边界和辅助数据 |
-| `output/local/` | 本地运行输出目录 |
-| `output/remote/<jobid>/` | HPC/SLURM 远程运行输出目录 |
+| `outputs/local/` | 本地运行输出目录 |
+| `outputs/remote/<jobid>/` | HPC/SLURM 远程运行输出目录 |
 | `docs/` | 技术说明、用户说明和算法参考文档 |
 | `dist/` | 打包后的 Windows 可执行程序 |
 | `release/` | 可分发压缩包和发布产物 |
@@ -67,7 +67,7 @@ G:\GRACE_Level2_pipeline_exc\dist\grace-pipeline-gui.exe
 
 ```powershell
 cd G:\GRACE_Level2_pipeline_exc\python
-python -m pip install -e .
+python -m pip install -e ".[gui]"
 python -m grace_pipeline.gui_entry
 ```
 
@@ -84,7 +84,7 @@ grace-pipeline gui
 
 ```powershell
 cd G:\GRACE_Level2_pipeline_exc\python
-grace-pipeline run -c ..\matlab\cfg\user.json -d ..\matlab\cfg\default.json
+grace-pipeline run -c ..\configs\user.json -d ..\configs\default.json
 ```
 
 常用参数包括：
@@ -104,7 +104,7 @@ grace-pipeline run -c ..\matlab\cfg\user.json -d ..\matlab\cfg\default.json
 
 ```powershell
 cd G:\GRACE_Level2_pipeline_exc\python
-grace-pipeline info -c ..\matlab\cfg\user.json
+grace-pipeline info -c ..\configs\user.json -d ..\configs\default.json
 ```
 
 ### 4.4 MATLAB 与 HPC 运行
@@ -125,13 +125,13 @@ cd G:\GRACE_Level2_pipeline_exc
 远程运行输出应写入：
 
 ```text
-output/remote/<jobid>/
+outputs/remote/<jobid>/
 ```
 
 本地运行输出应写入：
 
 ```text
-output/local/
+outputs/local/
 ```
 
 ## 5. GUI 功能详情
@@ -260,7 +260,7 @@ Run Output 页面用于运行监控和日志查看，主要功能包括：
 - 显示实时处理日志。
 - 辅助定位输入缺失、配置错误、保存失败、并行任务异常等问题。
 
-对于 HPC 运行，应优先检查 `output/remote/<jobid>/logs/` 和对应作业输出目录；对于本地运行，应检查 `output/local/` 以及 GUI 控制台日志。
+对于 HPC 运行，应优先检查 `outputs/remote/<jobid>/logs/` 和对应作业输出目录；对于本地运行，应检查 `outputs/local/` 以及 GUI 控制台日志。
 
 ## 6. 输入数据与输出产品
 
@@ -293,13 +293,13 @@ Run Output 页面用于运行监控和日志查看，主要功能包括：
 本地输出约定为：
 
 ```text
-output/local/...
+outputs/local/...
 ```
 
 HPC/SLURM 输出约定为：
 
 ```text
-output/remote/<jobid>/...
+outputs/remote/<jobid>/...
 ```
 
 ## 7. 适用范围
@@ -328,8 +328,8 @@ output/remote/<jobid>/...
 程序使用统一 JSON 配置，常用配置文件位于：
 
 ```text
-matlab/cfg/default.json
-matlab/cfg/user.json
+configs/default.json
+configs/user.json
 ```
 
 建议遵循以下原则：
@@ -373,7 +373,7 @@ matlab/cfg/user.json
 2. 确认远程输入文件齐全。
 3. 使用 `hpc.ps1` 同步并提交作业。
 4. 监控 SLURM 状态和日志。
-5. 将 `output/remote/<jobid>/` 结果拉回本地。
+5. 将 `outputs/remote/<jobid>/` 结果拉回本地。
 6. 使用 Preview 或脚本复查图件和指标。
 
 ## 11. 相关文档
@@ -385,4 +385,3 @@ matlab/cfg/user.json
 - [桌面应用概览](/G:/GRACE_Level2_pipeline_exc/docs/GRACE_L2_DESKTOP_OVERVIEW.md)
 - [滤波方法与算法说明](/G:/GRACE_Level2_pipeline_exc/docs/GRACE_FILTER_METHODS_AND_ALGORITHM.md)
 - [工程结构说明](/G:/GRACE_Level2_pipeline_exc/docs/ENGINEERING_STRUCTURE.md)
-

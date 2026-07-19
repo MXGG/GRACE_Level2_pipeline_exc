@@ -203,7 +203,7 @@ def select_tn14_slr_entry(filepath: str, time_entry) -> Dict[str, float]:
     best_overlap = float("-inf")
     for row in rows:
         overlap = min(mjd1, row["mjd_end"]) - max(mjd0, row["mjd_start"]) + 1
-        if overlap >= 0 and overlap > best_overlap:
+        if overlap > 0 and overlap > best_overlap:
             best = row
             best_overlap = overlap
 
@@ -290,141 +290,151 @@ def parse_tn13_degree1(filepath: str) -> Dict[str, Tuple[float, float, float]]:
     return deg1_data
 
 
-def infer_center_from_time_entry(time_entry) -> str:
-    """Infer solution center (CSR/JPL/GFZ) from file metadata."""
-    basename = Path(str(getattr(time_entry, "gfc_file", "") or "")).name.upper()
-    if any(token in basename for token in ("_JPL_", " JPL ", "JPLEM", "JPL")):
-        return "JPL"
-    if any(token in basename for token in ("_GFZ_", "GFZOP", "GFZ")):
-        return "GFZ"
-    if any(token in basename for token in ("_CSR_", "UTCSR", "CSR")):
-        return "CSR"
-    return "UNKNOWN"
+@lru_cache(maxsize=8)
+def _parse_tn13_degree1_rows(filepath: str) -> Tuple[Dict[str, float], ...]:
+    rows: list[Dict[str, float]] = []
+    path = Path(filepath)
+    if not path.exists():
+        return tuple()
+
+    with path.open("r", encoding="utf-8") as f:
+        for raw_line in f:
+            line = raw_line.strip()
+            if not line or line.startswith("#") or line.startswith("%"):
+                continue
+            parts = line.split()
+            if len(parts) >= 9 and parts[0].upper().startswith("GRCOF2"):
+                try:
+                    degree = int(parts[1])
+                    order = int(parts[2])
+                    c_val = float(parts[3])
+                    s_val = float(parts[4])
+                    start_dt = datetime.strptime(str(parts[-2])[:8], "%Y%m%d")
+                    end_exclusive = datetime.strptime(str(parts[-1])[:8], "%Y%m%d")
+                except (ValueError, IndexError):
+                    continue
+                if degree != 1 or order not in (0, 1):
+                    continue
+                rows.append(
+                    {
+                        "order": order,
+                        "C": c_val,
+                        "S": s_val,
+                        "start_dt": start_dt,
+                        "end_dt": end_exclusive - timedelta(days=1),
+                    }
+                )
+
+    return tuple(rows)
 
 
-def load_low_degree_data(cfg, time_entry=None) -> Tuple[Dict[str, Dict[str, float]], Dict[str, Tuple[float, float, float]]]:
-    """Load low-degree replacement data from configuration."""
+def select_tn13_degree1_entry(filepath: str, time_entry) -> Optional[Tuple[float, float, float]]:
+    """Select TN-13 degree-1 terms by maximum overlap with the calendar month."""
+    ym = str(getattr(time_entry, "ym", "") or "")
+    if not ym:
+        return None
+
+    rows = _parse_tn13_degree1_rows(filepath)
+    if not rows:
+        return parse_tn13_degree1(filepath).get(ym)
+
+    month_start, month_end = _month_bounds(ym)
+    best: dict[int, Tuple[int, Dict[str, float]]] = {}
+    for row in rows:
+        start_dt = row["start_dt"]
+        end_dt = row["end_dt"]
+        overlap = (min(month_end, end_dt) - max(month_start, start_dt)).days + 1
+        if overlap <= 0:
+            continue
+        order = int(row["order"])
+        current = best.get(order)
+        if current is None or overlap > current[0]:
+            best[order] = (overlap, row)
+
+    if 0 not in best or 1 not in best:
+        return parse_tn13_degree1(filepath).get(ym)
+    c10 = float(best[0][1]["C"])
+    c11 = float(best[1][1]["C"])
+    s11 = float(best[1][1]["S"])
+    return c10, c11, s11
+
+
+def replace_low_degree(cfg_or_sh, sh_or_cfg, time_entry):
+    """
+    Replace low-degree coefficients in SHCoefficients object.
+
+    Args:
+        cfg: Configuration object
+        sh: SHCoefficients object
+        time_entry: TimeEntry object
+
+    Returns:
+        Modified SHCoefficients object
+    """
+    if hasattr(cfg_or_sh, "C") and hasattr(cfg_or_sh, "S"):
+        sh = cfg_or_sh
+        cfg = sh_or_cfg
+    else:
+        cfg = cfg_or_sh
+        sh = sh_or_cfg
+
     inv_cfg = _inv_cfg(cfg)
-    lowdeg_cfg = _as_dict(inv_cfg.get("lowdeg", {}))
-    if not lowdeg_cfg:
-        return {}, {}
+    lowdeg_cfg = inv_cfg.get("lowdeg", {}) or {}
+    gia_cfg = inv_cfg.get("gia", {}) or {}
 
-    files = _as_dict(lowdeg_cfg.get("files", {}))
-    slr_data: Dict[str, Dict[str, float]] = {}
-    deg1_data: Dict[str, Tuple[float, float, float]] = {}
+    if not lowdeg_cfg.get("enable", True):
+        return sh
 
-    c20_file = str(files.get("C20", "") or "").strip()
+    files_cfg = lowdeg_cfg.get("files", {}) or {}
+    ym = time_entry.ym
+    center = infer_center_from_gfc(getattr(time_entry, "gfc_file", ""))
+    degree1_file = files_cfg.get(f"DEGREE1_{center}") or files_cfg.get("DEGREE1")
+
+    # Replace degree-1 (C10, C11, S11)
+    if lowdeg_cfg.get("replace_degree1", lowdeg_cfg.get("replace_C10", True)):
+        if degree1_file:
+            deg1 = select_tn13_degree1_entry(degree1_file, time_entry)
+            if deg1 is not None:
+                c10, c11, s11 = deg1
+                if sh.C.shape[0] > 1:
+                    sh.C[1, 0] = c10
+                    sh.C[1, 1] = c11
+                    sh.S[1, 1] = s11
+                    sh.replaced["C10"] = True
+                    sh.replaced["C11"] = True
+                    sh.replaced["S11"] = True
+                    sh.replaced["Degree1"] = True
+
+    # Replace C20/C30 from TN-14 SLR
+    c20_file = files_cfg.get("C20")
     if c20_file:
-        slr_data = parse_tn14_slr(c20_file)
+        slr_entry = select_tn14_slr_entry(c20_file, time_entry)
+        if slr_entry:
+            if lowdeg_cfg.get("replace_C20", True) and "C20" in slr_entry:
+                sh.C[2, 0] = slr_entry["C20"]
+                sh.replaced["C20"] = True
+                sh.meta["C20_match_method"] = slr_entry.get("match_method", "unknown")
+                if "overlap_days" in slr_entry:
+                    sh.meta["C20_overlap_days"] = slr_entry["overlap_days"]
+                if "mjd_start" in slr_entry:
+                    sh.meta["C20_mjd_start"] = slr_entry["mjd_start"]
+                    sh.meta["C20_mjd_end"] = slr_entry.get("mjd_end")
 
-    center = infer_center_from_time_entry(time_entry) if time_entry is not None else "UNKNOWN"
-    center_key = f"DEGREE1_{center}" if center != "UNKNOWN" else ""
-    deg1_file = str(files.get(center_key, "") or files.get("DEGREE1", "") or "").strip()
-    if deg1_file:
-        deg1_data = parse_tn13_degree1(deg1_file)
+            if (
+                lowdeg_cfg.get("replace_C30", False)
+                and _c30_replacement_applies(lowdeg_cfg, time_entry)
+                and sh.C.shape[0] > 3
+                and "C30" in slr_entry
+                and np.isfinite(slr_entry["C30"])
+            ):
+                sh.C[3, 0] = slr_entry["C30"]
+                sh.replaced["C30"] = True
 
-    return slr_data, deg1_data
-
-
-def _lowdeg_files(cfg) -> dict:
-    inv_cfg = _inv_cfg(cfg)
-    lowdeg_cfg = _as_dict(inv_cfg.get("lowdeg", {}))
-    return _as_dict(lowdeg_cfg.get("files", {}))
-
-
-def infer_mission_from_time_entry(time_entry) -> str:
-    """Infer GRACE mission family from file metadata and time stamp."""
-    basename = Path(str(getattr(time_entry, "gfc_file", "") or "")).name.upper()
-    if any(token in basename for token in ("GRFO", "GRACEFO", "GRACE-FO", "GRACE_FO")):
-        return "GRACE-FO"
-    if "GRAC" in basename:
-        return "GRACE"
-    year = int(getattr(time_entry, "year", 0) or 0)
-    if year >= 2018:
-        return "GRACE-FO"
-    if year:
-        return "GRACE"
-    return "UNKNOWN"
-
-
-def _c30_replacement_applies(lowdeg_cfg: dict, time_entry) -> bool:
-    """
-    Decide whether TN-14 C30 replacement should be applied.
-
-    Apply C30 replacement with mission-aware scope and start month.
-    """
-    scope = str(lowdeg_cfg.get("c30_scope", "grace_fo") or "grace_fo").strip().lower().replace("-", "_")
-    mission = infer_mission_from_time_entry(time_entry).upper()
-    if scope not in ("all", "global"):
-        if scope in ("grace_fo", "fo", "grfo") and mission != "GRACE-FO":
-            return False
-        if scope in ("grace", "grac") and mission != "GRACE":
-            return False
-
-    start_ym = str(lowdeg_cfg.get("c30_start_ym", "2018-06") or "2018-06")
-    ym = str(getattr(time_entry, "ym", "") or "")
-    if ym:
-        return ym >= start_ym
-    year = int(getattr(time_entry, "year", 0) or 0)
-    month = int(getattr(time_entry, "month", 0) or 0)
-    if year <= 0 or month <= 0:
-        return False
-    return f"{year:04d}-{month:02d}" >= start_ym
-
-
-def replace_low_degree(cfg, sh, time_entry):
-    """Replace low-degree coefficients in an SHCoefficients object."""
-    inv_cfg = _inv_cfg(cfg)
-    lowdeg_cfg = _as_dict(inv_cfg.get("lowdeg", {}))
-    if not lowdeg_cfg:
-        return sh
-
-    if not bool(lowdeg_cfg.get("enable", True)):
-        return sh
-
-    replace_c20 = bool(lowdeg_cfg.get("replace_C20", True))
-    replace_degree1 = bool(lowdeg_cfg.get("replace_degree1", lowdeg_cfg.get("replace_C10", True)))
-    replace_c30 = bool(lowdeg_cfg.get("replace_C30", True))
-
-    slr_data, deg1_data = load_low_degree_data(cfg, time_entry=time_entry)
-    ym = str(getattr(time_entry, "ym", "") or "")
-    c20_file = str(_lowdeg_files(cfg).get("C20", "") or "").strip()
-    slr_entry = select_tn14_slr_entry(c20_file, time_entry) if c20_file else slr_data.get(ym, {})
-
-    if replace_c20:
-        c20_value = slr_entry.get("C20", np.nan)
-        if np.isfinite(c20_value):
-            original_c20 = sh.C[2, 0]
-            sh.C[2, 0] = c20_value
-            sh.replaced["C20"] = True
-            sh.meta["C20_original"] = original_c20
-            sh.meta["C20_replaced"] = c20_value
-            if "match_method" in slr_entry:
-                sh.meta["C20_match_method"] = slr_entry.get("match_method")
-                sh.meta["C20_match_overlap_days"] = slr_entry.get("overlap_days")
-                sh.meta["C20_match_mjd_start"] = slr_entry.get("mjd_start")
-                sh.meta["C20_match_mjd_end"] = slr_entry.get("mjd_end")
-
-    if replace_c30 and _c30_replacement_applies(lowdeg_cfg, time_entry):
-        c30_value = slr_entry.get("C30", np.nan)
-        if not np.isfinite(c30_value):
-            c30_value = slr_data.get(ym, {}).get("C30", np.nan)
-        if np.isfinite(c30_value):
-            original_c30 = sh.C[3, 0]
-            sh.C[3, 0] = c30_value
-            sh.replaced["C30"] = True
-            sh.meta["C30_original"] = original_c30
-            sh.meta["C30_replaced"] = c30_value
-
-    if replace_degree1 and ym in deg1_data:
-        c10, c11, s11 = deg1_data[ym]
-        sh.C[1, 0] = c10
-        sh.C[1, 1] = c11
-        sh.S[1, 1] = s11
-        sh.replaced["C10"] = True
-        sh.replaced["C11"] = True
-        sh.replaced["S11"] = True
-        sh.replaced["Degree1"] = True
+    # Apply GIA correction if enabled
+    if gia_cfg.get("enable", False):
+        gia_file = gia_cfg.get("file")
+        if gia_file and Path(gia_file).exists():
+            apply_gia_correction(sh, gia_file, time_entry)
 
     return sh
 
@@ -477,9 +487,7 @@ def _compute_mean_over_entries(cfg, entries, Lmax: int):
 
 
 def compute_mean_sh(cfg, time_entries):
-    """
-    Compute mean spherical harmonic coefficients over the configured time period.
-    """
+    """Compute mean spherical harmonic coefficients over the configured period."""
     if not time_entries:
         return None
 
@@ -522,3 +530,61 @@ def compute_mean_sh(cfg, time_entries):
     if len(mean_map) == 1:
         return next(iter(mean_map.values()))
     return mean_map
+
+
+def infer_center_from_gfc(gfc_file: str) -> str:
+    name = Path(str(gfc_file or "")).name.upper()
+    if "UTCSR" in name or "_CSR" in name or name.startswith("CSR"):
+        return "CSR"
+    if "JPLEM" in name or "_JPL" in name or name.startswith("JPL"):
+        return "JPL"
+    if "GFZOP" in name or "_GFZ" in name or name.startswith("GFZ"):
+        return "GFZ"
+    return "UNKNOWN"
+
+
+def infer_mission_from_time_entry(time_entry) -> str:
+    """Infer GRACE mission family from file metadata and time stamp."""
+    basename = Path(str(getattr(time_entry, "gfc_file", "") or "")).name.upper()
+    if any(token in basename for token in ("GRFO", "GRACEFO", "GRACE-FO", "GRACE_FO")):
+        return "GRACE-FO"
+    if "GRAC" in basename:
+        return "GRACE"
+    year = int(getattr(time_entry, "year", 0) or 0)
+    if year >= 2018:
+        return "GRACE-FO"
+    if year:
+        return "GRACE"
+    return "UNKNOWN"
+
+
+def _c30_replacement_applies(lowdeg_cfg: dict, time_entry) -> bool:
+    """Return whether TN-14 C30 replacement applies to this month."""
+    scope = str(lowdeg_cfg.get("c30_scope", "grace_fo") or "grace_fo").strip().lower().replace("-", "_")
+    mission = infer_mission_from_time_entry(time_entry).upper()
+    if scope not in ("all", "global"):
+        if scope in ("grace_fo", "fo", "grfo") and mission != "GRACE-FO":
+            return False
+        if scope in ("grace", "grac") and mission != "GRACE":
+            return False
+
+    start_ym = str(lowdeg_cfg.get("c30_start_ym", "2018-06") or "2018-06")
+    ym = str(getattr(time_entry, "ym", "") or "")
+    if ym:
+        return ym >= start_ym
+    year = int(getattr(time_entry, "year", 0) or 0)
+    month = int(getattr(time_entry, "month", 0) or 0)
+    if year <= 0 or month <= 0:
+        return False
+    return f"{year:04d}-{month:02d}" >= start_ym
+
+
+def apply_gia_correction(sh, gia_file: str, time_entry):
+    """Apply GIA correction to coefficients (placeholder)."""
+    # TODO: implement GIA rate subtraction if needed
+    return sh
+
+
+# Backward-compatible aliases
+read_tn14_c20 = parse_tn14_c20
+read_tn13_degree1 = parse_tn13_degree1

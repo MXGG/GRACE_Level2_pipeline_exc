@@ -233,6 +233,15 @@ cd python
 .\build.ps1
 ```
 
+Windows installer build after the executables exist:
+
+```powershell
+cd installer
+ISCC.exe .\grace-l2.iss
+```
+
+Use `installer/grace-l2.iss` as the supported Inno Setup script. The root `grace-l2.iss` is a deprecation stub that stops accidental builds with the old relative paths.
+
 Linux executable build:
 
 ```bash

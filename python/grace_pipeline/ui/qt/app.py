@@ -1,4 +1,4 @@
-"""PySide6 application bootstrap for the first-stage desktop shell."""
+﻿"""PySide6 application bootstrap for the first-stage desktop shell."""
 
 from __future__ import annotations
 
@@ -25,8 +25,7 @@ def start_gui(argv: list[str] | None = None):
     from PySide6.QtGui import QFont, QFontDatabase
     from PySide6.QtWidgets import QApplication
 
-    from grace_pipeline.ui.qt.main_window import MainWindow
-    from grace_pipeline.ui.qt.theme import app_stylesheet
+    from grace_pipeline.ui.qt.runtime_refinements import apply_window_refinements, install_runtime_patches
 
     os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
     os.environ.setdefault("MKL_NUM_THREADS", "1")
@@ -40,11 +39,45 @@ def start_gui(argv: list[str] | None = None):
 
     app.setOrganizationName("GRACE-L2")
     app.setApplicationName("GRACE Level-2 Pipeline")
-    app.setStyleSheet(app_stylesheet("system", app=app))
+    app.setQuitOnLastWindowClosed(False)
+
+    install_runtime_patches()
+
+    from grace_pipeline.ui.qt import leakage_wizard_stable
+    from grace_pipeline.ui.qt.global_monitor import configure_global_run_monitor
+    from grace_pipeline.ui.qt.help_docs import bind_help_docs
+    from grace_pipeline.ui.qt.main_window import MainWindow
+    from grace_pipeline.ui.qt.preview_enhancements import install_preview_enhancements
+    from grace_pipeline.ui.qt.preview_export_quality import install_preview_export_quality
+    from grace_pipeline.ui.qt.preview_layer_options import install_preview_layer_options
+    from grace_pipeline.ui.qt.preview_stable_rendering import install_preview_stable_rendering
+    from grace_pipeline.ui.qt.preview_title_status import install_preview_title_status
+    from grace_pipeline.ui.qt.preview_view_polish import install_preview_view_polish
+    from grace_pipeline.ui.qt.preferences import load_ui_preferences
+    from grace_pipeline.ui.qt.shell_enhancements import install_shell_enhancements
+    from grace_pipeline.ui.qt.splash import create_splash_screen
+    from grace_pipeline.ui.qt.theme import app_stylesheet
+    from grace_pipeline.ui.qt.ui_compact_polish import install_compact_polish
+
+    splash = create_splash_screen()
+    if splash is not None:
+        splash.set_progress(12, "Loading runtime environment...")
+
+    # Apply the persisted palette before constructing the window so the splash
+    # and first frame do not briefly flash the legacy blue theme.
+    bootstrap_preferences = load_ui_preferences()
+    app.setStyleSheet(
+        app_stylesheet(
+            bootstrap_preferences.theme,
+            app=app,
+            ui_font=bootstrap_preferences.ui_font,
+            mono_font=bootstrap_preferences.mono_font,
+        )
+    )
     _load_windows_fonts()
     preferred_families = [
-        "Segoe UI",
         "Microsoft YaHei UI",
+        "Segoe UI",
         "Microsoft YaHei",
         "Arial",
     ]
@@ -54,9 +87,29 @@ def start_gui(argv: list[str] | None = None):
     if not family:
         font.setPointSize(10)
     app.setFont(font)
+    if splash is not None:
+        splash.set_progress(32, "Preparing interface fonts and theme...")
 
     window = MainWindow(load_persisted=True)
+    leakage_wizard_stable.install_leakage_wizard(window)
+    configure_global_run_monitor(window)
+    install_shell_enhancements(window)
+    bind_help_docs(window)
+    install_compact_polish(window)
+    install_preview_enhancements(window)
+    install_preview_title_status(window)
+    install_preview_view_polish(window)
+    install_preview_layer_options(window)
+    install_preview_stable_rendering(window)
+    install_preview_export_quality(window)
+    apply_window_refinements(window, app=app)
+    if splash is not None:
+        splash.set_progress(84, "Binding run monitor and workflow controls...")
+
     window.show()
+    if splash is not None:
+        splash.set_progress(100, "Ready.")
+        splash.finish(window)
 
     if owns_app:
         return app.exec()

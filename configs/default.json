@@ -63,6 +63,7 @@
     "_comment": "Spherical harmonic inversion parameters",
     "Lmax": 60,
     "remove_mean": true,
+    "mean_baseline_mode": "standard_2004_2009",
     "mean_start_ym": "2004-01",
     "mean_end_ym": "2009-12",
     "lowdeg": {
@@ -89,7 +90,7 @@
       "radius_km": 300
     },
     "p4m6": {
-      "enable": true,
+      "enable": false,
       "poly_deg": 4,
       "m_start": 6
     },
@@ -99,12 +100,12 @@
       "radius2_km": 300
     },
     "ddk": {
-      "enable": true,
+      "enable": false,
       "type": "DDK4",
       "data_dir": "${ROOT}/data/DDK"
     },
     "hankel": {
-      "enable": true,
+      "enable": false,
       "variant": "global",
       "engine": "matlab_v3",
       "adaptive": [],
@@ -122,7 +123,13 @@
     "_comment": "Basin analysis settings",
     "analysis_enable": false,
     "boundary_file": "",
-    "name": ""
+    "name": "",
+    "do_time_series": true,
+    "do_statistics": true,
+    "do_grid": true,
+    "save_ts_txt": true,
+    "save_ts_mat": true,
+    "save_grid_mat": true
   },
   "leakage": {
     "_comment": "Leakage reduction/correction settings",
@@ -157,6 +164,19 @@
     "fm_min_improve": 0.0001,
     "fm_accel": 1.1,
     "fm_metric": "land_weighted_mean",
+    "fm_mass_conservation": "legacy_land_mean_fill",
+    "fm_output_mode": "mask_zero",
+    "FM": {
+      "nIter": 40,
+      "minIter": 3,
+      "tol_rmse_mm": 0.01,
+      "accel": 1.1,
+      "patience": 8,
+      "min_improve": 0.0001,
+      "metric": "land_weighted_mean",
+      "mass_conservation": "legacy_land_mean_fill",
+      "output_mode": "mask_zero"
+    },
     "sf_toolbox": "",
     "input": "",
     "output": "",
@@ -171,10 +191,35 @@
     "compute_spectrum": false
   },
   "io": {
+    "output_formats": ["mat"],
     "save_monthly_mat": true,
     "save_stack_mat": true,
+    "save_stack_hdf5": false,
+    "save_netcdf": false,
+    "save_geotiff": false,
     "export_txt": false,
+    "export_csv": false,
+    "export_json_summary": true,
     "txt_format": "lonlatval",
+    "coefficient_export": {
+      "enabled": false,
+      "format": "icgem_gfc",
+      "coefficient_content": "anomaly",
+      "max_degree": null,
+      "norm": "fully_normalized",
+      "errors": "no",
+      "tide_system": "zero_tide",
+      "earth_gravity_constant": 398600441500000.0,
+      "radius": 6378136.46,
+      "earth_density": 5517.0,
+      "water_density": 1000.0,
+      "unit_for_grid_inverse": "mmEWH",
+      "allow_grid_to_cs": true,
+      "require_global_grid": true,
+      "roundtrip_check": true,
+      "output_dir": "monthly_gfc",
+      "filename_template": "GRACE_L2_{center}_{year_month}_{method}_L{max_degree}_{content}.gfc"
+    },
     "resume": false,
     "return_stacks": false,
     "return_basin": false,
